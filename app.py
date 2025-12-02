@@ -610,11 +610,11 @@ def delete_contact(contact_id):
     conn.close()
     return redirect(url_for("index"))
 
-
-@app.before_first_request
-def _ensure_tables():
+# Ensure tables exist when the app module is imported (Render / gunicorn)
+try:
     init_db()
-
+except Exception as e:
+    print("init_db() on import failed:", e)
 
 if __name__ == "__main__":
     init_db()
