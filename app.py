@@ -1,14 +1,20 @@
-import sqlite3
+import os
 from datetime import date
+
 from flask import Flask, render_template_string, request, redirect, url_for
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
-DB_NAME = "crm.db"
+
+# PostgreSQL connection string from environment (Render)
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
 def get_db():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not set")
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
 
 
@@ -18,7 +24,7 @@ def init_db():
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS contacts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             email TEXT,
             phone TEXT,
@@ -56,6 +62,7 @@ PIPELINE_STAGES = [
     "Active",
     "Under contract",
     "Closed",
+    "Past Client / Relationship",
     "Lost",
 ]
 
@@ -82,16 +89,21 @@ BASE_TEMPLATE = """
 <!doctype html>
 <html>
 <head>
-    <title>Real Estate CRM</title>
+    <title>Ulysses CRM</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
     >
+    <style>
+      body {
+        background-color: #6eb8f9;
+      }
+    </style>
 </head>
-<body class="bg-light">
+<body>
 <div class="container py-4">
-    <h1 class="mb-3">Real Estate CRM</h1>
+    <h1 class="mb-3">Ulysses CRM</h1>
 
     <!-- Add contact form -->
     <div class="card mb-4">
@@ -298,14 +310,19 @@ EDIT_TEMPLATE = """
 <!doctype html>
 <html>
 <head>
-    <title>Edit contact</title>
+    <title>Ulysses CRM - Edit contact</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
     >
+    <style>
+      body {
+        background-color: #6eb8f9;
+      }
+    </style>
 </head>
-<body class="bg-light">
+<body>
 <div class="container py-4">
     <h1 class="mb-4">Edit contact</h1>
     <form method="post">
@@ -418,24 +435,24 @@ def index():
     params = []
 
     if q:
-        sql += " AND (name LIKE ? OR email LIKE ? OR phone LIKE ?)"
+        sql += " AND (name ILIKE %s OR email ILIKE %s OR phone ILIKE %s)"
         like = f"%{q}%"
         params.extend([like, like, like])
 
     if lead_type:
-        sql += " AND lead_type = ?"
+        sql += " AND lead_type = %s"
         params.append(lead_type)
 
     if pipeline_stage:
-        sql += " AND pipeline_stage = ?"
+        sql += " AND pipeline_stage = %s"
         params.append(pipeline_stage)
 
     if priority:
-        sql += " AND priority = ?"
+        sql += " AND priority = %s"
         params.append(priority)
 
     if target_area:
-        sql += " AND target_area LIKE ?"
+        sql += " AND target_area ILIKE %s"
         params.append(f"%{target_area}%")
 
     sql += " ORDER BY next_follow_up IS NULL, next_follow_up, name"
@@ -495,7 +512,7 @@ def add_contact():
             name, email, phone, lead_type, pipeline_stage, price_min, price_max,
             target_area, source, priority, last_contacted, next_follow_up, notes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             data["name"],
@@ -543,10 +560,10 @@ def edit_contact(contact_id):
         cur.execute(
             """
             UPDATE contacts
-            SET name = ?, email = ?, phone = ?, lead_type = ?, pipeline_stage = ?,
-                price_min = ?, price_max = ?, target_area = ?, source = ?, priority = ?,
-                last_contacted = ?, next_follow_up = ?, notes = ?
-            WHERE id = ?
+            SET name = %s, email = %s, phone = %s, lead_type = %s, pipeline_stage = %s,
+                price_min = %s, price_max = %s, target_area = %s, source = %s, priority = %s,
+                last_contacted = %s, next_follow_up = %s, notes = %s
+            WHERE id = %s
             """,
             (
                 data["name"],
@@ -569,7 +586,7 @@ def edit_contact(contact_id):
         conn.close()
         return redirect(url_for("index"))
 
-    cur.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
+    cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
     contact = cur.fetchone()
     conn.close()
     if not contact:
@@ -588,10 +605,15 @@ def edit_contact(contact_id):
 def delete_contact(contact_id):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+    cur.execute("DELETE FROM contacts WHERE id = %s", (contact_id,))
     conn.commit()
     conn.close()
     return redirect(url_for("index"))
+
+
+@app.before_first_request
+def _ensure_tables():
+    init_db()
 
 
 if __name__ == "__main__":
