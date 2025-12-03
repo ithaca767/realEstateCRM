@@ -49,7 +49,13 @@ def init_db():
         "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_name TEXT",
         "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_name TEXT",
         "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_address TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_city TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_state TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_zip TEXT",
         "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_address TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_city TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_state TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_zip TEXT",
     ]
 
     for stmt in schema_updates:
@@ -72,6 +78,15 @@ def init_db():
         """
     )
     conn.commit()
+
+    # Schema upgrades for interactions
+    try:
+        cur.execute(
+            "ALTER TABLE interactions ADD COLUMN IF NOT EXISTS time_of_day TEXT"
+        )
+        conn.commit()
+    except Exception as e:
+        print("Interaction schema update skipped:", e)
 
     conn.close()
 
@@ -222,12 +237,38 @@ BASE_TEMPLATE = """
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Current address</label>
-                        <input name="current_address" class="form-control" placeholder="123 Main St, Keyport, NJ">
+                        <label class="form-label">Current street address</label>
+                        <input name="current_address" class="form-control" placeholder="123 Main St">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Subject property address</label>
+                        <label class="form-label">Subject property street address</label>
                         <input name="subject_address" class="form-control" placeholder="Property of interest">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Current city</label>
+                        <input name="current_city" class="form-control" placeholder="Keyport">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Current state</label>
+                        <input name="current_state" class="form-control" placeholder="NJ">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Current ZIP</label>
+                        <input name="current_zip" class="form-control" placeholder="07735">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Subject city</label>
+                        <input name="subject_city" class="form-control" placeholder="Hazlet">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Subject state</label>
+                        <input name="subject_state" class="form-control" placeholder="NJ">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Subject ZIP</label>
+                        <input name="subject_zip" class="form-control" placeholder="07730">
                     </div>
 
                     <div class="col-md-3">
@@ -334,8 +375,22 @@ BASE_TEMPLATE = """
                             {% endif %}
                         </td>
                         <td>{{ c["target_area"] or "" }}</td>
-                        <td>{{ c["current_address"] or "" }}</td>
-                        <td>{{ c["subject_address"] or "" }}</td>
+                        <td>
+                            {% if c["current_address"] or c["current_city"] or c["current_state"] or c["current_zip"] %}
+                                {{ c["current_address"] or "" }}
+                                {% if c["current_city"] %}, {{ c["current_city"] }}{% endif %}
+                                {% if c["current_state"] %}, {{ c["current_state"] }}{% endif %}
+                                {% if c["current_zip"] %} {{ c["current_zip"] }}{% endif %}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if c["subject_address"] or c["subject_city"] or c["subject_state"] or c["subject_zip"] %}
+                                {{ c["subject_address"] or "" }}
+                                {% if c["subject_city"] %}, {{ c["subject_city"] }}{% endif %}
+                                {% if c["subject_state"] %}, {{ c["subject_state"] }}{% endif %}
+                                {% if c["subject_zip"] %} {{ c["subject_zip"] }}{% endif %}
+                            {% endif %}
+                        </td>
                         <td>{{ c["source"] or "" }}</td>
                         <td>{{ c["last_contacted"] or "" }}</td>
                         <td>{{ c["next_follow_up"] or "" }}</td>
@@ -461,12 +516,38 @@ EDIT_TEMPLATE = """
             </div>
 
             <div class="col-md-6">
-                <label class="form-label">Current address</label>
+                <label class="form-label">Current street address</label>
                 <input name="current_address" class="form-control" value="{{ c['current_address'] or '' }}">
             </div>
             <div class="col-md-6">
-                <label class="form-label">Subject property address</label>
+                <label class="form-label">Subject property street address</label>
                 <input name="subject_address" class="form-control" value="{{ c['subject_address'] or '' }}">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Current city</label>
+                <input name="current_city" class="form-control" value="{{ c['current_city'] or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Current state</label>
+                <input name="current_state" class="form-control" value="{{ c['current_state'] or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Current ZIP</label>
+                <input name="current_zip" class="form-control" value="{{ c['current_zip'] or '' }}">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Subject city</label>
+                <input name="subject_city" class="form-control" value="{{ c['subject_city'] or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Subject state</label>
+                <input name="subject_state" class="form-control" value="{{ c['subject_state'] or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Subject ZIP</label>
+                <input name="subject_zip" class="form-control" value="{{ c['subject_zip'] or '' }}">
             </div>
 
             <div class="col-md-3">
@@ -511,7 +592,37 @@ EDIT_TEMPLATE = """
                         <label class="form-label">Date</label>
                         <input name="happened_at" type="date" class="form-control" value="{{ today }}">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-2">
+                        <label class="form-label">Time (optional)</label>
+                        <div class="d-flex">
+                            <select name="time_hour" class="form-select">
+                                <option value="">HH</option>
+                                {% for h in range(1,13) %}
+                                    <option value="{{ h }}">{{ h }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <div class="d-flex">
+                            <select name="time_minute" class="form-select">
+                                <option value="">MM</option>
+                                {% for m in ["00", "15", "30", "45"] %}
+                                    <option value="{{ m }}">{{ m }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <select name="time_ampm" class="form-select">
+                            <option value="">AM/PM</option>
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
                         <label class="form-label">Notes</label>
                         <input name="notes" class="form-control" placeholder="Summary of the conversation or message">
                     </div>
@@ -529,6 +640,7 @@ EDIT_TEMPLATE = """
                         <thead class="table-light">
                             <tr>
                                 <th>Date</th>
+                                <th>Time</th>
                                 <th>Type</th>
                                 <th>Notes</th>
                             </tr>
@@ -537,6 +649,7 @@ EDIT_TEMPLATE = """
                         {% for i in interactions %}
                             <tr>
                                 <td>{{ i["happened_at"] or "" }}</td>
+                                <td>{{ i["time_of_day"] or "" }}</td>
                                 <td>{{ i["kind"] }}</td>
                                 <td>{{ i["notes"] or "" }}</td>
                             </tr>
@@ -639,7 +752,13 @@ def add_contact():
         "price_max": parse_int_or_none(request.form.get("price_max")),
         "target_area": (request.form.get("target_area") or "").strip(),
         "current_address": (request.form.get("current_address") or "").strip(),
+        "current_city": (request.form.get("current_city") or "").strip(),
+        "current_state": (request.form.get("current_state") or "").strip(),
+        "current_zip": (request.form.get("current_zip") or "").strip(),
         "subject_address": (request.form.get("subject_address") or "").strip(),
+        "subject_city": (request.form.get("subject_city") or "").strip(),
+        "subject_state": (request.form.get("subject_state") or "").strip(),
+        "subject_zip": (request.form.get("subject_zip") or "").strip(),
         "last_contacted": request.form.get("last_contacted") or None,
         "next_follow_up": request.form.get("next_follow_up") or None,
         "notes": (request.form.get("notes") or "").strip(),
@@ -655,9 +774,14 @@ def add_contact():
         INSERT INTO contacts (
             name, email, phone, lead_type, pipeline_stage, price_min, price_max,
             target_area, source, priority, last_contacted, next_follow_up, notes,
-            first_name, last_name, current_address, subject_address
+            first_name, last_name,
+            current_address, current_city, current_state, current_zip,
+            subject_address, subject_city, subject_state, subject_zip
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s)
         """,
         (
             data["name"],
@@ -676,7 +800,13 @@ def add_contact():
             data["first_name"],
             data["last_name"],
             data["current_address"],
+            data["current_city"],
+            data["current_state"],
+            data["current_zip"],
             data["subject_address"],
+            data["subject_city"],
+            data["subject_state"],
+            data["subject_zip"],
         ),
     )
     conn.commit()
@@ -708,7 +838,13 @@ def edit_contact(contact_id):
             "price_max": parse_int_or_none(request.form.get("price_max")),
             "target_area": (request.form.get("target_area") or "").strip(),
             "current_address": (request.form.get("current_address") or "").strip(),
+            "current_city": (request.form.get("current_city") or "").strip(),
+            "current_state": (request.form.get("current_state") or "").strip(),
+            "current_zip": (request.form.get("current_zip") or "").strip(),
             "subject_address": (request.form.get("subject_address") or "").strip(),
+            "subject_city": (request.form.get("subject_city") or "").strip(),
+            "subject_state": (request.form.get("subject_state") or "").strip(),
+            "subject_zip": (request.form.get("subject_zip") or "").strip(),
             "last_contacted": request.form.get("last_contacted") or None,
             "next_follow_up": request.form.get("next_follow_up") or None,
             "notes": (request.form.get("notes") or "").strip(),
@@ -724,7 +860,9 @@ def edit_contact(contact_id):
             SET name = %s, email = %s, phone = %s, lead_type = %s, pipeline_stage = %s,
                 price_min = %s, price_max = %s, target_area = %s, source = %s, priority = %s,
                 last_contacted = %s, next_follow_up = %s, notes = %s,
-                first_name = %s, last_name = %s, current_address = %s, subject_address = %s
+                first_name = %s, last_name = %s,
+                current_address = %s, current_city = %s, current_state = %s, current_zip = %s,
+                subject_address = %s, subject_city = %s, subject_state = %s, subject_zip = %s
             WHERE id = %s
             """,
             (
@@ -744,7 +882,13 @@ def edit_contact(contact_id):
                 data["first_name"],
                 data["last_name"],
                 data["current_address"],
+                data["current_city"],
+                data["current_state"],
+                data["current_zip"],
                 data["subject_address"],
+                data["subject_city"],
+                data["subject_state"],
+                data["subject_zip"],
                 contact_id,
             ),
         )
@@ -789,6 +933,14 @@ def add_interaction(contact_id):
     happened_at = request.form.get("happened_at") or None
     notes = (request.form.get("notes") or "").strip()
 
+    time_hour = (request.form.get("time_hour") or "").strip()
+    time_minute = (request.form.get("time_minute") or "").strip()
+    time_ampm = (request.form.get("time_ampm") or "").strip()
+
+    time_of_day = None
+    if time_hour and time_minute and time_ampm:
+        time_of_day = f"{time_hour}:{time_minute} {time_ampm}"
+
     if not kind:
         return redirect(url_for("edit_contact", contact_id=contact_id))
 
@@ -796,10 +948,10 @@ def add_interaction(contact_id):
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO interactions (contact_id, kind, happened_at, notes)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO interactions (contact_id, kind, happened_at, time_of_day, notes)
+        VALUES (%s, %s, %s, %s, %s)
         """,
-        (contact_id, kind, happened_at, notes),
+        (contact_id, kind, happened_at, time_of_day, notes),
     )
     conn.commit()
     conn.close()
