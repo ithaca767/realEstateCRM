@@ -1,5 +1,5 @@
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import Flask, render_template_string, request, redirect, url_for, Response
 import psycopg2
@@ -56,6 +56,7 @@ def init_db():
         "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_city TEXT",
         "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_state TEXT",
         "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_zip TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS next_follow_up_time TEXT",
     ]
 
     for stmt in schema_updates:
@@ -276,8 +277,35 @@ BASE_TEMPLATE = """
                         <input name="last_contacted" type="date" class="form-control" value="{{ today }}">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Next follow up</label>
+                        <label class="form-label">Next follow up (date)</label>
                         <input name="next_follow_up" type="date" class="form-control">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Follow up time</label>
+                        <select name="next_follow_up_hour" class="form-select">
+                            <option value="">HH</option>
+                            {% for h in range(1,13) %}
+                                <option value="{{ h }}">{{ h }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <select name="next_follow_up_minute" class="form-select">
+                            <option value="">MM</option>
+                            {% for m in ["00", "15", "30", "45"] %}
+                                <option value="{{ m }}">{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <select name="next_follow_up_ampm" class="form-select">
+                            <option value="">AM/PM</option>
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                        </select>
                     </div>
 
                     <div class="col-12">
@@ -393,7 +421,12 @@ BASE_TEMPLATE = """
                         </td>
                         <td>{{ c["source"] or "" }}</td>
                         <td>{{ c["last_contacted"] or "" }}</td>
-                        <td>{{ c["next_follow_up"] or "" }}</td>
+                        <td>
+                            {{ c["next_follow_up"] or "" }}
+                            {% if c["next_follow_up_time"] %}
+                                {{ " " }}{{ c["next_follow_up_time"] }}
+                            {% endif %}
+                        </td>
                         <td>
                             <a href="{{ url_for('edit_contact', contact_id=c['id']) }}" class="btn btn-sm btn-outline-primary">Edit</a>
                             <a href="{{ url_for('delete_contact', contact_id=c['id']) }}"
@@ -556,9 +589,36 @@ EDIT_TEMPLATE = """
                        value="{{ c['last_contacted'] or '' }}">
             </div>
             <div class="col-md-3">
-                <label class="form-label">Next follow up</label>
+                <label class="form-label">Next follow up (date)</label>
                 <input name="next_follow_up" type="date" class="form-control"
                        value="{{ c['next_follow_up'] or '' }}">
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Follow up time</label>
+                <select name="next_follow_up_hour" class="form-select">
+                    <option value="">HH</option>
+                    {% for h in range(1,13) %}
+                        <option value="{{ h }}" {% if next_time_hour == h %}selected{% endif %}>{{ h }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <select name="next_follow_up_minute" class="form-select">
+                    <option value="">MM</option>
+                    {% for m in ["00", "15", "30", "45"] %}
+                        <option value="{{ m }}" {% if next_time_minute == m %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <select name="next_follow_up_ampm" class="form-select">
+                    <option value="">AM/PM</option>
+                    <option value="AM" {% if next_time_ampm == "AM" %}selected{% endif %}>AM</option>
+                    <option value="PM" {% if next_time_ampm == "PM" %}selected{% endif %}>PM</option>
+                </select>
             </div>
 
             <div class="col-12">
@@ -731,12 +791,43 @@ def parse_int_or_none(value):
         return None
 
 
+def parse_follow_up_time_from_form(prefix: str = "next_follow_up_"):
+    """
+    Reads hour/minute/ampm from the form and returns a 24-hour "HH:MM" string or None.
+    Prefix is for field names like next_follow_up_hour, next_follow_up_minute, next_follow_up_ampm.
+    """
+    hour_raw = (request.form.get(prefix + "hour") or "").strip()
+    minute = (request.form.get(prefix + "minute") or "").strip()
+    ampm = (request.form.get(prefix + "ampm") or "").strip().upper()
+
+    if not hour_raw or not minute or ampm not in ("AM", "PM"):
+        return None
+
+    try:
+        hour_12 = int(hour_raw)
+        if hour_12 < 1 or hour_12 > 12:
+            return None
+    except ValueError:
+        return None
+
+    # Convert 12-hour to 24-hour
+    if ampm == "AM":
+        hour_24 = 0 if hour_12 == 12 else hour_12
+    else:  # PM
+        hour_24 = 12 if hour_12 == 12 else hour_12 + 12
+
+    return f"{hour_24:02d}:{minute}"
+
+
 @app.route("/add", methods=["POST"])
 def add_contact():
     first_name = (request.form.get("first_name") or "").strip()
     last_name = (request.form.get("last_name") or "").strip()
 
     full_name = f"{first_name} {last_name}".strip()
+
+    next_follow_up_date = request.form.get("next_follow_up") or None
+    next_follow_up_time = parse_follow_up_time_from_form()
 
     data = {
         "name": full_name,
@@ -760,7 +851,8 @@ def add_contact():
         "subject_state": (request.form.get("subject_state") or "").strip(),
         "subject_zip": (request.form.get("subject_zip") or "").strip(),
         "last_contacted": request.form.get("last_contacted") or None,
-        "next_follow_up": request.form.get("next_follow_up") or None,
+        "next_follow_up": next_follow_up_date,
+        "next_follow_up_time": next_follow_up_time,
         "notes": (request.form.get("notes") or "").strip(),
     }
 
@@ -773,12 +865,12 @@ def add_contact():
         """
         INSERT INTO contacts (
             name, email, phone, lead_type, pipeline_stage, price_min, price_max,
-            target_area, source, priority, last_contacted, next_follow_up, notes,
+            target_area, source, priority, last_contacted, next_follow_up, next_follow_up_time, notes,
             first_name, last_name,
             current_address, current_city, current_state, current_zip,
             subject_address, subject_city, subject_state, subject_zip
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s)
@@ -796,6 +888,7 @@ def add_contact():
             data["priority"],
             data["last_contacted"],
             data["next_follow_up"],
+            data["next_follow_up_time"],
             data["notes"],
             data["first_name"],
             data["last_name"],
@@ -824,6 +917,9 @@ def edit_contact(contact_id):
         last_name = (request.form.get("last_name") or "").strip()
         full_name = f"{first_name} {last_name}".strip()
 
+        next_follow_up_date = request.form.get("next_follow_up") or None
+        next_follow_up_time = parse_follow_up_time_from_form()
+
         data = {
             "name": full_name,
             "first_name": first_name,
@@ -846,7 +942,8 @@ def edit_contact(contact_id):
             "subject_state": (request.form.get("subject_state") or "").strip(),
             "subject_zip": (request.form.get("subject_zip") or "").strip(),
             "last_contacted": request.form.get("last_contacted") or None,
-            "next_follow_up": request.form.get("next_follow_up") or None,
+            "next_follow_up": next_follow_up_date,
+            "next_follow_up_time": next_follow_up_time,
             "notes": (request.form.get("notes") or "").strip(),
         }
 
@@ -859,7 +956,7 @@ def edit_contact(contact_id):
             UPDATE contacts
             SET name = %s, email = %s, phone = %s, lead_type = %s, pipeline_stage = %s,
                 price_min = %s, price_max = %s, target_area = %s, source = %s, priority = %s,
-                last_contacted = %s, next_follow_up = %s, notes = %s,
+                last_contacted = %s, next_follow_up = %s, next_follow_up_time = %s, notes = %s,
                 first_name = %s, last_name = %s,
                 current_address = %s, current_city = %s, current_state = %s, current_zip = %s,
                 subject_address = %s, subject_city = %s, subject_state = %s, subject_zip = %s
@@ -878,6 +975,7 @@ def edit_contact(contact_id):
                 data["priority"],
                 data["last_contacted"],
                 data["next_follow_up"],
+                data["next_follow_up_time"],
                 data["notes"],
                 data["first_name"],
                 data["last_name"],
@@ -904,6 +1002,33 @@ def edit_contact(contact_id):
         conn.close()
         return "Contact not found", 404
 
+    # Pre-fill follow-up time selects if we have a stored time
+    next_time_hour = None
+    next_time_minute = None
+    next_time_ampm = None
+    t_str = contact.get("next_follow_up_time")
+    if t_str:
+        try:
+            hh, mm = t_str.split(":")
+            hh24 = int(hh)
+            if hh24 == 0:
+                next_time_hour = 12
+                next_time_ampm = "AM"
+            elif 1 <= hh24 < 12:
+                next_time_hour = hh24
+                next_time_ampm = "AM"
+            elif hh24 == 12:
+                next_time_hour = 12
+                next_time_ampm = "PM"
+            else:
+                next_time_hour = hh24 - 12
+                next_time_ampm = "PM"
+            next_time_minute = mm
+        except Exception:
+            next_time_hour = None
+            next_time_minute = None
+            next_time_ampm = None
+
     cur.execute(
         """
         SELECT * FROM interactions
@@ -924,6 +1049,9 @@ def edit_contact(contact_id):
         priorities=PRIORITIES,
         sources=SOURCES,
         today=date.today().isoformat(),
+        next_time_hour=next_time_hour,
+        next_time_minute=next_time_minute,
+        next_time_ampm=next_time_ampm,
     )
 
 
@@ -957,6 +1085,7 @@ def add_interaction(contact_id):
     conn.close()
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
+
 @app.route("/followups.ics")
 def followups_ics():
     """
@@ -973,6 +1102,7 @@ def followups_ics():
             first_name,
             last_name,
             next_follow_up,
+            next_follow_up_time,
             pipeline_stage,
             priority,
             target_area
@@ -996,9 +1126,6 @@ def followups_ics():
         date_str = row["next_follow_up"]
         if not date_str:
             continue
-
-        # next_follow_up is stored as 'YYYY-MM-DD'; ICS wants 'YYYYMMDD'
-        dtstart = date_str.replace("-", "")
 
         # Use first/last name if available
         display_name = row["name"]
@@ -1026,8 +1153,35 @@ def followups_ics():
         lines.append(f"UID:{uid}")
         lines.append(f"DTSTAMP:{dtstamp}")
         lines.append(f"SUMMARY:{summary}")
-        lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
-        lines.append(f"DTEND;VALUE=DATE:{dtstart}")
+
+        time_str = row.get("next_follow_up_time")
+
+        if time_str:
+            # Timed event with 30-minute duration
+            try:
+                d_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+                hh, mm = time_str.split(":")
+                hh24 = int(hh)
+                mm_int = int(mm)
+                start_dt = datetime(d_obj.year, d_obj.month, d_obj.day, hh24, mm_int)
+                end_dt = start_dt + timedelta(minutes=30)
+
+                dtstart = start_dt.strftime("%Y%m%dT%H%M%S")
+                dtend = end_dt.strftime("%Y%m%dT%H%M%S")
+
+                lines.append(f"DTSTART:{dtstart}")
+                lines.append(f"DTEND:{dtend}")
+            except Exception:
+                # Fallback to all-day if something goes wrong
+                dtstart = date_str.replace("-", "")
+                lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
+                lines.append(f"DTEND;VALUE=DATE:{dtstart}")
+        else:
+            # All-day event
+            dtstart = date_str.replace("-", "")
+            lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
+            lines.append(f"DTEND;VALUE=DATE:{dtstart}")
+
         if description:
             lines.append(f"DESCRIPTION:{description}")
         lines.append("END:VEVENT")
@@ -1036,6 +1190,7 @@ def followups_ics():
     ics_text = "\r\n".join(lines) + "\r\n"
 
     return Response(ics_text, mimetype="text/calendar")
+
 
 @app.route("/delete/<int:contact_id>")
 def delete_contact(contact_id):
