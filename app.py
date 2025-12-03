@@ -21,7 +21,7 @@ def init_db():
     conn = get_db()
     cur = conn.cursor()
 
-    # Ensure base table exists
+    # Ensure base contacts table exists
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS contacts (
@@ -44,7 +44,7 @@ def init_db():
     )
     conn.commit()
 
-    # Schema upgrades (safe to re-run)
+    # Schema upgrades for contacts (safe to re-run)
     schema_updates = [
         "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_name TEXT",
         "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_name TEXT",
@@ -58,6 +58,20 @@ def init_db():
             conn.commit()
         except Exception as e:
             print("Schema update skipped:", e)
+
+    # Interactions table for engagement log
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS interactions (
+            id SERIAL PRIMARY KEY,
+            contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            happened_at DATE,
+            notes TEXT
+        )
+        """
+    )
+    conn.commit()
 
     conn.close()
 
@@ -474,6 +488,67 @@ EDIT_TEMPLATE = """
         <button class="btn btn-primary mt-3" type="submit">Save changes</button>
         <a href="{{ url_for('index') }}" class="btn btn-secondary mt-3">Cancel</a>
     </form>
+
+    <!-- Engagement log -->
+    <div class="card mt-4">
+        <div class="card-header">
+            Engagement log
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('add_interaction', contact_id=c['id']) }}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Type</label>
+                        <select name="kind" class="form-select" required>
+                            <option value="Call">Phone call</option>
+                            <option value="Text">Text message</option>
+                            <option value="Email">Email</option>
+                            <option value="Meeting">Meeting</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Date</label>
+                        <input name="happened_at" type="date" class="form-control" value="{{ today }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Notes</label>
+                        <input name="notes" class="form-control" placeholder="Summary of the conversation or message">
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-outline-primary mt-2" type="submit">Add interaction</button>
+                    </div>
+                </div>
+            </form>
+
+            <hr>
+
+            {% if interactions and interactions|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for i in interactions %}
+                            <tr>
+                                <td>{{ i["happened_at"] or "" }}</td>
+                                <td>{{ i["kind"] }}</td>
+                                <td>{{ i["notes"] or "" }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="mb-0 text-muted">No interactions logged yet.</p>
+            {% endif %}
+        </div>
+    </div>
 </div>
 </body>
 </html>
@@ -677,19 +752,58 @@ def edit_contact(contact_id):
         conn.close()
         return redirect(url_for("index"))
 
+    # GET: load contact and its interactions
     cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
     contact = cur.fetchone()
-    conn.close()
+
     if not contact:
+        conn.close()
         return "Contact not found", 404
+
+    cur.execute(
+        """
+        SELECT * FROM interactions
+        WHERE contact_id = %s
+        ORDER BY happened_at DESC NULLS LAST, id DESC
+        """,
+        (contact_id,),
+    )
+    interactions = cur.fetchall()
+    conn.close()
+
     return render_template_string(
         EDIT_TEMPLATE,
         c=contact,
+        interactions=interactions,
         lead_types=LEAD_TYPES,
         pipeline_stages=PIPELINE_STAGES,
         priorities=PRIORITIES,
         sources=SOURCES,
+        today=date.today().isoformat(),
     )
+
+
+@app.route("/add_interaction/<int:contact_id>", methods=["POST"])
+def add_interaction(contact_id):
+    kind = (request.form.get("kind") or "").strip()
+    happened_at = request.form.get("happened_at") or None
+    notes = (request.form.get("notes") or "").strip()
+
+    if not kind:
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO interactions (contact_id, kind, happened_at, notes)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (contact_id, kind, happened_at, notes),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("edit_contact", contact_id=contact_id))
 
 
 @app.route("/delete/<int:contact_id>")
