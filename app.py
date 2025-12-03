@@ -107,7 +107,7 @@ BASE_TEMPLATE = """
     <img
         src="{{ url_for('static', filename='ulysses-logo.svg') }}"
         alt="Ulysses CRM"
-        style="height: 56px;"
+        style="height: 72px;"
     >
 </div>
     <!-- Add contact form -->
