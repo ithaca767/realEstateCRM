@@ -103,8 +103,13 @@ BASE_TEMPLATE = """
 </head>
 <body>
 <div class="container py-4">
-    <h1 class="mb-3">Ulysses CRM</h1>
-
+<div class="d-flex align-items-center mb-3">
+    <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 56px;"
+    >
+</div>
     <!-- Add contact form -->
     <div class="card mb-4">
         <div class="card-header">

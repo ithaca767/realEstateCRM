@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 793 301">
+  <defs>
+    <style>
+      .cls-1 {
+        letter-spacing: 0em;
+      }
+
+      .cls-2 {
+        fill: #ffcd05;
+        font-family: Impact, Impact;
+        font-size: 48px;
+      }
+
+      .cls-3 {
+        fill: #002349;
+        stroke: #231f20;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-4 {
+        letter-spacing: -.18em;
+      }
+
+      .cls-5 {
+        fill: #fff;
+        font-family: Nelson-Bold, Nelson;
+        font-size: 176px;
+        font-weight: 700;
+      }
+
+      .cls-6 {
+        letter-spacing: -.05em;
+      }
+    </style>
+  </defs>
+  <rect class="cls-3" x=".5" y=".5" width="792" height="300"/>
+  <text class="cls-5" transform="translate(38.35 202.06)"><tspan x="0" y="0">U</tspan><tspan class="cls-4" x="121.26" y="0">L</tspan><tspan class="cls-6" x="186.91" y="0">Y</tspan><tspan class="cls-1" x="308.18" y="0">SSES</tspan></text>
+  <text class="cls-2" transform="translate(43.35 66.68)"><tspan x="0" y="0">project</tspan></text>
+  <text class="cls-2" transform="translate(659.09 263.5)"><tspan x="0" y="0">CRM</tspan></text>
+</svg>
