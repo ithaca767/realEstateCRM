@@ -21,6 +21,8 @@ def get_db():
 def init_db():
     conn = get_db()
     cur = conn.cursor()
+
+    # Ensure base table exists
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS contacts (
@@ -42,6 +44,22 @@ def init_db():
         """
     )
     conn.commit()
+
+    # Schema upgrades (safe to re-run)
+    schema_updates = [
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_name TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_name TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_address TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_address TEXT",
+    ]
+
+    for stmt in schema_updates:
+        try:
+            cur.execute(stmt)
+            conn.commit()
+        except Exception as e:
+            print("Schema update skipped:", e)
+
     conn.close()
 
 
