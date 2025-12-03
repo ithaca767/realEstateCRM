@@ -1,7 +1,7 @@
 import os
-from datetime import date
+from datetime import date, datetime
 
-from flask import Flask, render_template_string, request, redirect, url_for
+from flask import Flask, render_template_string, request, redirect, url_for, Response
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -957,6 +957,85 @@ def add_interaction(contact_id):
     conn.close()
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
+@app.route("/followups.ics")
+def followups_ics():
+    """
+    Calendar feed of upcoming follow-ups.
+    Subscribe to: https://<your-domain>/followups.ics
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            id,
+            name,
+            first_name,
+            last_name,
+            next_follow_up,
+            pipeline_stage,
+            priority,
+            target_area
+        FROM contacts
+        WHERE next_follow_up IS NOT NULL
+          AND next_follow_up <> ''
+        ORDER BY next_follow_up, name
+        """
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    lines = []
+    lines.append("BEGIN:VCALENDAR")
+    lines.append("VERSION:2.0")
+    lines.append("PRODID:-//Ulysses CRM//EN")
+
+    dtstamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+
+    for row in rows:
+        date_str = row["next_follow_up"]
+        if not date_str:
+            continue
+
+        # next_follow_up is stored as 'YYYY-MM-DD'; ICS wants 'YYYYMMDD'
+        dtstart = date_str.replace("-", "")
+
+        # Use first/last name if available
+        display_name = row["name"]
+        fn = row.get("first_name") or ""
+        ln = row.get("last_name") or ""
+        full = (fn + " " + ln).strip()
+        if full:
+            display_name = full
+
+        summary = f"Follow up: {display_name}"
+
+        desc_parts = []
+        if row.get("pipeline_stage"):
+            desc_parts.append(f"Stage: {row['pipeline_stage']}")
+        if row.get("priority"):
+            desc_parts.append(f"Priority: {row['priority']}")
+        if row.get("target_area"):
+            desc_parts.append(f"Area: {row['target_area']}")
+
+        description = "\\n".join(desc_parts) if desc_parts else ""
+
+        uid = f"ulysses-followup-{row['id']}@ulyssescrm"
+
+        lines.append("BEGIN:VEVENT")
+        lines.append(f"UID:{uid}")
+        lines.append(f"DTSTAMP:{dtstamp}")
+        lines.append(f"SUMMARY:{summary}")
+        lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
+        lines.append(f"DTEND;VALUE=DATE:{dtstart}")
+        if description:
+            lines.append(f"DESCRIPTION:{description}")
+        lines.append("END:VEVENT")
+
+    lines.append("END:VCALENDAR")
+    ics_text = "\r\n".join(lines) + "\r\n"
+
+    return Response(ics_text, mimetype="text/calendar")
 
 @app.route("/delete/<int:contact_id>")
 def delete_contact(contact_id):
