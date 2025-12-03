@@ -7,7 +7,6 @@ from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
-# PostgreSQL connection string from environment (Render)
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
@@ -121,13 +120,15 @@ BASE_TEMPLATE = """
 </head>
 <body>
 <div class="container py-4">
-<div class="d-flex align-items-center mb-3">
-    <img
-        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-        alt="Ulysses CRM"
-        style="height: 72px;"
-    >
-</div>
+
+    <div class="d-flex align-items-center mb-3">
+        <img
+            src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+            alt="Ulysses CRM"
+            style="height: 72px;"
+        >
+    </div>
+
     <!-- Add contact form -->
     <div class="card mb-4">
         <div class="card-header">
@@ -136,15 +137,19 @@ BASE_TEMPLATE = """
         <div class="card-body">
             <form method="post" action="{{ url_for('add_contact') }}">
                 <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">Name *</label>
-                        <input name="name" class="form-control" required>
+                    <div class="col-md-3">
+                        <label class="form-label">First name *</label>
+                        <input name="first_name" class="form-control" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
+                        <label class="form-label">Last name</label>
+                        <input name="last_name" class="form-control">
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label">Email</label>
                         <input name="email" type="email" class="form-control">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Phone</label>
                         <input name="phone" class="form-control">
                     </div>
@@ -200,6 +205,15 @@ BASE_TEMPLATE = """
                     <div class="col-md-3">
                         <label class="form-label">Target area</label>
                         <input name="target_area" class="form-control" placeholder="Keyport, Hazlet, Netflix zone">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Current address</label>
+                        <input name="current_address" class="form-control" placeholder="123 Main St, Keyport, NJ">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Subject property address</label>
+                        <input name="subject_address" class="form-control" placeholder="Property of interest">
                     </div>
 
                     <div class="col-md-3">
@@ -277,6 +291,8 @@ BASE_TEMPLATE = """
                         <th>Priority</th>
                         <th>Price range</th>
                         <th>Area</th>
+                        <th>Current address</th>
+                        <th>Subject property</th>
                         <th>Source</th>
                         <th>Last contacted</th>
                         <th>Next follow up</th>
@@ -286,7 +302,13 @@ BASE_TEMPLATE = """
                 <tbody>
                 {% for c in contacts %}
                     <tr>
-                        <td>{{ c["name"] }}</td>
+                        <td>
+                            {% if c["first_name"] or c["last_name"] %}
+                                {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                            {% else %}
+                                {{ c["name"] }}
+                            {% endif %}
+                        </td>
                         <td>{{ c["lead_type"] or "" }}</td>
                         <td>{{ c["pipeline_stage"] or "" }}</td>
                         <td>{{ c["priority"] or "" }}</td>
@@ -298,6 +320,8 @@ BASE_TEMPLATE = """
                             {% endif %}
                         </td>
                         <td>{{ c["target_area"] or "" }}</td>
+                        <td>{{ c["current_address"] or "" }}</td>
+                        <td>{{ c["subject_address"] or "" }}</td>
                         <td>{{ c["source"] or "" }}</td>
                         <td>{{ c["last_contacted"] or "" }}</td>
                         <td>{{ c["next_follow_up"] or "" }}</td>
@@ -312,12 +336,12 @@ BASE_TEMPLATE = """
                     </tr>
                     {% if c["notes"] %}
                     <tr class="table-secondary">
-                        <td colspan="10"><strong>Notes:</strong> {{ c["notes"] }}</td>
+                        <td colspan="12"><strong>Notes:</strong> {{ c["notes"] }}</td>
                     </tr>
                     {% endif %}
                 {% endfor %}
                 {% if contacts|length == 0 %}
-                    <tr><td colspan="10" class="text-center py-3">No contacts yet.</td></tr>
+                    <tr><td colspan="12" class="text-center py-3">No contacts yet.</td></tr>
                 {% endif %}
                 </tbody>
             </table>
@@ -350,17 +374,21 @@ EDIT_TEMPLATE = """
     <h1 class="mb-4">Edit contact</h1>
     <form method="post">
         <div class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label">Name *</label>
-                <input name="name" class="form-control" required value="{{ c['name'] }}">
+            <div class="col-md-3">
+                <label class="form-label">First name *</label>
+                <input name="first_name" class="form-control" required value="{{ c['first_name'] or '' }}">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
+                <label class="form-label">Last name</label>
+                <input name="last_name" class="form-control" value="{{ c['last_name'] or '' }}">
+            </div>
+            <div class="col-md-3">
                 <label class="form-label">Email</label>
-                <input name="email" type="email" class="form-control" value="{{ c['email'] }}">
+                <input name="email" type="email" class="form-control" value="{{ c['email'] or '' }}">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label">Phone</label>
-                <input name="phone" class="form-control" value="{{ c['phone'] }}">
+                <input name="phone" class="form-control" value="{{ c['phone'] or '' }}">
             </div>
 
             <div class="col-md-3">
@@ -416,6 +444,15 @@ EDIT_TEMPLATE = """
             <div class="col-md-3">
                 <label class="form-label">Target area</label>
                 <input name="target_area" class="form-control" value="{{ c['target_area'] or '' }}">
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Current address</label>
+                <input name="current_address" class="form-control" value="{{ c['current_address'] or '' }}">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Subject property address</label>
+                <input name="subject_address" class="form-control" value="{{ c['subject_address'] or '' }}">
             </div>
 
             <div class="col-md-3">
@@ -508,20 +545,29 @@ def parse_int_or_none(value):
 
 @app.route("/add", methods=["POST"])
 def add_contact():
+    first_name = (request.form.get("first_name") or "").strip()
+    last_name = (request.form.get("last_name") or "").strip()
+
+    full_name = f"{first_name} {last_name}".strip()
+
     data = {
-        "name": request.form.get("name", "").strip(),
-        "email": request.form.get("email", "").strip(),
-        "phone": request.form.get("phone", "").strip(),
-        "lead_type": request.form.get("lead_type", "").strip(),
-        "pipeline_stage": request.form.get("pipeline_stage", "").strip(),
-        "priority": request.form.get("priority", "").strip(),
-        "source": request.form.get("source", "").strip(),
+        "name": full_name,
+        "first_name": first_name,
+        "last_name": last_name,
+        "email": (request.form.get("email") or "").strip(),
+        "phone": (request.form.get("phone") or "").strip(),
+        "lead_type": (request.form.get("lead_type") or "").strip(),
+        "pipeline_stage": (request.form.get("pipeline_stage") or "").strip(),
+        "priority": (request.form.get("priority") or "").strip(),
+        "source": (request.form.get("source") or "").strip(),
         "price_min": parse_int_or_none(request.form.get("price_min")),
         "price_max": parse_int_or_none(request.form.get("price_max")),
-        "target_area": request.form.get("target_area", "").strip(),
+        "target_area": (request.form.get("target_area") or "").strip(),
+        "current_address": (request.form.get("current_address") or "").strip(),
+        "subject_address": (request.form.get("subject_address") or "").strip(),
         "last_contacted": request.form.get("last_contacted") or None,
         "next_follow_up": request.form.get("next_follow_up") or None,
-        "notes": request.form.get("notes", "").strip(),
+        "notes": (request.form.get("notes") or "").strip(),
     }
 
     if not data["name"]:
@@ -533,9 +579,10 @@ def add_contact():
         """
         INSERT INTO contacts (
             name, email, phone, lead_type, pipeline_stage, price_min, price_max,
-            target_area, source, priority, last_contacted, next_follow_up, notes
+            target_area, source, priority, last_contacted, next_follow_up, notes,
+            first_name, last_name, current_address, subject_address
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             data["name"],
@@ -551,6 +598,10 @@ def add_contact():
             data["last_contacted"],
             data["next_follow_up"],
             data["notes"],
+            data["first_name"],
+            data["last_name"],
+            data["current_address"],
+            data["subject_address"],
         ),
     )
     conn.commit()
@@ -564,28 +615,41 @@ def edit_contact(contact_id):
     cur = conn.cursor()
 
     if request.method == "POST":
+        first_name = (request.form.get("first_name") or "").strip()
+        last_name = (request.form.get("last_name") or "").strip()
+        full_name = f"{first_name} {last_name}".strip()
+
         data = {
-            "name": request.form.get("name", "").strip(),
-            "email": request.form.get("email", "").strip(),
-            "phone": request.form.get("phone", "").strip(),
-            "lead_type": request.form.get("lead_type", "").strip(),
-            "pipeline_stage": request.form.get("pipeline_stage", "").strip(),
-            "priority": request.form.get("priority", "").strip(),
-            "source": request.form.get("source", "").strip(),
+            "name": full_name,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": (request.form.get("email") or "").strip(),
+            "phone": (request.form.get("phone") or "").strip(),
+            "lead_type": (request.form.get("lead_type") or "").strip(),
+            "pipeline_stage": (request.form.get("pipeline_stage") or "").strip(),
+            "priority": (request.form.get("priority") or "").strip(),
+            "source": (request.form.get("source") or "").strip(),
             "price_min": parse_int_or_none(request.form.get("price_min")),
             "price_max": parse_int_or_none(request.form.get("price_max")),
-            "target_area": request.form.get("target_area", "").strip(),
+            "target_area": (request.form.get("target_area") or "").strip(),
+            "current_address": (request.form.get("current_address") or "").strip(),
+            "subject_address": (request.form.get("subject_address") or "").strip(),
             "last_contacted": request.form.get("last_contacted") or None,
             "next_follow_up": request.form.get("next_follow_up") or None,
-            "notes": request.form.get("notes", "").strip(),
+            "notes": (request.form.get("notes") or "").strip(),
         }
+
+        if not data["name"]:
+            conn.close()
+            return redirect(url_for("index"))
 
         cur.execute(
             """
             UPDATE contacts
             SET name = %s, email = %s, phone = %s, lead_type = %s, pipeline_stage = %s,
                 price_min = %s, price_max = %s, target_area = %s, source = %s, priority = %s,
-                last_contacted = %s, next_follow_up = %s, notes = %s
+                last_contacted = %s, next_follow_up = %s, notes = %s,
+                first_name = %s, last_name = %s, current_address = %s, subject_address = %s
             WHERE id = %s
             """,
             (
@@ -602,6 +666,10 @@ def edit_contact(contact_id):
                 data["last_contacted"],
                 data["next_follow_up"],
                 data["notes"],
+                data["first_name"],
+                data["last_name"],
+                data["current_address"],
+                data["subject_address"],
                 contact_id,
             ),
         )
@@ -633,11 +701,12 @@ def delete_contact(contact_id):
     conn.close()
     return redirect(url_for("index"))
 
-# Ensure tables exist when the app module is imported (Render / gunicorn)
+
 try:
     init_db()
 except Exception as e:
     print("init_db() on import failed:", e)
+
 
 if __name__ == "__main__":
     init_db()
