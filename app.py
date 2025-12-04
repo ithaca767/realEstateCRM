@@ -386,11 +386,13 @@ BASE_TEMPLATE = """
                 {% for c in contacts %}
                     <tr>
                         <td>
-                            {% if c["first_name"] or c["last_name"] %}
-                                {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                            <a href="{{ url_for('edit_contact', contact_id=c['id']) }}">
+                                {% if c["first_name"] or c["last_name"] %}
+                                    {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
                             {% else %}
-                                {{ c["name"] }}
+                                    {{ c["name"] }}
                             {% endif %}
+                            </a>
                         </td>
                         <td>{{ c["lead_type"] or "" }}</td>
                         <td>{{ c["pipeline_stage"] or "" }}</td>
@@ -631,6 +633,7 @@ EDIT_TEMPLATE = """
     </form>
 
     <!-- Engagement log -->
+    <!-- Engagement log -->
     <div class="card mt-4">
         <div class="card-header">
             Engagement log
@@ -654,25 +657,21 @@ EDIT_TEMPLATE = """
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Time (optional)</label>
-                        <div class="d-flex">
-                            <select name="time_hour" class="form-select">
-                                <option value="">HH</option>
-                                {% for h in range(1,13) %}
-                                    <option value="{{ h }}">{{ h }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
+                        <select name="time_hour" class="form-select">
+                            <option value="">Hour</option>
+                            {% for h in range(1,13) %}
+                                <option value="{{ h }}">{{ h }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">&nbsp;</label>
-                        <div class="d-flex">
-                            <select name="time_minute" class="form-select">
-                                <option value="">MM</option>
-                                {% for m in ["00", "15", "30", "45"] %}
-                                    <option value="{{ m }}">{{ m }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
+                        <select name="time_minute" class="form-select">
+                            <option value="">Minute</option>
+                            {% for m in ["00", "15", "30", "45"] %}
+                                <option value="{{ m }}">{{ m }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">&nbsp;</label>
@@ -687,7 +686,7 @@ EDIT_TEMPLATE = """
                         <input name="notes" class="form-control" placeholder="Summary of the conversation or message">
                     </div>
                     <div class="col-12">
-                        <button class="btn btn-outline-primary mt-2" type="submit">Add interaction</button>
+                        <button class="btn btn-outline-primary mt-2" type="submit">Save interaction</button>
                     </div>
                 </div>
             </form>
@@ -703,6 +702,7 @@ EDIT_TEMPLATE = """
                                 <th>Time</th>
                                 <th>Type</th>
                                 <th>Notes</th>
+                                <th style="width: 80px;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -712,6 +712,13 @@ EDIT_TEMPLATE = """
                                 <td>{{ i["time_of_day"] or "" }}</td>
                                 <td>{{ i["kind"] }}</td>
                                 <td>{{ i["notes"] or "" }}</td>
+                                <td>
+                                    <a href="{{ url_for('delete_interaction', interaction_id=i['id']) }}"
+                                       class="btn btn-sm btn-outline-danger"
+                                       onclick="return confirm('Delete this interaction?');">
+                                        Delete
+                                    </a>
+                                </td>
                             </tr>
                         {% endfor %}
                         </tbody>
@@ -1085,6 +1092,29 @@ def add_interaction(contact_id):
     conn.close()
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
+@app.route("/delete_interaction/<int:interaction_id>")
+def delete_interaction(interaction_id):
+    conn = get_db()
+    cur = conn.cursor()
+    # Find which contact this interaction belongs to
+    cur.execute(
+        "SELECT contact_id FROM interactions WHERE id = %s",
+        (interaction_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return redirect(url_for("index"))
+
+    contact_id = row["contact_id"]
+
+    # Delete the interaction
+    cur.execute("DELETE FROM interactions WHERE id = %s", (interaction_id,))
+    conn.commit()
+    conn.close()
+
+    # Go back to that contact's edit page
+    return redirect(url_for("edit_contact", contact_id=contact_id))
 
 @app.route("/followups.ics")
 def followups_ics():
