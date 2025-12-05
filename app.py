@@ -202,7 +202,7 @@ BASE_TEMPLATE = """
         </li>
         <li class="nav-item">
           <a class="nav-link"
-             href="{{ url_for('followups_ics') if 'followups_ics' in globals() else '/followups.ics' }}"
+             href="{{ url_for('followups_ics') }}"
              target="_blank">
             Calendar Feed
           </a>
@@ -588,7 +588,7 @@ EDIT_TEMPLATE = """
         </li>
         <li class="nav-item">
           <a class="nav-link"
-             href="{{ url_for('followups_ics') if 'followups_ics' in globals() else '/followups.ics' }}"
+             href="{{ url_for('followups_ics') }}"
              target="_blank">
             Calendar Feed
           </a>
@@ -927,7 +927,7 @@ FOLLOWUPS_TEMPLATE = """
         </li>
         <li class="nav-item">
           <a class="nav-link"
-             href="{{ url_for('followups_ics') if 'followups_ics' in globals() else '/followups.ics' }}"
+             href="{{ url_for('followups_ics') }}"
              target="_blank">
             Calendar Feed
           </a>
