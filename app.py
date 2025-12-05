@@ -146,33 +146,88 @@ BASE_TEMPLATE = """
       body {
         background-color: #6eb8f9;
       }
+      .card-add {
+        border-top: 4px solid #198754;
+      }
+      .card-add .card-header {
+        background-color: rgba(25, 135, 84, 0.08);
+        font-weight: 600;
+      }
+      .card-edit {
+        border-top: 4px solid #0d6efd;
+      }
+      .card-edit .card-header {
+        background-color: rgba(13, 110, 253, 0.08);
+        font-weight: 600;
+      }
+      .card-followups .card-header {
+        font-weight: 600;
+      }
     </style>
 </head>
 <body>
+
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+  <div class="container-fluid">
+    <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 40px;"
+        class="me-2"
+      >
+      <span class="fw-semibold">Ulysses CRM</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+            data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link{% if request.endpoint == 'index' %} active{% endif %}"
+             href="{{ url_for('index') }}">
+            Contacts
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#add-contact">Add Contact</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link{% if request.endpoint == 'followups' %} active{% endif %}"
+             href="{{ url_for('followups') }}">
+            Follow Up Dashboard
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link"
+             href="{{ url_for('followups_ics') if 'followups_ics' in globals() else '/followups.ics' }}"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
 <div class="container py-4">
 
-    <div class="d-flex align-items-center mb-3">
-        <img
-            src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-            alt="Ulysses CRM"
-            style="height: 72px;"
-        >
-    </div>
-
-    <!-- Add contact form -->
-    <div class="card mb-4">
+    <!-- Add Contact form -->
+    <div id="add-contact" class="card card-add mb-4">
         <div class="card-header">
-            Add new contact
+            Add New Contact
         </div>
-        <div class="card-body">
+        <div class="card-body bg-white">
             <form method="post" action="{{ url_for('add_contact') }}">
                 <div class="row g-3">
                     <div class="col-md-3">
-                        <label class="form-label">First name *</label>
+                        <label class="form-label">First Name *</label>
                         <input name="first_name" class="form-control" required>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Last name</label>
+                        <label class="form-label">Last Name</label>
                         <input name="last_name" class="form-control">
                     </div>
                     <div class="col-md-3">
@@ -185,7 +240,7 @@ BASE_TEMPLATE = """
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Lead type</label>
+                        <label class="form-label">Lead Type</label>
                         <select name="lead_type" class="form-select">
                             <option value="">Select...</option>
                             {% for t in lead_types %}
@@ -195,7 +250,7 @@ BASE_TEMPLATE = """
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Pipeline stage</label>
+                        <label class="form-label">Pipeline Stage</label>
                         <select name="pipeline_stage" class="form-select">
                             <option value="">Select...</option>
                             {% for s in pipeline_stages %}
@@ -225,27 +280,28 @@ BASE_TEMPLATE = """
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Price min</label>
+                        <label class="form-label">Price Min</label>
                         <input name="price_min" type="number" class="form-control" placeholder="300000">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Price max</label>
+                        <label class="form-label">Price Max</label>
                         <input name="price_max" type="number" class="form-control" placeholder="600000">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Target area</label>
+                        <label class="form-label">Target Area</label>
                         <input name="target_area" class="form-control" placeholder="Keyport, Hazlet, Netflix zone">
                     </div>
 
+                    <!-- Subject and Current addresses, grouped -->
                     <div class="col-12 mt-3">
-                        <h6 class="fw-bold mb-2">Subject property</h6>
+                        <h6 class="fw-bold mb-2">Subject Property</h6>
                     </div>
-                    
+
                     <div class="col-md-6">
-                        <label class="form-label">Street address</label>
+                        <label class="form-label">Street Address</label>
                         <input name="subject_address" class="form-control" placeholder="Property of interest">
                     </div>
-                    
+
                     <div class="col-md-2 col-6">
                         <label class="form-label">City</label>
                         <input name="subject_city" class="form-control" placeholder="Hazlet">
@@ -258,16 +314,16 @@ BASE_TEMPLATE = """
                         <label class="form-label">ZIP</label>
                         <input name="subject_zip" class="form-control" placeholder="07730">
                     </div>
-                    
+
                     <div class="col-12 mt-3">
-                        <h6 class="fw-bold mb-2">Current address</h6>
+                        <h6 class="fw-bold mb-2">Current Address</h6>
                     </div>
-                    
+
                     <div class="col-md-6">
-                        <label class="form-label">Street address</label>
+                        <label class="form-label">Street Address</label>
                         <input name="current_address" class="form-control" placeholder="123 Main St">
                     </div>
-                    
+
                     <div class="col-md-2 col-6">
                         <label class="form-label">City</label>
                         <input name="current_city" class="form-control" placeholder="Keyport">
@@ -280,18 +336,18 @@ BASE_TEMPLATE = """
                         <label class="form-label">ZIP</label>
                         <input name="current_zip" class="form-control" placeholder="07735">
                     </div>
-                    
+
                     <div class="col-md-3">
-                        <label class="form-label">Last contacted</label>
+                        <label class="form-label">Last Contacted</label>
                         <input name="last_contacted" type="date" class="form-control" value="{{ today }}">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Next follow up (date)</label>
+                        <label class="form-label">Next Follow Up (Date)</label>
                         <input name="next_follow_up" type="date" class="form-control">
                     </div>
 
                     <div class="col-md-2">
-                        <label class="form-label">Follow up time</label>
+                        <label class="form-label">Follow Up Hour</label>
                         <select name="next_follow_up_hour" class="form-select">
                             <option value="">HH</option>
                             {% for h in range(1,13) %}
@@ -300,7 +356,7 @@ BASE_TEMPLATE = """
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">&nbsp;</label>
+                        <label class="form-label">Follow Up Minute</label>
                         <select name="next_follow_up_minute" class="form-select">
                             <option value="">MM</option>
                             {% for m in ["00", "15", "30", "45"] %}
@@ -309,9 +365,9 @@ BASE_TEMPLATE = """
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">&nbsp;</label>
+                        <label class="form-label">AM / PM</label>
                         <select name="next_follow_up_ampm" class="form-select">
-                            <option value="">AM/PM</option>
+                            <option value="">AM / PM</option>
                             <option value="AM">AM</option>
                             <option value="PM">PM</option>
                         </select>
@@ -323,71 +379,78 @@ BASE_TEMPLATE = """
                          placeholder="Motivation, timing, specific needs..."></textarea>
                     </div>
                 </div>
-                <button class="btn btn-primary mt-3" type="submit">Add contact</button>
+                <button class="btn btn-success mt-3" type="submit">Add Contact</button>
             </form>
         </div>
     </div>
 
     <!-- Filters -->
-    <form class="row g-3 mb-3" method="get" action="{{ url_for('index') }}">
-        <div class="col-md-3">
-            <input type="text" name="q" value="{{ request.args.get('q','') }}" class="form-control"
-                   placeholder="Search name, email, phone">
+    <div class="card mb-3">
+        <div class="card-header fw-bold">
+            Filters
         </div>
-        <div class="col-md-2">
-            <select name="lead_type" class="form-select">
-                <option value="">Lead type</option>
-                {% for t in lead_types %}
-                    <option value="{{ t }}" {% if request.args.get('lead_type') == t %}selected{% endif %}>{{ t }}</option>
-                {% endfor %}
-            </select>
+        <div class="card-body bg-white">
+            <form class="row g-3 mb-0" method="get" action="{{ url_for('index') }}">
+                <div class="col-md-3">
+                    <input type="text" name="q" value="{{ request.args.get('q','') }}" class="form-control"
+                           placeholder="Search name, email, phone">
+                </div>
+                <div class="col-md-2">
+                    <select name="lead_type" class="form-select">
+                        <option value="">Lead Type</option>
+                        {% for t in lead_types %}
+                            <option value="{{ t }}" {% if request.args.get('lead_type') == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="pipeline_stage" class="form-select">
+                        <option value="">Stage</option>
+                        {% for s in pipeline_stages %}
+                            <option value="{{ s }}" {% if request.args.get('pipeline_stage') == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="priority" class="form-select">
+                        <option value="">Priority</option>
+                        {% for p in priorities %}
+                            <option value="{{ p }}" {% if request.args.get('priority') == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" name="target_area" value="{{ request.args.get('target_area','') }}" class="form-control"
+                           placeholder="Filter by area">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-secondary" type="submit">Apply Filters</button>
+                    <a href="{{ url_for('index') }}" class="btn btn-link">Clear</a>
+                </div>
+            </form>
         </div>
-        <div class="col-md-2">
-            <select name="pipeline_stage" class="form-select">
-                <option value="">Stage</option>
-                {% for s in pipeline_stages %}
-                    <option value="{{ s }}" {% if request.args.get('pipeline_stage') == s %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2">
-            <select name="priority" class="form-select">
-                <option value="">Priority</option>
-                {% for p in priorities %}
-                    <option value="{{ p }}" {% if request.args.get('priority') == p %}selected{% endif %}>{{ p }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3">
-            <input type="text" name="target_area" value="{{ request.args.get('target_area','') }}" class="form-control"
-                   placeholder="Filter by area">
-        </div>
-        <div class="col-md-3">
-            <button class="btn btn-outline-secondary" type="submit">Apply filters</button>
-            <a href="{{ url_for('index') }}" class="btn btn-link">Clear</a>
-        </div>
-    </form>
+    </div>
 
     <!-- Contacts table -->
     <div class="card">
-        <div class="card-header">
+        <div class="card-header fw-bold">
             Contacts ({{ contacts|length }})
         </div>
-        <div class="table-responsive">
+        <div class="table-responsive bg-white">
             <table class="table table-sm table-striped mb-0">
                 <thead class="table-light">
                     <tr>
                         <th>Name</th>
-                        <th>Lead type</th>
+                        <th>Lead Type</th>
                         <th>Stage</th>
                         <th>Priority</th>
-                        <th>Price range</th>
+                        <th>Price Range</th>
                         <th>Area</th>
-                        <th>Current address</th>
-                        <th>Subject property</th>
+                        <th>Current Address</th>
+                        <th>Subject Property</th>
                         <th>Source</th>
-                        <th>Last contacted</th>
-                        <th>Next follow up</th>
+                        <th>Last Contacted</th>
+                        <th>Next Follow Up</th>
                         <th style="width: 220px;">Actions</th>
                     </tr>
                 </thead>
@@ -398,9 +461,9 @@ BASE_TEMPLATE = """
                             <a href="{{ url_for('edit_contact', contact_id=c['id']) }}">
                                 {% if c["first_name"] or c["last_name"] %}
                                     {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                            {% else %}
+                                {% else %}
                                     {{ c["name"] }}
-                            {% endif %}
+                                {% endif %}
                             </a>
                         </td>
                         <td>{{ c["lead_type"] or "" }}</td>
@@ -461,16 +524,17 @@ BASE_TEMPLATE = """
         </div>
     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 """
-
 
 EDIT_TEMPLATE = """
 <!doctype html>
 <html>
 <head>
-    <title>Ulysses CRM - Edit contact</title>
+    <title>Ulysses CRM - Edit Contact</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
@@ -480,38 +544,76 @@ EDIT_TEMPLATE = """
       body {
         background-color: #6eb8f9;
       }
+      .card-edit {
+        border-top: 4px solid #0d6efd;
+      }
+      .card-edit .card-header {
+        background-color: rgba(13, 110, 253, 0.08);
+        font-weight: 600;
+      }
+      .card-engagement .card-header {
+        font-weight: 600;
+      }
     </style>
 </head>
 <body>
+
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+  <div class="container-fluid">
+    <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 40px;"
+        class="me-2"
+      >
+      <span class="fw-semibold">Ulysses CRM</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+            data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('index') }}">
+            Contacts
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('followups') }}">
+            Follow Up Dashboard
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link"
+             href="{{ url_for('followups_ics') if 'followups_ics' in globals() else '/followups.ics' }}"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
 <div class="container py-4">
 
-    <div class="d-flex align-items-center mb-3">
-        <img
-            src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-            alt="Ulysses CRM"
-            style="height: 72px;"
-        >
-        <div class="ms-auto">
-            <a href="{{ url_for('followups') }}"
-               class="btn btn-outline-dark btn-sm">
-                Follow-up dashboard
-            </a>
-        </div>
-    </div>
-
-    <div class="card mb-4">
+    <!-- Edit Contact card -->
+    <div class="card card-edit mb-4">
         <div class="card-header">
-            Edit contact
+            Edit Contact
         </div>
-        <div class="card-body">
+        <div class="card-body bg-white">
             <form method="post">
                 <div class="row g-3">
                     <div class="col-md-3">
-                        <label class="form-label">First name *</label>
+                        <label class="form-label">First Name *</label>
                         <input name="first_name" class="form-control" required value="{{ c['first_name'] or '' }}">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Last name</label>
+                        <label class="form-label">Last Name</label>
                         <input name="last_name" class="form-control" value="{{ c['last_name'] or '' }}">
                     </div>
                     <div class="col-md-3">
@@ -524,7 +626,7 @@ EDIT_TEMPLATE = """
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Lead type</label>
+                        <label class="form-label">Lead Type</label>
                         <select name="lead_type" class="form-select">
                             <option value="">Select...</option>
                             {% for t in lead_types %}
@@ -534,7 +636,7 @@ EDIT_TEMPLATE = """
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Pipeline stage</label>
+                        <label class="form-label">Pipeline Stage</label>
                         <select name="pipeline_stage" class="form-select">
                             <option value="">Select...</option>
                             {% for s in pipeline_stages %}
@@ -564,30 +666,29 @@ EDIT_TEMPLATE = """
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Price min</label>
+                        <label class="form-label">Price Min</label>
                         <input name="price_min" type="number" class="form-control"
                                value="{{ c['price_min'] if c['price_min'] is not none else '' }}">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Price max</label>
+                        <label class="form-label">Price Max</label>
                         <input name="price_max" type="number" class="form-control"
                                value="{{ c['price_max'] if c['price_max'] is not none else '' }}">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Target area</label>
+                        <label class="form-label">Target Area</label>
                         <input name="target_area" class="form-control" value="{{ c['target_area'] or '' }}">
                     </div>
 
-                    <!-- Subject on left, Current on right -->
                     <div class="col-12 mt-3">
-                        <h6 class="fw-bold mb-2">Subject property</h6>
+                        <h6 class="fw-bold mb-2">Subject Property</h6>
                     </div>
-                    
+
                     <div class="col-md-6">
-                        <label class="form-label">Street address</label>
+                        <label class="form-label">Street Address</label>
                         <input name="subject_address" class="form-control" value="{{ c['subject_address'] or '' }}">
                     </div>
-                    
+
                     <div class="col-md-2 col-6">
                         <label class="form-label">City</label>
                         <input name="subject_city" class="form-control" value="{{ c['subject_city'] or '' }}">
@@ -600,16 +701,16 @@ EDIT_TEMPLATE = """
                         <label class="form-label">ZIP</label>
                         <input name="subject_zip" class="form-control" value="{{ c['subject_zip'] or '' }}">
                     </div>
-                    
+
                     <div class="col-12 mt-3">
-                        <h6 class="fw-bold mb-2">Current address</h6>
+                        <h6 class="fw-bold mb-2">Current Address</h6>
                     </div>
-                    
+
                     <div class="col-md-6">
-                        <label class="form-label">Street address</label>
+                        <label class="form-label">Street Address</label>
                         <input name="current_address" class="form-control" value="{{ c['current_address'] or '' }}">
                     </div>
-                    
+
                     <div class="col-md-2 col-6">
                         <label class="form-label">City</label>
                         <input name="current_city" class="form-control" value="{{ c['current_city'] or '' }}">
@@ -620,22 +721,22 @@ EDIT_TEMPLATE = """
                     </div>
                     <div class="col-md-2 col-3">
                         <label class="form-label">ZIP</label>
-                        <input name="current_zip" class="form-control" value "{{ c['current_zip'] or '' }}">
+                        <input name="current_zip" class="form-control" value="{{ c['current_zip'] or '' }}">
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Last contacted</label>
+                        <label class="form-label">Last Contacted</label>
                         <input name="last_contacted" type="date" class="form-control"
                                value="{{ c['last_contacted'] or '' }}">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Next follow up (date)</label>
+                        <label class="form-label">Next Follow Up (Date)</label>
                         <input name="next_follow_up" type="date" class="form-control"
                                value="{{ c['next_follow_up'] or '' }}">
                     </div>
 
                     <div class="col-md-2">
-                        <label class="form-label">Follow up time</label>
+                        <label class="form-label">Follow Up Hour</label>
                         <select name="next_follow_up_hour" class="form-select">
                             <option value="">HH</option>
                             {% for h in range(1,13) %}
@@ -644,7 +745,7 @@ EDIT_TEMPLATE = """
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">&nbsp;</label>
+                        <label class="form-label">Follow Up Minute</label>
                         <select name="next_follow_up_minute" class="form-select">
                             <option value="">MM</option>
                             {% for m in ["00", "15", "30", "45"] %}
@@ -653,9 +754,9 @@ EDIT_TEMPLATE = """
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">&nbsp;</label>
+                        <label class="form-label">AM / PM</label>
                         <select name="next_follow_up_ampm" class="form-select">
-                            <option value="">AM/PM</option>
+                            <option value="">AM / PM</option>
                             <option value="AM" {% if next_time_ampm == "AM" %}selected{% endif %}>AM</option>
                             <option value="PM" {% if next_time_ampm == "PM" %}selected{% endif %}>PM</option>
                         </select>
@@ -666,25 +767,25 @@ EDIT_TEMPLATE = """
                         <textarea name="notes" class="form-control" rows="3">{{ c['notes'] or '' }}</textarea>
                     </div>
                 </div>
-                <button class="btn btn-primary mt-3" type="submit">Save changes</button>
+                <button class="btn btn-primary mt-3" type="submit">Save Changes</button>
                 <a href="{{ url_for('index') }}" class="btn btn-secondary mt-3">Cancel</a>
             </form>
         </div>
     </div>
 
-    <!-- Engagement log -->
-    <div class="card mt-4">
+    <!-- Engagement Log -->
+    <div class="card card-engagement">
         <div class="card-header">
-            Engagement log
+            Engagement Log
         </div>
-        <div class="card-body">
+        <div class="card-body bg-white">
             <form method="post" action="{{ url_for('add_interaction', contact_id=c['id']) }}">
                 <div class="row g-3 align-items-end">
                     <div class="col-md-3">
                         <label class="form-label">Type</label>
                         <select name="kind" class="form-select" required>
-                            <option value="Call">Phone call</option>
-                            <option value="Text">Text message</option>
+                            <option value="Call">Phone Call</option>
+                            <option value="Text">Text Message</option>
                             <option value="Email">Email</option>
                             <option value="Meeting">Meeting</option>
                             <option value="Other">Other</option>
@@ -695,7 +796,7 @@ EDIT_TEMPLATE = """
                         <input name="happened_at" type="date" class="form-control" value="{{ today }}">
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">Time (optional)</label>
+                        <label class="form-label">Time (Optional)</label>
                         <select name="time_hour" class="form-select">
                             <option value="">Hour</option>
                             {% for h in range(1,13) %}
@@ -715,7 +816,7 @@ EDIT_TEMPLATE = """
                     <div class="col-md-2">
                         <label class="form-label">&nbsp;</label>
                         <select name="time_ampm" class="form-select">
-                            <option value="">AM/PM</option>
+                            <option value="">AM / PM</option>
                             <option value="AM">AM</option>
                             <option value="PM">PM</option>
                         </select>
@@ -725,7 +826,7 @@ EDIT_TEMPLATE = """
                         <input name="notes" class="form-control" placeholder="Summary of the conversation or message">
                     </div>
                     <div class="col-12">
-                        <button class="btn btn-outline-primary mt-2" type="submit">Save interaction</button>
+                        <button class="btn btn-outline-primary mt-2" type="submit">Save Interaction</button>
                     </div>
                 </div>
             </form>
@@ -768,8 +869,9 @@ EDIT_TEMPLATE = """
             {% endif %}
         </div>
     </div>
-
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 """
@@ -778,7 +880,7 @@ FOLLOWUPS_TEMPLATE = """
 <!doctype html>
 <html>
 <head>
-    <title>Ulysses CRM - Follow-ups</title>
+    <title>Ulysses CRM - Follow Ups</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
@@ -788,25 +890,56 @@ FOLLOWUPS_TEMPLATE = """
       body {
         background-color: #6eb8f9;
       }
+      .card-followups .card-header {
+        font-weight: 600;
+      }
     </style>
 </head>
 <body>
+
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+  <div class="container-fluid">
+    <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 40px;"
+        class="me-2"
+      >
+      <span class="fw-semibold">Ulysses CRM</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+            data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('index') }}">
+            Contacts
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link active" href="{{ url_for('followups') }}">
+            Follow Up Dashboard
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link"
+             href="{{ url_for('followups_ics') if 'followups_ics' in globals() else '/followups.ics' }}"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
 <div class="container py-4">
 
-    <div class="d-flex align-items-center mb-3">
-        <img
-            src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-            alt="Ulysses CRM"
-            style="height: 72px;"
-        >
-        <div class="ms-auto">
-            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
-                Back to contacts
-            </a>
-        </div>
-    </div>
-
-    <h2 class="mb-3">Follow-up dashboard</h2>
+    <h2 class="mb-1">Follow Up Dashboard</h2>
     <p class="text-muted">Today: {{ today }}</p>
 
     {% macro followup_table(rows) %}
@@ -858,9 +991,9 @@ FOLLOWUPS_TEMPLATE = """
     {% endmacro %}
 
     <!-- Overdue -->
-    <div class="card mb-4">
+    <div class="card card-followups mb-4">
         <div class="card-header bg-danger text-white">
-            Overdue follow-ups
+            Overdue Follow Ups
         </div>
         <div class="card-body bg-white">
             {{ followup_table(overdue) }}
@@ -868,7 +1001,7 @@ FOLLOWUPS_TEMPLATE = """
     </div>
 
     <!-- Today -->
-    <div class="card mb-4">
+    <div class="card card-followups mb-4">
         <div class="card-header bg-warning">
             Today
         </div>
@@ -878,7 +1011,7 @@ FOLLOWUPS_TEMPLATE = """
     </div>
 
     <!-- Upcoming -->
-    <div class="card mb-4">
+    <div class="card card-followups mb-4">
         <div class="card-header bg-success text-white">
             Upcoming
         </div>
@@ -886,8 +1019,9 @@ FOLLOWUPS_TEMPLATE = """
             {{ followup_table(upcoming) }}
         </div>
     </div>
-
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 """
