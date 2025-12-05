@@ -237,26 +237,48 @@ BASE_TEMPLATE = """
                         <input name="target_area" class="form-control" placeholder="Keyport, Hazlet, Netflix zone">
                     </div>
 
+<div class="col-12 mt-3">
+    <h6 class="fw-bold mb-2">Subject property</h6>
+</div>
+
 <div class="col-md-6">
-    <label class="form-label">Subject property street address</label>
+    <label class="form-label">Street address</label>
     <input name="subject_address" class="form-control" placeholder="Property of interest">
 </div>
+
+<div class="col-md-2 col-6">
+    <label class="form-label">City</label>
+    <input name="subject_city" class="form-control" placeholder="Hazlet">
+</div>
+<div class="col-md-2 col-3">
+    <label class="form-label">State</label>
+    <input name="subject_state" class="form-control" placeholder="NJ">
+</div>
+<div class="col-md-2 col-3">
+    <label class="form-label">ZIP</label>
+    <input name="subject_zip" class="form-control" placeholder="07730">
+</div>
+
+<div class="col-12 mt-3">
+    <h6 class="fw-bold mb-2">Current address</h6>
+</div>
+
 <div class="col-md-6">
-    <label class="form-label">Current street address</label>
+    <label class="form-label">Street address</label>
     <input name="current_address" class="form-control" placeholder="123 Main St">
 </div>
 
-<div class="col-md-2">
-    <label class="form-label">Subject city</label>
-    <input name="subject_city" class="form-control" placeholder="Hazlet">
+<div class="col-md-2 col-6">
+    <label class="form-label">City</label>
+    <input name="current_city" class="form-control" placeholder="Keyport">
 </div>
-<div class="col-md-2">
-    <label class="form-label">Subject state</label>
-    <input name="subject_state" class="form-control" placeholder="NJ">
+<div class="col-md-2 col-3">
+    <label class="form-label">State</label>
+    <input name="current_state" class="form-control" placeholder="NJ">
 </div>
-<div class="col-md-2">
-    <label class="form-label">Subject ZIP</label>
-    <input name="subject_zip" class="form-control" placeholder="07730">
+<div class="col-md-2 col-3">
+    <label class="form-label">ZIP</label>
+    <input name="current_zip" class="form-control" placeholder="07735">
 </div>
 
 <div class="col-md-2">
@@ -564,39 +586,48 @@ EDIT_TEMPLATE = """
                     </div>
 
                     <!-- Subject on left, Current on right -->
+                    <div class="col-12 mt-3">
+                        <h6 class="fw-bold mb-2">Subject property</h6>
+                    </div>
+                    
                     <div class="col-md-6">
-                        <label class="form-label">Subject property street address</label>
+                        <label class="form-label">Street address</label>
                         <input name="subject_address" class="form-control" value="{{ c['subject_address'] or '' }}">
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Current street address</label>
-                        <input name="current_address" class="form-control" value="{{ c['current_address'] or '' }}">
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">Subject city</label>
+                    
+                    <div class="col-md-2 col-6">
+                        <label class="form-label">City</label>
                         <input name="subject_city" class="form-control" value="{{ c['subject_city'] or '' }}">
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Subject state</label>
+                    <div class="col-md-2 col-3">
+                        <label class="form-label">State</label>
                         <input name="subject_state" class="form-control" value="{{ c['subject_state'] or '' }}">
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Subject ZIP</label>
+                    <div class="col-md-2 col-3">
+                        <label class="form-label">ZIP</label>
                         <input name="subject_zip" class="form-control" value="{{ c['subject_zip'] or '' }}">
                     </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">Current city</label>
+                    
+                    <div class="col-12 mt-3">
+                        <h6 class="fw-bold mb-2">Current address</h6>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label class="form-label">Street address</label>
+                        <input name="current_address" class="form-control" value="{{ c['current_address'] or '' }}">
+                    </div>
+                    
+                    <div class="col-md-2 col-6">
+                        <label class="form-label">City</label>
                         <input name="current_city" class="form-control" value="{{ c['current_city'] or '' }}">
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Current state</label>
+                    <div class="col-md-2 col-3">
+                        <label class="form-label">State</label>
                         <input name="current_state" class="form-control" value="{{ c['current_state'] or '' }}">
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Current ZIP</label>
-                        <input name="current_zip" class="form-control" value="{{ c['current_zip'] or '' }}">
+                    <div class="col-md-2 col-3">
+                        <label class="form-label">ZIP</label>
+                        <input name="current_zip" class="form-control" value "{{ c['current_zip'] or '' }}">
                     </div>
 
                     <div class="col-md-3">
