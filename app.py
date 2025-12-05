@@ -475,164 +475,179 @@ EDIT_TEMPLATE = """
 </head>
 <body>
 <div class="container py-4">
-    <h1 class="mb-4">Edit contact</h1>
-    <form method="post">
-        <div class="row g-3">
-            <div class="col-md-3">
-                <label class="form-label">First name *</label>
-                <input name="first_name" class="form-control" required value="{{ c['first_name'] or '' }}">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Last name</label>
-                <input name="last_name" class="form-control" value="{{ c['last_name'] or '' }}">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Email</label>
-                <input name="email" type="email" class="form-control" value="{{ c['email'] or '' }}">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Phone</label>
-                <input name="phone" class="form-control" value="{{ c['phone'] or '' }}">
-            </div>
 
-            <div class="col-md-3">
-                <label class="form-label">Lead type</label>
-                <select name="lead_type" class="form-select">
-                    <option value="">Select...</option>
-                    {% for t in lead_types %}
-                        <option value="{{ t }}" {% if c['lead_type'] == t %}selected{% endif %}>{{ t }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+    <div class="d-flex align-items-center mb-3">
+        <img
+            src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+            alt="Ulysses CRM"
+            style="height: 72px;"
+        >
+    </div>
 
-            <div class="col-md-3">
-                <label class="form-label">Pipeline stage</label>
-                <select name="pipeline_stage" class="form-select">
-                    <option value="">Select...</option>
-                    {% for s in pipeline_stages %}
-                        <option value="{{ s }}" {% if c['pipeline_stage'] == s %}selected{% endif %}>{{ s }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Priority</label>
-                <select name="priority" class="form-select">
-                    <option value="">Select...</option>
-                    {% for p in priorities %}
-                        <option value="{{ p }}" {% if c['priority'] == p %}selected{% endif %}>{{ p }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Source</label>
-                <select name="source" class="form-select">
-                    <option value="">Select...</option>
-                    {% for s in sources %}
-                        <option value="{{ s }}" {% if c['source'] == s %}selected{% endif %}>{{ s }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Price min</label>
-                <input name="price_min" type="number" class="form-control"
-                       value="{{ c['price_min'] if c['price_min'] is not none else '' }}">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Price max</label>
-                <input name="price_max" type="number" class="form-control"
-                       value="{{ c['price_max'] if c['price_max'] is not none else '' }}">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Target area</label>
-                <input name="target_area" class="form-control" value="{{ c['target_area'] or '' }}">
-            </div>
-
-<div class="col-md-6">
-    <label class="form-label">Subject property street address</label>
-    <input name="subject_address" class="form-control" value="{{ c['subject_address'] or '' }}">
-</div>
-<div class="col-md-6">
-    <label class="form-label">Current street address</label>
-    <input name="current_address" class="form-control" value="{{ c['current_address'] or '' }}">
-</div>
-
-<div class="col-md-2">
-    <label class="form-label">Subject city</label>
-    <input name="subject_city" class="form-control" value="{{ c['subject_city'] or '' }}">
-</div>
-<div class="col-md-2">
-    <label class="form-label">Subject state</label>
-    <input name="subject_state" class="form-control" value="{{ c['subject_state'] or '' }}">
-</div>
-<div class="col-md-2">
-    <label class="form-label">Subject ZIP</label>
-    <input name="subject_zip" class="form-control" value="{{ c['subject_zip'] or '' }}">
-</div>
-
-<div class="col-md-2">
-    <label class="form-label">Current city</label>
-    <input name="current_city" class="form-control" value="{{ c['current_city'] or '' }}">
-</div>
-<div class="col-md-2">
-    <label class="form-label">Current state</label>
-    <input name="current_state" class="form-control" value="{{ c['current_state'] or '' }}">
-</div>
-<div class="col-md-2">
-    <label class="form-label">Current ZIP</label>
-    <input name="current_zip" class="form-control" value="{{ c['current_zip'] or '' }}">
-</div>
-
-            <div class="col-md-3">
-                <label class="form-label">Last contacted</label>
-                <input name="last_contacted" type="date" class="form-control"
-                       value="{{ c['last_contacted'] or '' }}">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Next follow up (date)</label>
-                <input name="next_follow_up" type="date" class="form-control"
-                       value="{{ c['next_follow_up'] or '' }}">
-            </div>
-
-            <div class="col-md-2">
-                <label class="form-label">Follow up time</label>
-                <select name="next_follow_up_hour" class="form-select">
-                    <option value="">HH</option>
-                    {% for h in range(1,13) %}
-                        <option value="{{ h }}" {% if next_time_hour == h %}selected{% endif %}>{{ h }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">&nbsp;</label>
-                <select name="next_follow_up_minute" class="form-select">
-                    <option value="">MM</option>
-                    {% for m in ["00", "15", "30", "45"] %}
-                        <option value="{{ m }}" {% if next_time_minute == m %}selected{% endif %}>{{ m }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">&nbsp;</label>
-                <select name="next_follow_up_ampm" class="form-select">
-                    <option value="">AM/PM</option>
-                    <option value="AM" {% if next_time_ampm == "AM" %}selected{% endif %}>AM</option>
-                    <option value="PM" {% if next_time_ampm == "PM" %}selected{% endif %}>PM</option>
-                </select>
-            </div>
-
-            <div class="col-12">
-                <label class="form-label">Notes</label>
-                <textarea name="notes" class="form-control" rows="3">{{ c['notes'] or '' }}</textarea>
-            </div>
+    <div class="card mb-4">
+        <div class="card-header">
+            Edit contact
         </div>
-        <button class="btn btn-primary mt-3" type="submit">Save changes</button>
-        <a href="{{ url_for('index') }}" class="btn btn-secondary mt-3">Cancel</a>
-    </form>
+        <div class="card-body">
+            <form method="post">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">First name *</label>
+                        <input name="first_name" class="form-control" required value="{{ c['first_name'] or '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Last name</label>
+                        <input name="last_name" class="form-control" value="{{ c['last_name'] or '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Email</label>
+                        <input name="email" type="email" class="form-control" value="{{ c['email'] or '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Phone</label>
+                        <input name="phone" class="form-control" value="{{ c['phone'] or '' }}">
+                    </div>
 
-    <!-- Engagement log -->
+                    <div class="col-md-3">
+                        <label class="form-label">Lead type</label>
+                        <select name="lead_type" class="form-select">
+                            <option value="">Select...</option>
+                            {% for t in lead_types %}
+                                <option value="{{ t }}" {% if c['lead_type'] == t %}selected{% endif %}>{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Pipeline stage</label>
+                        <select name="pipeline_stage" class="form-select">
+                            <option value="">Select...</option>
+                            {% for s in pipeline_stages %}
+                                <option value="{{ s }}" {% if c['pipeline_stage'] == s %}selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Priority</label>
+                        <select name="priority" class="form-select">
+                            <option value="">Select...</option>
+                            {% for p in priorities %}
+                                <option value="{{ p }}" {% if c['priority'] == p %}selected{% endif %}>{{ p }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Source</label>
+                        <select name="source" class="form-select">
+                            <option value="">Select...</option>
+                            {% for s in sources %}
+                                <option value="{{ s }}" {% if c['source'] == s %}selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Price min</label>
+                        <input name="price_min" type="number" class="form-control"
+                               value="{{ c['price_min'] if c['price_min'] is not none else '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Price max</label>
+                        <input name="price_max" type="number" class="form-control"
+                               value="{{ c['price_max'] if c['price_max'] is not none else '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Target area</label>
+                        <input name="target_area" class="form-control" value="{{ c['target_area'] or '' }}">
+                    </div>
+
+                    <!-- Subject on left, Current on right -->
+                    <div class="col-md-6">
+                        <label class="form-label">Subject property street address</label>
+                        <input name="subject_address" class="form-control" value="{{ c['subject_address'] or '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Current street address</label>
+                        <input name="current_address" class="form-control" value="{{ c['current_address'] or '' }}">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Subject city</label>
+                        <input name="subject_city" class="form-control" value="{{ c['subject_city'] or '' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Subject state</label>
+                        <input name="subject_state" class="form-control" value="{{ c['subject_state'] or '' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Subject ZIP</label>
+                        <input name="subject_zip" class="form-control" value="{{ c['subject_zip'] or '' }}">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Current city</label>
+                        <input name="current_city" class="form-control" value="{{ c['current_city'] or '' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Current state</label>
+                        <input name="current_state" class="form-control" value="{{ c['current_state'] or '' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Current ZIP</label>
+                        <input name="current_zip" class="form-control" value="{{ c['current_zip'] or '' }}">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Last contacted</label>
+                        <input name="last_contacted" type="date" class="form-control"
+                               value="{{ c['last_contacted'] or '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Next follow up (date)</label>
+                        <input name="next_follow_up" type="date" class="form-control"
+                               value="{{ c['next_follow_up'] or '' }}">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Follow up time</label>
+                        <select name="next_follow_up_hour" class="form-select">
+                            <option value="">HH</option>
+                            {% for h in range(1,13) %}
+                                <option value="{{ h }}" {% if next_time_hour == h %}selected{% endif %}>{{ h }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <select name="next_follow_up_minute" class="form-select">
+                            <option value="">MM</option>
+                            {% for m in ["00", "15", "30", "45"] %}
+                                <option value="{{ m }}" {% if next_time_minute == m %}selected{% endif %}>{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <select name="next_follow_up_ampm" class="form-select">
+                            <option value="">AM/PM</option>
+                            <option value="AM" {% if next_time_ampm == "AM" %}selected{% endif %}>AM</option>
+                            <option value="PM" {% if next_time_ampm == "PM" %}selected{% endif %}>PM</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Notes</label>
+                        <textarea name="notes" class="form-control" rows="3">{{ c['notes'] or '' }}</textarea>
+                    </div>
+                </div>
+                <button class="btn btn-primary mt-3" type="submit">Save changes</button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary mt-3">Cancel</a>
+            </form>
+        </div>
+    </div>
+
     <!-- Engagement log -->
     <div class="card mt-4">
         <div class="card-header">
@@ -729,11 +744,11 @@ EDIT_TEMPLATE = """
             {% endif %}
         </div>
     </div>
+
 </div>
 </body>
 </html>
 """
-
 
 @app.route("/")
 def index():
