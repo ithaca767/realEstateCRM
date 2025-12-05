@@ -491,6 +491,12 @@ EDIT_TEMPLATE = """
             alt="Ulysses CRM"
             style="height: 72px;"
         >
+        <div class="ms-auto">
+            <a href="{{ url_for('followups') }}"
+               class="btn btn-outline-dark btn-sm">
+                Follow-up dashboard
+            </a>
+        </div>
     </div>
 
     <div class="card mb-4">
@@ -760,6 +766,124 @@ EDIT_TEMPLATE = """
             {% else %}
                 <p class="mb-0 text-muted">No interactions logged yet.</p>
             {% endif %}
+        </div>
+    </div>
+
+</div>
+</body>
+</html>
+"""
+
+FOLLOWUPS_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <title>Ulysses CRM - Follow-ups</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    >
+    <style>
+      body {
+        background-color: #6eb8f9;
+      }
+    </style>
+</head>
+<body>
+<div class="container py-4">
+
+    <div class="d-flex align-items-center mb-3">
+        <img
+            src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+            alt="Ulysses CRM"
+            style="height: 72px;"
+        >
+        <div class="ms-auto">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+                Back to contacts
+            </a>
+        </div>
+    </div>
+
+    <h2 class="mb-3">Follow-up dashboard</h2>
+    <p class="text-muted">Today: {{ today }}</p>
+
+    {% macro followup_table(rows) %}
+        {% if rows and rows|length > 0 %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Stage</th>
+                            <th>Priority</th>
+                            <th>Area</th>
+                            <th style="width: 140px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for c in rows %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}">
+                                    {% if c["first_name"] or c["last_name"] %}
+                                        {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                                    {% else %}
+                                        {{ c["name"] }}
+                                    {% endif %}
+                                </a>
+                            </td>
+                            <td>{{ c["next_follow_up"] or "" }}</td>
+                            <td>{{ c["next_follow_up_time"] or "" }}</td>
+                            <td>{{ c["pipeline_stage"] or "" }}</td>
+                            <td>{{ c["priority"] or "" }}</td>
+                            <td>{{ c["target_area"] or "" }}</td>
+                            <td>
+                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
+                                   class="btn btn-sm btn-outline-primary">
+                                   Open
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="mb-0 text-muted">Nothing here.</p>
+        {% endif %}
+    {% endmacro %}
+
+    <!-- Overdue -->
+    <div class="card mb-4">
+        <div class="card-header bg-danger text-white">
+            Overdue follow-ups
+        </div>
+        <div class="card-body bg-white">
+            {{ followup_table(overdue) }}
+        </div>
+    </div>
+
+    <!-- Today -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning">
+            Today
+        </div>
+        <div class="card-body bg-white">
+            {{ followup_table(today_list) }}
+        </div>
+    </div>
+
+    <!-- Upcoming -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            Upcoming
+        </div>
+        <div class="card-body bg-white">
+            {{ followup_table(upcoming) }}
         </div>
     </div>
 
@@ -1148,6 +1272,59 @@ def delete_interaction(interaction_id):
 
     # Go back to that contact's edit page
     return redirect(url_for("edit_contact", contact_id=contact_id))
+
+@app.route("/followups")
+def followups():
+    """
+    Simple dashboard view of overdue, today's, and upcoming follow-ups.
+    """
+    today_str = date.today().isoformat()
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            id,
+            name,
+            first_name,
+            last_name,
+            next_follow_up,
+            next_follow_up_time,
+            pipeline_stage,
+            priority,
+            target_area
+        FROM contacts
+        WHERE next_follow_up IS NOT NULL
+          AND next_follow_up <> ''
+        ORDER BY next_follow_up, name
+        """
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    overdue = []
+    today_list = []
+    upcoming = []
+
+    for row in rows:
+        nf = row["next_follow_up"]
+        if not nf:
+            continue
+        if nf < today_str:
+            overdue.append(row)
+        elif nf == today_str:
+            today_list.append(row)
+        else:
+            upcoming.append(row)
+
+    return render_template_string(
+        FOLLOWUPS_TEMPLATE,
+        overdue=overdue,
+        today_list=today_list,
+        upcoming=upcoming,
+        today=today_str,
+    )
 
 @app.route("/followups.ics")
 def followups_ics():
