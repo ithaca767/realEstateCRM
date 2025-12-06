@@ -547,11 +547,32 @@ BASE_TEMPLATE = """
                     {% endif %}
 
                     <!-- Actions -->
-                    <div class="mt-2">
+                    <div class="mt-2 d-flex flex-wrap gap-1">
+                    
+                        {% if c["phone"] %}
+                            <a href="tel:{{ c['phone'] }}"
+                               class="btn btn-sm btn-outline-success">
+                                Call
+                            </a>
+                    
+                            <a href="sms:{{ c['phone'] }}"
+                               class="btn btn-sm btn-outline-secondary">
+                                Text
+                            </a>
+                        {% endif %}
+                    
+                        {% if c["email"] %}
+                            <a href="mailto:{{ c['email'] }}"
+                               class="btn btn-sm btn-outline-info">
+                                Email
+                            </a>
+                        {% endif %}
+                    
                         <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
                            class="btn btn-sm btn-outline-primary">
                             Edit
                         </a>
+                    
                         <a href="{{ url_for('delete_contact', contact_id=c['id']) }}"
                            class="btn btn-sm btn-outline-danger"
                            onclick="return confirm('Delete this contact?');">
