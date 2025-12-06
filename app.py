@@ -167,47 +167,48 @@ BASE_TEMPLATE = """
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
-  <div class="container-fluid">
-    <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
-      <img
-        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-        alt="Ulysses CRM"
-        style="height: 40px;"
-        class="me-2"
-      >
-      <span class="fw-semibold">Ulysses CRM</span>
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-            data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false"
-            aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="mainNav">
-      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-        <li class="nav-item">
-          <a class="nav-link{% if request.endpoint == 'index' %} active{% endif %}"
-             href="{{ url_for('index') }}">
-            Contacts
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="#add-contact">Add Contact</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link{% if request.endpoint == 'followups' %} active{% endif %}"
-             href="{{ url_for('followups') }}">
-            Follow Up Dashboard
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link"
-             href="{{ url_for('followups_ics') }}"
-             target="_blank">
-            Calendar Feed
-          </a>
-        </li>
-      </ul>
+<nav class="bg-white shadow-sm border-bottom">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+    <div class="d-flex align-items-center flex-wrap gap-2">
+
+      <!-- Logo + name -->
+      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+        <img
+          src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+          alt="Ulysses CRM"
+          style="height: 32px;"
+          class="me-2"
+        >
+        <span class="fw-semibold">Ulysses CRM</span>
+      </a>
+
+      <!-- Nav links with pipes -->
+      <a href="{{ url_for('index') }}"
+         class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
+        Contacts
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="#add-contact" class="text-decoration-none text-dark">
+        Add Contact
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('followups') }}"
+         class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
+        Follow Up Dashboard
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('followups_ics') }}"
+         class="text-decoration-none text-dark"
+         target="_blank">
+        Calendar Feed
+      </a>
+
     </div>
   </div>
 </nav>
@@ -558,42 +559,42 @@ EDIT_TEMPLATE = """
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
-  <div class="container-fluid">
-    <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
-      <img
-        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-        alt="Ulysses CRM"
-        style="height: 40px;"
-        class="me-2"
-      >
-      <span class="fw-semibold">Ulysses CRM</span>
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-            data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false"
-            aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="mainNav">
-      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('index') }}">
-            Contacts
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('followups') }}">
-            Follow Up Dashboard
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link"
-             href="{{ url_for('followups_ics') }}"
-             target="_blank">
-            Calendar Feed
-          </a>
-        </li>
-      </ul>
+<nav class="bg-white shadow-sm border-bottom">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+    <div class="d-flex align-items-center flex-wrap gap-2">
+
+      <!-- Logo + name -->
+      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+        <img
+          src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+          alt="Ulysses CRM"
+          style="height: 32px;"
+          class="me-2"
+        >
+        <span class="fw-semibold">Ulysses CRM</span>
+      </a>
+
+      <!-- Nav links with pipes -->
+      <a href="{{ url_for('index') }}"
+         class="text-decoration-none text-dark">
+        Contacts
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('followups') }}"
+         class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
+        Follow Up Dashboard
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('followups_ics') }}"
+         class="text-decoration-none text-dark"
+         target="_blank">
+        Calendar Feed
+      </a>
+
     </div>
   </div>
 </nav>
@@ -897,42 +898,42 @@ FOLLOWUPS_TEMPLATE = """
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
-  <div class="container-fluid">
-    <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
-      <img
-        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-        alt="Ulysses CRM"
-        style="height: 40px;"
-        class="me-2"
-      >
-      <span class="fw-semibold">Ulysses CRM</span>
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-            data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false"
-            aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="mainNav">
-      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('index') }}">
-            Contacts
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link active" href="{{ url_for('followups') }}">
-            Follow Up Dashboard
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link"
-             href="{{ url_for('followups_ics') }}"
-             target="_blank">
-            Calendar Feed
-          </a>
-        </li>
-      </ul>
+<nav class="bg-white shadow-sm border-bottom">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+    <div class="d-flex align-items-center flex-wrap gap-2">
+
+      <!-- Logo + name -->
+      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+        <img
+          src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+          alt="Ulysses CRM"
+          style="height: 32px;"
+          class="me-2"
+        >
+        <span class="fw-semibold">Ulysses CRM</span>
+      </a>
+
+      <!-- Nav links with pipes -->
+      <a href="{{ url_for('index') }}"
+         class="text-decoration-none text-dark">
+        Contacts
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('followups') }}"
+         class="text-decoration-none text-dark fw-semibold">
+        Follow Up Dashboard
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('followups_ics') }}"
+         class="text-decoration-none text-dark"
+         target="_blank">
+        Calendar Feed
+      </a>
+
     </div>
   </div>
 </nav>
