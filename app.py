@@ -443,6 +443,21 @@ BASE_TEMPLATE = """
                     <input type="text" name="target_area" value="{{ request.args.get('target_area','') }}" class="form-control"
                            placeholder="Filter by area">
                 </div>
+            
+                <!-- Sort by select -->
+                <div class="col-md-3">
+                    <select name="sort" class="form-select">
+                        <option value="followup"
+                            {% if request.args.get('sort','followup') == 'followup' %}selected{% endif %}>
+                            Sort by Follow Up
+                        </option>
+                        <option value="name"
+                            {% if request.args.get('sort','followup') == 'name' %}selected{% endif %}>
+                            Sort by Name
+                        </option>
+                    </select>
+                </div>
+            
                 <div class="col-md-3">
                     <button class="btn btn-outline-secondary" type="submit">Apply Filters</button>
                     <a href="{{ url_for('index') }}" class="btn btn-link">Clear</a>
@@ -516,9 +531,24 @@ BASE_TEMPLATE = """
                         <td>{{ c["source"] or "" }}</td>
                         <td>{{ c["last_contacted"] or "" }}</td>
                         <td>
-                            {{ c["next_follow_up"] or "" }}
-                            {% if c["next_follow_up_time"] %}
-                                {{ " " }}{{ c["next_follow_up_time"] }}
+                            {% set nf = c["next_follow_up"] %}
+                            {% set nft = c["next_follow_up_time"] %}
+                            {% if nf %}
+                                {% if nf < today %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                        {{ nf }}{% if nft %} {{ nft }}{% endif %}
+                                    </span>
+                                {% elif nf == today %}
+                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle">
+                                        Today{% if nft %} {{ nft }}{% endif %}
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                        {{ nf }}{% if nft %} {{ nft }}{% endif %}
+                                    </span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">–</span>
                             {% endif %}
                         </td>
                         <td>
@@ -1076,6 +1106,7 @@ def index():
     pipeline_stage = request.args.get("pipeline_stage", "").strip()
     priority = request.args.get("priority", "").strip()
     target_area = request.args.get("target_area", "").strip()
+    sort = request.args.get("sort", "followup").strip() or "followup"
 
     conn = get_db()
     cur = conn.cursor()
@@ -1104,7 +1135,12 @@ def index():
         sql += " AND target_area ILIKE %s"
         params.append(f"%{target_area}%")
 
-    sql += " ORDER BY next_follow_up IS NULL, next_follow_up, name"
+    # Sorting
+    if sort == "name":
+        sql += " ORDER BY name, next_follow_up IS NULL, next_follow_up"
+    else:
+        # default: sort by next follow up, then name
+        sql += " ORDER BY next_follow_up IS NULL, next_follow_up, name"
 
     cur.execute(sql, params)
     contacts = cur.fetchall()
@@ -1120,7 +1156,6 @@ def index():
         priorities=PRIORITIES,
         sources=SOURCES,
     )
-
 
 def parse_int_or_none(value):
     value = (value or "").strip()
