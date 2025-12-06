@@ -1,13 +1,24 @@
 import os
+import re
 from datetime import date, datetime, timedelta
 
-from flask import Flask, render_template_string, request, redirect, url_for, Response
+from flask import (
+    Flask,
+    render_template_string,
+    request,
+    redirect,
+    url_for,
+    Response,
+    jsonify,
+    abort,
+)
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
+SHORTCUT_API_KEY = os.environ.get("SHORTCUT_API_KEY")  # optional shared secret
 
 
 def get_db():
@@ -163,70 +174,44 @@ BASE_TEMPLATE = """
       .card-followups .card-header {
         font-weight: 600;
       }
-
-      /* NEW: top nav layout */
-      .top-nav {
-        font-size: 0.9rem;
-      }
-      .top-nav-inner {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        flex-wrap: wrap;
-        gap: 0.25rem 1rem;
-      }
-      .top-nav-links {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.25rem 0.5rem;
-      }
-      @media (max-width: 576px) {
-        .top-nav-inner {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-      }
     </style>
 </head>
 <body>
 
 <nav class="bg-white shadow-sm border-bottom sticky-top">
-  <div class="container-fluid py-2 top-nav">
-    <div class="top-nav-inner">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+    <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo -->
-      <a href="{{ url_for('index') }}"
-         class="d-flex align-items-center text-decoration-none text-dark">
+      <!-- Logo only -->
+      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          style="height: 44px;"
+          style="height: 40px;"
+          class="me-2"
         >
       </a>
 
-      <!-- Links -->
-      <div class="top-nav-links">
-        <a href="{{ url_for('index') }}"
-           class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
-          Contacts
-        </a>
+      <!-- Nav links with pipes -->
+      <a href="{{ url_for('index') }}"
+         class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
+        Contacts
+      </a>
 
-        <span class="text-secondary">|</span>
+      <span class="text-secondary">|</span>
 
-        <a href="{{ url_for('followups') }}"
-           class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
-          Follow Up Dashboard
-        </a>
+      <a href="{{ url_for('followups') }}"
+         class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
+        Follow Up Dashboard
+      </a>
 
-        <span class="text-secondary">|</span>
+      <span class="text-secondary">|</span>
 
-        <a href="{{ url_for('followups_ics') }}"
-           class="text-decoration-none text-dark"
-           target="_blank">
-          Calendar Feed
-        </a>
-      </div>
+      <a href="{{ url_for('followups_ics') }}"
+         class="text-decoration-none text-dark"
+         target="_blank">
+        Calendar Feed
+      </a>
 
     </div>
   </div>
@@ -443,21 +428,6 @@ BASE_TEMPLATE = """
                     <input type="text" name="target_area" value="{{ request.args.get('target_area','') }}" class="form-control"
                            placeholder="Filter by area">
                 </div>
-            
-                <!-- Sort by select -->
-                <div class="col-md-3">
-                    <select name="sort" class="form-select">
-                        <option value="followup"
-                            {% if request.args.get('sort','followup') == 'followup' %}selected{% endif %}>
-                            Sort by Follow Up
-                        </option>
-                        <option value="name"
-                            {% if request.args.get('sort','followup') == 'name' %}selected{% endif %}>
-                            Sort by Name
-                        </option>
-                    </select>
-                </div>
-            
                 <div class="col-md-3">
                     <button class="btn btn-outline-secondary" type="submit">Apply Filters</button>
                     <a href="{{ url_for('index') }}" class="btn btn-link">Clear</a>
@@ -486,7 +456,7 @@ BASE_TEMPLATE = """
                         <th>Source</th>
                         <th>Last Contacted</th>
                         <th>Next Follow Up</th>
-                        <th style="width: 220px;">Actions</th>
+                        <th style="width: 260px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -531,33 +501,37 @@ BASE_TEMPLATE = """
                         <td>{{ c["source"] or "" }}</td>
                         <td>{{ c["last_contacted"] or "" }}</td>
                         <td>
-                            {% set nf = c["next_follow_up"] %}
-                            {% set nft = c["next_follow_up_time"] %}
-                            {% if nf %}
-                                {% if nf < today %}
-                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
-                                        {{ nf }}{% if nft %} {{ nft }}{% endif %}
-                                    </span>
-                                {% elif nf == today %}
-                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle">
-                                        Today{% if nft %} {{ nft }}{% endif %}
-                                    </span>
-                                {% else %}
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
-                                        {{ nf }}{% if nft %} {{ nft }}{% endif %}
-                                    </span>
-                                {% endif %}
-                            {% else %}
-                                <span class="text-muted">–</span>
+                            {{ c["next_follow_up"] or "" }}
+                            {% if c["next_follow_up_time"] %}
+                                {{ " " }}{{ c["next_follow_up_time"] }}
                             {% endif %}
                         </td>
-                        <td>
-                            <a href="{{ url_for('edit_contact', contact_id=c['id']) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                        <td class="d-flex flex-wrap gap-1">
+                            <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
+                               class="btn btn-sm btn-outline-primary">
+                               Edit
+                            </a>
                             <a href="{{ url_for('delete_contact', contact_id=c['id']) }}"
                                class="btn btn-sm btn-outline-danger"
                                onclick="return confirm('Delete this contact?');">
                                Delete
                             </a>
+                            {% if c["phone"] %}
+                                <a href="tel:{{ c['phone'] }}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                   Call
+                                </a>
+                                <a href="sms:{{ c['phone'] }}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                   Text
+                                </a>
+                            {% endif %}
+                            {% if c["email"] %}
+                                <a href="mailto:{{ c['email'] }}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                   Email
+                                </a>
+                            {% endif %}
                         </td>
                     </tr>
                     {% if c["notes"] %}
@@ -593,16 +567,6 @@ EDIT_TEMPLATE = """
     <style>
       body {
         background-color: #6eb8f9;
-      }            
-      
-      .navbar-logo {
-        height: 56px;
-      }
-      
-      @media (max-width: 576px) {
-        .navbar-logo {
-          height: 44px;
-        }
       }
       .card-edit {
         border-top: 4px solid #0d6efd;
@@ -619,41 +583,39 @@ EDIT_TEMPLATE = """
 <body>
 
 <nav class="bg-white shadow-sm border-bottom sticky-top">
-  <div class="container-fluid py-2 top-nav">
-    <div class="top-nav-inner">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+    <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo -->
-      <a href="{{ url_for('index') }}"
-         class="d-flex align-items-center text-decoration-none text-dark">
+      <!-- Logo only -->
+      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          style="height: 44px;"
+          style="height: 40px;"
+          class="me-2"
         >
       </a>
 
-      <!-- Links -->
-      <div class="top-nav-links">
-        <a href="{{ url_for('index') }}"
-           class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
-          Contacts
-        </a>
+      <!-- Nav links with pipes -->
+      <a href="{{ url_for('index') }}"
+         class="text-decoration-none text-dark">
+        Contacts
+      </a>
 
-        <span class="text-secondary">|</span>
+      <span class="text-secondary">|</span>
 
-        <a href="{{ url_for('followups') }}"
-           class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
-          Follow Up Dashboard
-        </a>
+      <a href="{{ url_for('followups') }}"
+         class="text-decoration-none text-dark">
+        Follow Up Dashboard
+      </a>
 
-        <span class="text-secondary">|</span>
+      <span class="text-secondary">|</span>
 
-        <a href="{{ url_for('followups_ics') }}"
-           class="text-decoration-none text-dark"
-           target="_blank">
-          Calendar Feed
-        </a>
-      </div>
+      <a href="{{ url_for('followups_ics') }}"
+         class="text-decoration-none text-dark"
+         target="_blank">
+        Calendar Feed
+      </a>
 
     </div>
   </div>
@@ -684,6 +646,23 @@ EDIT_TEMPLATE = """
                     <div class="col-md-3">
                         <label class="form-label">Phone</label>
                         <input name="phone" class="form-control" value="{{ c['phone'] or '' }}">
+                    </div>
+
+                    <!-- Quick actions row -->
+                    <div class="col-12 d-flex flex-wrap gap-2">
+                        {% if c["phone"] %}
+                            <a href="tel:{{ c['phone'] }}" class="btn btn-sm btn-outline-secondary">
+                                Call
+                            </a>
+                            <a href="sms:{{ c['phone'] }}" class="btn btn-sm btn-outline-secondary">
+                                Text
+                            </a>
+                        {% endif %}
+                        {% if c["email"] %}
+                            <a href="mailto:{{ c['email'] }}" class="btn btn-sm btn-outline-secondary">
+                                Email
+                            </a>
+                        {% endif %}
                     </div>
 
                     <div class="col-md-3">
@@ -951,17 +930,6 @@ FOLLOWUPS_TEMPLATE = """
       body {
         background-color: #6eb8f9;
       }
-
-      .navbar-logo {
-        height: 56px;
-      }
-
-      @media (max-width: 576px) {
-        .navbar-logo {
-          height: 44px;
-        }
-      }
-
       .card-followups .card-header {
         font-weight: 600;
       }
@@ -970,41 +938,39 @@ FOLLOWUPS_TEMPLATE = """
 <body>
 
 <nav class="bg-white shadow-sm border-bottom sticky-top">
-  <div class="container-fluid py-2 top-nav">
-    <div class="top-nav-inner">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+    <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo -->
-      <a href="{{ url_for('index') }}"
-         class="d-flex align-items-center text-decoration-none text-dark">
+      <!-- Logo only -->
+      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          style="height: 44px;"
+          style="height: 40px;"
+          class="me-2"
         >
       </a>
 
-      <!-- Links -->
-      <div class="top-nav-links">
-        <a href="{{ url_for('index') }}"
-           class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
-          Contacts
-        </a>
+      <!-- Nav links with pipes -->
+      <a href="{{ url_for('index') }}"
+         class="text-decoration-none text-dark">
+        Contacts
+      </a>
 
-        <span class="text-secondary">|</span>
+      <span class="text-secondary">|</span>
 
-        <a href="{{ url_for('followups') }}"
-           class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
-          Follow Up Dashboard
-        </a>
+      <a href="{{ url_for('followups') }}"
+         class="text-decoration-none text-dark fw-semibold">
+        Follow Up Dashboard
+      </a>
 
-        <span class="text-secondary">|</span>
+      <span class="text-secondary">|</span>
 
-        <a href="{{ url_for('followups_ics') }}"
-           class="text-decoration-none text-dark"
-           target="_blank">
-          Calendar Feed
-        </a>
-      </div>
+      <a href="{{ url_for('followups_ics') }}"
+         class="text-decoration-none text-dark"
+         target="_blank">
+        Calendar Feed
+      </a>
 
     </div>
   </div>
@@ -1099,6 +1065,7 @@ FOLLOWUPS_TEMPLATE = """
 </html>
 """
 
+
 @app.route("/")
 def index():
     q = request.args.get("q", "").strip()
@@ -1106,7 +1073,6 @@ def index():
     pipeline_stage = request.args.get("pipeline_stage", "").strip()
     priority = request.args.get("priority", "").strip()
     target_area = request.args.get("target_area", "").strip()
-    sort = request.args.get("sort", "followup").strip() or "followup"
 
     conn = get_db()
     cur = conn.cursor()
@@ -1135,12 +1101,7 @@ def index():
         sql += " AND target_area ILIKE %s"
         params.append(f"%{target_area}%")
 
-    # Sorting
-    if sort == "name":
-        sql += " ORDER BY name, next_follow_up IS NULL, next_follow_up"
-    else:
-        # default: sort by next follow up, then name
-        sql += " ORDER BY next_follow_up IS NULL, next_follow_up, name"
+    sql += " ORDER BY next_follow_up IS NULL, next_follow_up, name"
 
     cur.execute(sql, params)
     contacts = cur.fetchall()
@@ -1156,6 +1117,7 @@ def index():
         priorities=PRIORITIES,
         sources=SOURCES,
     )
+
 
 def parse_int_or_none(value):
     value = (value or "").strip()
@@ -1186,10 +1148,9 @@ def parse_follow_up_time_from_form(prefix: str = "next_follow_up_"):
     except ValueError:
         return None
 
-    # Convert 12-hour to 24-hour
     if ampm == "AM":
         hour_24 = 0 if hour_12 == 12 else hour_12
-    else:  # PM
+    else:
         hour_24 = 12 if hour_12 == 12 else hour_12 + 12
 
     return f"{hour_24:02d}:{minute}"
@@ -1461,6 +1422,7 @@ def add_interaction(contact_id):
     conn.close()
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
+
 @app.route("/delete_interaction/<int:interaction_id>")
 def delete_interaction(interaction_id):
     conn = get_db()
@@ -1485,10 +1447,11 @@ def delete_interaction(interaction_id):
     # Go back to that contact's edit page
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
+
 @app.route("/followups")
 def followups():
     """
-    Simple dashboard view of overdue, today's, and upcoming follow-ups.
+    Dashboard view of overdue, today's, and upcoming follow-ups.
     """
     today_str = date.today().isoformat()
 
@@ -1538,6 +1501,7 @@ def followups():
         today=today_str,
     )
 
+
 @app.route("/followups.ics")
 def followups_ics():
     """
@@ -1579,7 +1543,6 @@ def followups_ics():
         if not date_str:
             continue
 
-        # Use first/last name if available
         display_name = row["name"]
         fn = row.get("first_name") or ""
         ln = row.get("last_name") or ""
@@ -1609,7 +1572,6 @@ def followups_ics():
         time_str = row.get("next_follow_up_time")
 
         if time_str:
-            # Timed event with 30-minute duration
             try:
                 d_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
                 hh, mm = time_str.split(":")
@@ -1624,12 +1586,10 @@ def followups_ics():
                 lines.append(f"DTSTART:{dtstart}")
                 lines.append(f"DTEND:{dtend}")
             except Exception:
-                # Fallback to all-day if something goes wrong
                 dtstart = date_str.replace("-", "")
                 lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
                 lines.append(f"DTEND;VALUE=DATE:{dtstart}")
         else:
-            # All-day event
             dtstart = date_str.replace("-", "")
             lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
             lines.append(f"DTEND;VALUE=DATE:{dtstart}")
@@ -1652,6 +1612,113 @@ def delete_contact(contact_id):
     conn.commit()
     conn.close()
     return redirect(url_for("index"))
+
+
+def normalize_phone_digits(phone: str) -> str:
+    """
+    Strip non-digits from a phone string.
+    """
+    if not phone:
+        return ""
+    return re.sub(r"\\D+", "", phone)
+
+
+@app.route("/api/add_interaction", methods=["POST"])
+def api_add_interaction():
+    """
+    Lightweight API endpoint so macOS/iOS Shortcuts can log interactions.
+
+    Expected JSON body fields (all optional except kind and one of contact_id/email/phone):
+
+    {
+      "contact_id": 123,          # or
+      "email": "client@example.com",
+      "phone": "+1 (732) 555-1212",
+      "kind": "Text",             # Call, Text, Email, Meeting, Other
+      "happened_at": "2025-12-06",
+      "time_of_day": "3:15 PM",
+      "notes": "Followed up about listing appointment"
+    }
+    """
+    if SHORTCUT_API_KEY:
+        api_key = request.headers.get("X-API-Key", "")
+        if api_key != SHORTCUT_API_KEY:
+            return jsonify({"error": "Forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+
+    kind = (data.get("kind") or "Other").strip()
+    if not kind:
+        kind = "Other"
+
+    contact_id = data.get("contact_id")
+    email = (data.get("email") or "").strip().lower()
+    phone_raw = (data.get("phone") or "").strip()
+    phone_digits = normalize_phone_digits(phone_raw)
+
+    if not contact_id and not email and not phone_digits:
+        return jsonify(
+            {"error": "Must provide contact_id or email or phone to match a contact"}
+        ), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    contact_row = None
+
+    try:
+        if contact_id:
+            cur.execute("SELECT id FROM contacts WHERE id = %s", (contact_id,))
+            contact_row = cur.fetchone()
+        if not contact_row and email:
+            cur.execute(
+                "SELECT id FROM contacts WHERE lower(email) = %s LIMIT 1",
+                (email,),
+            )
+            contact_row = cur.fetchone()
+        if not contact_row and phone_digits:
+            cur.execute(
+                """
+                SELECT id
+                FROM contacts
+                WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = %s
+                LIMIT 1
+                """,
+                (phone_digits,),
+            )
+            contact_row = cur.fetchone()
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": f"Database error: {e}"}), 500
+
+    if not contact_row:
+        conn.close()
+        return jsonify({"error": "Contact not found"}), 404
+
+    cid = contact_row["id"]
+
+    happened_at = data.get("happened_at")
+    if not happened_at:
+        happened_at = date.today().isoformat()
+
+    time_of_day = (data.get("time_of_day") or "").strip() or None
+    notes = (data.get("notes") or "").strip()
+
+    try:
+        cur.execute(
+            """
+            INSERT INTO interactions (contact_id, kind, happened_at, time_of_day, notes)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (cid, kind, happened_at, time_of_day, notes),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": f"Insert failed: {e}"}), 500
+
+    conn.close()
+    return jsonify({"status": "ok", "contact_id": cid})
 
 
 try:
