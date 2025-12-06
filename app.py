@@ -174,6 +174,11 @@ BASE_TEMPLATE = """
       .card-followups .card-header {
         font-weight: 600;
       }
+      @media (max-width: 576px) {
+        .nav-pipe {
+          display: none;
+        }
+      }
     </style>
 </head>
 <body>
@@ -198,14 +203,14 @@ BASE_TEMPLATE = """
         Contacts
       </a>
 
-      <span class="text-secondary">|</span>
+      <span class="text-secondary nav-pipe">|</span>
 
       <a href="{{ url_for('followups') }}"
          class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
         Follow Up Dashboard
       </a>
 
-      <span class="text-secondary">|</span>
+      <span class="text-secondary nav-pipe">|</span>
 
       <a href="{{ url_for('followups_ics') }}"
          class="text-decoration-none text-dark"
@@ -436,118 +441,131 @@ BASE_TEMPLATE = """
         </div>
     </div>
 
-    <!-- Contacts table -->
+    <!-- Contacts list -->
     <div class="card">
         <div class="card-header fw-bold">
             Contacts ({{ contacts|length }})
         </div>
-        <div class="table-responsive bg-white">
-            <table class="table table-sm table-striped mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Name</th>
-                        <th>Lead Type</th>
-                        <th>Stage</th>
-                        <th>Priority</th>
-                        <th>Price Range</th>
-                        <th>Area</th>
-                        <th>Current Address</th>
-                        <th>Subject Property</th>
-                        <th>Source</th>
-                        <th>Last Contacted</th>
-                        <th>Next Follow Up</th>
-                        <th style="width: 260px;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for c in contacts %}
-                    <tr>
-                        <td>
-                            <a href="{{ url_for('edit_contact', contact_id=c['id']) }}">
+        <div class="list-group list-group-flush bg-white">
+            {% for c in contacts %}
+                <div class="list-group-item">
+                    <!-- Top row: name + quick status -->
+                    <div class="d-flex justify-content-between align-items-start flex-wrap">
+                        <div class="me-3">
+                            <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
+                               class="fw-semibold text-decoration-none">
                                 {% if c["first_name"] or c["last_name"] %}
                                     {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
                                 {% else %}
                                     {{ c["name"] }}
                                 {% endif %}
                             </a>
-                        </td>
-                        <td>{{ c["lead_type"] or "" }}</td>
-                        <td>{{ c["pipeline_stage"] or "" }}</td>
-                        <td>{{ c["priority"] or "" }}</td>
-                        <td>
+                            <div class="small text-muted mt-1">
+                                {% if c["lead_type"] %}{{ c["lead_type"] }}{% endif %}
+                                {% if c["lead_type"] and c["pipeline_stage"] %} · {% endif %}
+                                {% if c["pipeline_stage"] %}{{ c["pipeline_stage"] }}{% endif %}
+                            </div>
+                        </div>
+                        <div class="text-end small mt-2 mt-sm-0">
+                            {% if c["priority"] %}
+                                {% if c["priority"] == "Hot" %}
+                                    <span class="badge bg-danger">Hot</span>
+                                {% elif c["priority"] == "Warm" %}
+                                    <span class="badge bg-warning text-dark">Warm</span>
+                                {% elif c["priority"] == "Cold" %}
+                                    <span class="badge bg-secondary">Cold</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ c["priority"] }}</span>
+                                {% endif %}
+                            {% endif %}
+                            {% if c["next_follow_up"] %}
+                                <div class="mt-1">
+                                    <strong>Next:</strong>
+                                    {{ c["next_follow_up"] }}
+                                    {% if c["next_follow_up_time"] %}
+                                        {{ c["next_follow_up_time"] }}
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                            {% if c["last_contacted"] %}
+                                <div class="text-muted mt-1">
+                                    Last: {{ c["last_contacted"] }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Middle rows: price, area, source -->
+                    <div class="row small mt-2">
+                        <div class="col-md-4 mb-1">
                             {% if c["price_min"] or c["price_max"] %}
+                                <strong>Price:</strong>
                                 {% if c["price_min"] %}${{ "{:,}".format(c["price_min"]) }}{% endif %}
-                                {% if c["price_min"] and c["price_max"] %} - {% endif %}
+                                {% if c["price_min"] and c["price_max"] %} – {% endif %}
                                 {% if c["price_max"] %}${{ "{:,}".format(c["price_max"]) }}{% endif %}
                             {% endif %}
-                        </td>
-                        <td>{{ c["target_area"] or "" }}</td>
-                        <td>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            {% if c["target_area"] %}
+                                <strong>Area:</strong> {{ c["target_area"] }}
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            {% if c["source"] %}
+                                <strong>Source:</strong> {{ c["source"] }}
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Addresses -->
+                    <div class="row small mt-1">
+                        <div class="col-md-6 mb-1">
                             {% if c["current_address"] or c["current_city"] or c["current_state"] or c["current_zip"] %}
+                                <strong>Current:</strong>
                                 {{ c["current_address"] or "" }}
                                 {% if c["current_city"] %}, {{ c["current_city"] }}{% endif %}
                                 {% if c["current_state"] %}, {{ c["current_state"] }}{% endif %}
                                 {% if c["current_zip"] %} {{ c["current_zip"] }}{% endif %}
                             {% endif %}
-                        </td>
-                        <td>
+                        </div>
+                        <div class="col-md-6 mb-1">
                             {% if c["subject_address"] or c["subject_city"] or c["subject_state"] or c["subject_zip"] %}
+                                <strong>Subject:</strong>
                                 {{ c["subject_address"] or "" }}
                                 {% if c["subject_city"] %}, {{ c["subject_city"] }}{% endif %}
                                 {% if c["subject_state"] %}, {{ c["subject_state"] }}{% endif %}
                                 {% if c["subject_zip"] %} {{ c["subject_zip"] }}{% endif %}
                             {% endif %}
-                        </td>
-                        <td>{{ c["source"] or "" }}</td>
-                        <td>{{ c["last_contacted"] or "" }}</td>
-                        <td>
-                            {{ c["next_follow_up"] or "" }}
-                            {% if c["next_follow_up_time"] %}
-                                {{ " " }}{{ c["next_follow_up_time"] }}
-                            {% endif %}
-                        </td>
-                        <td class="d-flex flex-wrap gap-1">
-                            <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
-                               class="btn btn-sm btn-outline-primary">
-                               Edit
-                            </a>
-                            <a href="{{ url_for('delete_contact', contact_id=c['id']) }}"
-                               class="btn btn-sm btn-outline-danger"
-                               onclick="return confirm('Delete this contact?');">
-                               Delete
-                            </a>
-                            {% if c["phone"] %}
-                                <a href="tel:{{ c['phone'] }}"
-                                   class="btn btn-sm btn-outline-secondary">
-                                   Call
-                                </a>
-                                <a href="sms:{{ c['phone'] }}"
-                                   class="btn btn-sm btn-outline-secondary">
-                                   Text
-                                </a>
-                            {% endif %}
-                            {% if c["email"] %}
-                                <a href="mailto:{{ c['email'] }}"
-                                   class="btn btn-sm btn-outline-secondary">
-                                   Email
-                                </a>
-                            {% endif %}
-                        </td>
-                    </tr>
+                        </div>
+                    </div>
+
+                    <!-- Notes -->
                     {% if c["notes"] %}
-                    <tr class="table-secondary">
-                        <td colspan="12"><strong>Notes:</strong> {{ c["notes"] }}</td>
-                    </tr>
+                        <div class="small mt-2">
+                            <strong>Notes:</strong> {{ c["notes"] }}
+                        </div>
                     {% endif %}
-                {% endfor %}
-                {% if contacts|length == 0 %}
-                    <tr><td colspan="12" class="text-center py-3">No contacts yet.</td></tr>
-                {% endif %}
-                </tbody>
-            </table>
+
+                    <!-- Actions -->
+                    <div class="mt-2">
+                        <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
+                           class="btn btn-sm btn-outline-primary">
+                            Edit
+                        </a>
+                        <a href="{{ url_for('delete_contact', contact_id=c['id']) }}"
+                           class="btn btn-sm btn-outline-danger"
+                           onclick="return confirm('Delete this contact?');">
+                            Delete
+                        </a>
+                    </div>
+                </div>
+            {% else %}
+                <div class="list-group-item text-center text-muted">
+                    No contacts yet.
+                </div>
+            {% endfor %}
         </div>
     </div>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
@@ -578,6 +596,12 @@ EDIT_TEMPLATE = """
       .card-engagement .card-header {
         font-weight: 600;
       }
+      @media (max-width: 576px) {
+        .nav-pipe {
+          display: none;
+        }
+      }
+
     </style>
 </head>
 <body>
@@ -602,14 +626,14 @@ EDIT_TEMPLATE = """
         Contacts
       </a>
 
-      <span class="text-secondary">|</span>
+      <span class="text-secondary nav-pipe">|</span>
 
       <a href="{{ url_for('followups') }}"
          class="text-decoration-none text-dark">
         Follow Up Dashboard
       </a>
 
-      <span class="text-secondary">|</span>
+      <span class="text-secondary nav-pipe">|</span>
 
       <a href="{{ url_for('followups_ics') }}"
          class="text-decoration-none text-dark"
@@ -933,6 +957,11 @@ FOLLOWUPS_TEMPLATE = """
       .card-followups .card-header {
         font-weight: 600;
       }
+      @media (max-width: 576px) {
+        .nav-pipe {
+          display: none;
+        }
+      }
     </style>
 </head>
 <body>
@@ -957,14 +986,14 @@ FOLLOWUPS_TEMPLATE = """
         Contacts
       </a>
 
-      <span class="text-secondary">|</span>
+      <span class="text-secondary nav-pipe">|</span>
 
       <a href="{{ url_for('followups') }}"
          class="text-decoration-none text-dark fw-semibold">
         Follow Up Dashboard
       </a>
 
-      <span class="text-secondary">|</span>
+      <span class="text-secondary nav-pipe">|</span>
 
       <a href="{{ url_for('followups_ics') }}"
          class="text-decoration-none text-dark"
