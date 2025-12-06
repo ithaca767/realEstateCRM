@@ -146,16 +146,6 @@ BASE_TEMPLATE = """
       body {
         background-color: #6eb8f9;
       }
-      
-      .navbar-logo {
-        height: 56px;
-      }
-      
-      @media (max-width: 576px) {
-        .navbar-logo {
-          height: 44px;
-        }
-      }   
       .card-add {
         border-top: 4px solid #198754;
       }
@@ -173,46 +163,70 @@ BASE_TEMPLATE = """
       .card-followups .card-header {
         font-weight: 600;
       }
+
+      /* NEW: top nav layout */
+      .top-nav {
+        font-size: 0.9rem;
+      }
+      .top-nav-inner {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 0.25rem 1rem;
+      }
+      .top-nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.25rem 0.5rem;
+      }
+      @media (max-width: 576px) {
+        .top-nav-inner {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
     </style>
 </head>
 <body>
 
 <nav class="bg-white shadow-sm border-bottom sticky-top">
-  <div class="container-fluid py-2" style="font-size: 0.9rem;">
-    <div class="d-flex align-items-center flex-wrap gap-2">
+  <div class="container-fluid py-2 top-nav">
+    <div class="top-nav-inner">
 
-      <!-- Logo only -->
+      <!-- Logo -->
       <a href="{{ url_for('index') }}"
-         class="d-flex align-items-center text-decoration-none text-dark me-3">
+         class="d-flex align-items-center text-decoration-none text-dark">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          class="navbar-logo me-2"
+          style="height: 44px;"
         >
       </a>
 
-      <!-- Contacts -->
-      <a href="{{ url_for('index') }}"
-         class="text-decoration-none {% if request.endpoint in ['index', 'edit_contact'] %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
-        Contacts
-      </a>
+      <!-- Links -->
+      <div class="top-nav-links">
+        <a href="{{ url_for('index') }}"
+           class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
+          Contacts
+        </a>
 
-      <span class="text-secondary">|</span>
+        <span class="text-secondary">|</span>
 
-      <!-- Follow Up Dashboard -->
-      <a href="{{ url_for('followups') }}"
-         class="text-decoration-none {% if request.endpoint == 'followups' %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
-        Follow Up Dashboard
-      </a>
+        <a href="{{ url_for('followups') }}"
+           class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
+          Follow Up Dashboard
+        </a>
 
-      <span class="text-secondary">|</span>
+        <span class="text-secondary">|</span>
 
-      <!-- Calendar Feed -->
-      <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-secondary"
-         target="_blank">
-        Calendar Feed
-      </a>
+        <a href="{{ url_for('followups_ics') }}"
+           class="text-decoration-none text-dark"
+           target="_blank">
+          Calendar Feed
+        </a>
+      </div>
 
     </div>
   </div>
@@ -575,41 +589,41 @@ EDIT_TEMPLATE = """
 <body>
 
 <nav class="bg-white shadow-sm border-bottom sticky-top">
-  <div class="container-fluid py-2" style="font-size: 0.9rem;">
-    <div class="d-flex align-items-center flex-wrap gap-2">
+  <div class="container-fluid py-2 top-nav">
+    <div class="top-nav-inner">
 
-      <!-- Logo only -->
+      <!-- Logo -->
       <a href="{{ url_for('index') }}"
-         class="d-flex align-items-center text-decoration-none text-dark me-3">
+         class="d-flex align-items-center text-decoration-none text-dark">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          class="navbar-logo me-2"
+          style="height: 44px;"
         >
       </a>
 
-      <!-- Contacts -->
-      <a href="{{ url_for('index') }}"
-         class="text-decoration-none {% if request.endpoint in ['index', 'edit_contact'] %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
-        Contacts
-      </a>
+      <!-- Links -->
+      <div class="top-nav-links">
+        <a href="{{ url_for('index') }}"
+           class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
+          Contacts
+        </a>
 
-      <span class="text-secondary">|</span>
+        <span class="text-secondary">|</span>
 
-      <!-- Follow Up Dashboard -->
-      <a href="{{ url_for('followups') }}"
-         class="text-decoration-none {% if request.endpoint == 'followups' %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
-        Follow Up Dashboard
-      </a>
+        <a href="{{ url_for('followups') }}"
+           class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
+          Follow Up Dashboard
+        </a>
 
-      <span class="text-secondary">|</span>
+        <span class="text-secondary">|</span>
 
-      <!-- Calendar Feed -->
-      <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-secondary"
-         target="_blank">
-        Calendar Feed
-      </a>
+        <a href="{{ url_for('followups_ics') }}"
+           class="text-decoration-none text-dark"
+           target="_blank">
+          Calendar Feed
+        </a>
+      </div>
 
     </div>
   </div>
@@ -926,41 +940,41 @@ FOLLOWUPS_TEMPLATE = """
 <body>
 
 <nav class="bg-white shadow-sm border-bottom sticky-top">
-  <div class="container-fluid py-2" style="font-size: 0.9rem;">
-    <div class="d-flex align-items-center flex-wrap gap-2">
+  <div class="container-fluid py-2 top-nav">
+    <div class="top-nav-inner">
 
-      <!-- Logo only -->
+      <!-- Logo -->
       <a href="{{ url_for('index') }}"
-         class="d-flex align-items-center text-decoration-none text-dark me-3">
+         class="d-flex align-items-center text-decoration-none text-dark">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          class="navbar-logo me-2"
+          style="height: 44px;"
         >
       </a>
 
-      <!-- Contacts -->
-      <a href="{{ url_for('index') }}"
-         class="text-decoration-none {% if request.endpoint in ['index', 'edit_contact'] %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
-        Contacts
-      </a>
+      <!-- Links -->
+      <div class="top-nav-links">
+        <a href="{{ url_for('index') }}"
+           class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
+          Contacts
+        </a>
 
-      <span class="text-secondary">|</span>
+        <span class="text-secondary">|</span>
 
-      <!-- Follow Up Dashboard -->
-      <a href="{{ url_for('followups') }}"
-         class="text-decoration-none {% if request.endpoint == 'followups' %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
-        Follow Up Dashboard
-      </a>
+        <a href="{{ url_for('followups') }}"
+           class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
+          Follow Up Dashboard
+        </a>
 
-      <span class="text-secondary">|</span>
+        <span class="text-secondary">|</span>
 
-      <!-- Calendar Feed -->
-      <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-secondary"
-         target="_blank">
-        Calendar Feed
-      </a>
+        <a href="{{ url_for('followups_ics') }}"
+           class="text-decoration-none text-dark"
+           target="_blank">
+          Calendar Feed
+        </a>
+      </div>
 
     </div>
   </div>
