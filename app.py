@@ -146,6 +146,16 @@ BASE_TEMPLATE = """
       body {
         background-color: #6eb8f9;
       }
+      
+      .navbar-logo {
+        height: 56px;
+      }
+      
+      @media (max-width: 576px) {
+        .navbar-logo {
+          height: 44px;
+        }
+      }   
       .card-add {
         border-top: 4px solid #198754;
       }
@@ -171,39 +181,35 @@ BASE_TEMPLATE = """
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
     <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo only (no text title) -->
-      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+      <!-- Logo only -->
+      <a href="{{ url_for('index') }}"
+         class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          style="height: 32px;"
-          class="me-2"
+          class="navbar-logo me-2"
         >
       </a>
 
-      <!-- Nav links with pipes -->
+      <!-- Contacts -->
       <a href="{{ url_for('index') }}"
-         class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
+         class="text-decoration-none {% if request.endpoint in ['index', 'edit_contact'] %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
         Contacts
       </a>
 
       <span class="text-secondary">|</span>
 
-      <a href="#add-contact" class="text-decoration-none text-dark">
-        Add Contact
-      </a>
-
-      <span class="text-secondary">|</span>
-
+      <!-- Follow Up Dashboard -->
       <a href="{{ url_for('followups') }}"
-         class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
+         class="text-decoration-none {% if request.endpoint == 'followups' %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
         Follow Up Dashboard
       </a>
 
       <span class="text-secondary">|</span>
 
+      <!-- Calendar Feed -->
       <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-dark"
+         class="text-decoration-none text-secondary"
          target="_blank">
         Calendar Feed
       </a>
@@ -543,6 +549,16 @@ EDIT_TEMPLATE = """
     <style>
       body {
         background-color: #6eb8f9;
+      }            
+      
+      .navbar-logo {
+        height: 56px;
+      }
+      
+      @media (max-width: 576px) {
+        .navbar-logo {
+          height: 44px;
+        }
       }
       .card-edit {
         border-top: 4px solid #0d6efd;
@@ -563,32 +579,34 @@ EDIT_TEMPLATE = """
     <div class="d-flex align-items-center flex-wrap gap-2">
 
       <!-- Logo only -->
-      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+      <a href="{{ url_for('index') }}"
+         class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          style="height: 32px;"
-          class="me-2"
+          class="navbar-logo me-2"
         >
       </a>
 
-      <!-- Nav links with pipes -->
+      <!-- Contacts -->
       <a href="{{ url_for('index') }}"
-         class="text-decoration-none text-dark">
+         class="text-decoration-none {% if request.endpoint in ['index', 'edit_contact'] %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
         Contacts
       </a>
 
       <span class="text-secondary">|</span>
 
+      <!-- Follow Up Dashboard -->
       <a href="{{ url_for('followups') }}"
-         class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
+         class="text-decoration-none {% if request.endpoint == 'followups' %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
         Follow Up Dashboard
       </a>
 
       <span class="text-secondary">|</span>
 
+      <!-- Calendar Feed -->
       <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-dark"
+         class="text-decoration-none text-secondary"
          target="_blank">
         Calendar Feed
       </a>
@@ -889,6 +907,17 @@ FOLLOWUPS_TEMPLATE = """
       body {
         background-color: #6eb8f9;
       }
+
+      .navbar-logo {
+        height: 56px;
+      }
+
+      @media (max-width: 576px) {
+        .navbar-logo {
+          height: 44px;
+        }
+      }
+
       .card-followups .card-header {
         font-weight: 600;
       }
@@ -901,32 +930,34 @@ FOLLOWUPS_TEMPLATE = """
     <div class="d-flex align-items-center flex-wrap gap-2">
 
       <!-- Logo only -->
-      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+      <a href="{{ url_for('index') }}"
+         class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          style="height: 32px;"
-          class="me-2"
+          class="navbar-logo me-2"
         >
       </a>
 
-      <!-- Nav links with pipes -->
+      <!-- Contacts -->
       <a href="{{ url_for('index') }}"
-         class="text-decoration-none text-dark">
+         class="text-decoration-none {% if request.endpoint in ['index', 'edit_contact'] %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
         Contacts
       </a>
 
       <span class="text-secondary">|</span>
 
+      <!-- Follow Up Dashboard -->
       <a href="{{ url_for('followups') }}"
-         class="text-decoration-none text-dark fw-semibold">
+         class="text-decoration-none {% if request.endpoint == 'followups' %}fw-semibold text-dark{% else %}text-secondary{% endif %}">
         Follow Up Dashboard
       </a>
 
       <span class="text-secondary">|</span>
 
+      <!-- Calendar Feed -->
       <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-dark"
+         class="text-decoration-none text-secondary"
          target="_blank">
         Calendar Feed
       </a>
