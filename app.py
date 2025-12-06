@@ -167,11 +167,11 @@ BASE_TEMPLATE = """
 </head>
 <body>
 
-<nav class="bg-white shadow-sm border-bottom">
+<nav class="bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
     <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo + name -->
+      <!-- Logo only (no text title) -->
       <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
@@ -179,7 +179,6 @@ BASE_TEMPLATE = """
           style="height: 32px;"
           class="me-2"
         >
-        <span class="fw-semibold">Ulysses CRM</span>
       </a>
 
       <!-- Nav links with pipes -->
@@ -559,11 +558,11 @@ EDIT_TEMPLATE = """
 </head>
 <body>
 
-<nav class="bg-white shadow-sm border-bottom">
+<nav class="bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
     <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo + name -->
+      <!-- Logo only -->
       <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
@@ -571,7 +570,6 @@ EDIT_TEMPLATE = """
           style="height: 32px;"
           class="me-2"
         >
-        <span class="fw-semibold">Ulysses CRM</span>
       </a>
 
       <!-- Nav links with pipes -->
@@ -898,11 +896,11 @@ FOLLOWUPS_TEMPLATE = """
 </head>
 <body>
 
-<nav class="bg-white shadow-sm border-bottom">
+<nav class="bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
     <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo + name -->
+      <!-- Logo only -->
       <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
@@ -910,7 +908,6 @@ FOLLOWUPS_TEMPLATE = """
           style="height: 32px;"
           class="me-2"
         >
-        <span class="fw-semibold">Ulysses CRM</span>
       </a>
 
       <!-- Nav links with pipes -->
