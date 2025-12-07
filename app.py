@@ -1914,32 +1914,7 @@ def delete_related(related_id):
     conn.close()
 
     return redirect(url_for("edit_contact", contact_id=contact_id))
-
-
-@app.route("/delete_related/<int:related_id>")
-def delete_related(related_id):
-    conn = get_db()
-    cur = conn.cursor()
-
-    # Find parent contact
-    cur.execute(
-        "SELECT contact_id FROM related_contacts WHERE id = %s",
-        (related_id,),
-    )
-    row = cur.fetchone()
-    if not row:
-        conn.close()
-        return redirect(url_for("contacts"))
-
-    contact_id = row["contact_id"]
-
-    # Delete associated-contact row
-    cur.execute("DELETE FROM related_contacts WHERE id = %s", (related_id,))
-    conn.commit()
-    conn.close()
-
-    return redirect(url_for("edit_contact", contact_id=contact_id))
-
+    
 
 @app.route("/followups")
 def followups():
