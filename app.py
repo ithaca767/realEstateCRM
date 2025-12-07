@@ -421,7 +421,7 @@ BASE_TEMPLATE = """
             Filters
         </div>
         <div class="card-body bg-white">
-            <form class="row g-3 mb-0" method="get" action="{{ url_for('index') }}">
+            <form class="row g-3 mb-0" method="get" action="{{ url_for('contacts') }}">
                 <div class="col-md-3">
                     <input type="text" name="q" value="{{ request.args.get('q','') }}" class="form-control"
                            placeholder="Search name, email, phone">
@@ -456,7 +456,7 @@ BASE_TEMPLATE = """
                 </div>
                 <div class="col-md-3">
                     <button class="btn btn-outline-secondary" type="submit">Apply Filters</button>
-                    <a href="{{ url_for('index') }}" class="btn btn-link">Clear</a>
+                    <a href="{{ url_for('contacts') }}" class="btn btn-link">Clear</a>
                 </div>
             </form>
         </div>
