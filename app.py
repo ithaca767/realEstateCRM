@@ -4,14 +4,14 @@ from datetime import date, datetime, timedelta
 
 from flask import (
     Flask,
-    render_template_string,
     request,
     redirect,
     url_for,
-    Response,
+    render_template,
+    render_template_string,
     jsonify,
-    abort,
 )
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
