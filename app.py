@@ -135,23 +135,21 @@ def init_db():
         """
     )
     conn.commit()
-    # Upgrades for buyer_profiles
-    try:
-        cur.execute(
-            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS property_type TEXT"
-        )
-        conn.commit()
-    except Exception as e:
-        print("buyer_profiles schema update skipped:", e)
 
-    # Upgrades for seller_profiles
-    try:
-        cur.execute(
-            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS property_type TEXT"
-        )
-        conn.commit()
-    except Exception as e:
-        print("seller_profiles schema update skipped:", e)
+    # Upgrades for buyer_profiles (property type + documents checklist)
+    buyer_profile_upgrades = [
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS property_type TEXT",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS cis_signed BOOLEAN",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_agreement_signed BOOLEAN",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS wire_fraud_notice_signed BOOLEAN",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS dual_agency_consent_signed BOOLEAN",
+    ]
+    for stmt in buyer_profile_upgrades:
+        try:
+            cur.execute(stmt)
+            conn.commit()
+        except Exception as e:
+            print("buyer_profiles schema update skipped:", e)
 
     # Seller profiles table
     cur.execute(
@@ -170,14 +168,6 @@ def init_db():
         """
     )
     conn.commit()
-    # Upgrades for buyer_profiles
-    try:
-        cur.execute(
-            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS property_type TEXT"
-        )
-        conn.commit()
-    except Exception as e:
-        print("buyer_profiles schema update skipped:", e)
 
     # Upgrades for seller_profiles
     try:
@@ -189,7 +179,6 @@ def init_db():
         print("seller_profiles schema update skipped:", e)
 
     conn.close()
-
 
 LEAD_TYPES = [
     "Buyer",
@@ -1333,6 +1322,62 @@ BUYER_TEMPLATE = """
                                   placeholder="Motivation, non-negotiables, etc.">{{ bp['notes'] if bp else '' }}</textarea>
                     </div>
 
+                    <div class="col-12 mt-3">
+                        <h6 class="fw-bold mb-2">Required Buyer Documents Checklist</h6>
+
+                        <div class="form-check">
+                            <input
+                              class="form-check-input"
+                              type="checkbox"
+                              name="cis_signed"
+                              id="cis_signed"
+                              {% if bp and bp['cis_signed'] %}checked{% endif %}
+                            >
+                            <label class="form-check-label" for="cis_signed">
+                                Consumer Information Statement signed?
+                            </label>
+                        </div>
+
+                        <div class="form-check">
+                            <input
+                              class="form-check-input"
+                              type="checkbox"
+                              name="buyer_agreement_signed"
+                              id="buyer_agreement_signed"
+                              {% if bp and bp['buyer_agreement_signed'] %}checked{% endif %}
+                            >
+                            <label class="form-check-label" for="buyer_agreement_signed">
+                                Buyer's Agency Agreement signed?
+                            </label>
+                        </div>
+
+                        <div class="form-check">
+                            <input
+                              class="form-check-input"
+                              type="checkbox"
+                              name="wire_fraud_notice_signed"
+                              id="wire_fraud_notice_signed"
+                              {% if bp and bp['wire_fraud_notice_signed'] %}checked{% endif %}
+                            >
+                            <label class="form-check-label" for="wire_fraud_notice_signed">
+                                Wire Fraud Notice signed?
+                            </label>
+                        </div>
+
+                        <div class="form-check">
+                            <input
+                              class="form-check-input"
+                              type="checkbox"
+                              name="dual_agency_consent_signed"
+                              id="dual_agency_consent_signed"
+                              {% if bp and bp['dual_agency_consent_signed'] %}checked{% endif %}
+                            >
+                            <label class="form-check-label" for="dual_agency_consent_signed">
+                                Informed Consent to Dual Agency signed?
+                            </label>
+                        </div>
+                    </div>
+
                 </div>
                 <button class="btn btn-primary mt-3" type="submit">Save Buyer Profile</button>
                 <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary mt-3">
@@ -2430,6 +2475,12 @@ def buyer_profile(contact_id):
         min_price = parse_int_or_none(request.form.get("min_price"))
         max_price = parse_int_or_none(request.form.get("max_price"))
 
+        # Buyer documents checklist fields
+        cis_signed = bool(request.form.get("cis_signed"))
+        buyer_agreement_signed = bool(request.form.get("buyer_agreement_signed"))
+        wire_fraud_notice_signed = bool(request.form.get("wire_fraud_notice_signed"))
+        dual_agency_consent_signed = bool(request.form.get("dual_agency_consent_signed"))
+
         # Check for existing profile
         cur.execute(
             "SELECT id FROM buyer_profiles WHERE contact_id = %s",
@@ -2450,7 +2501,11 @@ def buyer_profile(contact_id):
                     preapproval_status = %s,
                     lender_name = %s,
                     referral_source = %s,
-                    notes = %s
+                    notes = %s,
+                    cis_signed = %s,
+                    buyer_agreement_signed = %s,
+                    wire_fraud_notice_signed = %s,
+                    dual_agency_consent_signed = %s
                 WHERE contact_id = %s
                 """,
                 (
@@ -2464,6 +2519,10 @@ def buyer_profile(contact_id):
                     lender_name,
                     referral_source,
                     notes,
+                    cis_signed,
+                    buyer_agreement_signed,
+                    wire_fraud_notice_signed,
+                    dual_agency_consent_signed,
                     contact_id,
                 ),
             )
@@ -2481,9 +2540,13 @@ def buyer_profile(contact_id):
                     preapproval_status,
                     lender_name,
                     referral_source,
-                    notes
+                    notes,
+                    cis_signed,
+                    buyer_agreement_signed,
+                    wire_fraud_notice_signed,
+                    dual_agency_consent_signed
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     contact_id,
@@ -2497,6 +2560,10 @@ def buyer_profile(contact_id):
                     lender_name,
                     referral_source,
                     notes,
+                    cis_signed,
+                    buyer_agreement_signed,
+                    wire_fraud_notice_signed,
+                    dual_agency_consent_signed,
                 ),
             )
 
