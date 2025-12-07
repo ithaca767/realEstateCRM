@@ -135,6 +135,23 @@ def init_db():
         """
     )
     conn.commit()
+    # Upgrades for buyer_profiles
+    try:
+        cur.execute(
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS property_type TEXT"
+        )
+        conn.commit()
+    except Exception as e:
+        print("buyer_profiles schema update skipped:", e)
+
+    # Upgrades for seller_profiles
+    try:
+        cur.execute(
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS property_type TEXT"
+        )
+        conn.commit()
+    except Exception as e:
+        print("seller_profiles schema update skipped:", e)
 
     # Seller profiles table
     cur.execute(
@@ -153,6 +170,23 @@ def init_db():
         """
     )
     conn.commit()
+    # Upgrades for buyer_profiles
+    try:
+        cur.execute(
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS property_type TEXT"
+        )
+        conn.commit()
+    except Exception as e:
+        print("buyer_profiles schema update skipped:", e)
+
+    # Upgrades for seller_profiles
+    try:
+        cur.execute(
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS property_type TEXT"
+        )
+        conn.commit()
+    except Exception as e:
+        print("seller_profiles schema update skipped:", e)
 
     conn.close()
 
@@ -363,19 +397,6 @@ BASE_TEMPLATE = """
                                 <option value="{{ s }}">{{ s }}</option>
                             {% endfor %}
                         </select>
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Price Min</label>
-                        <input name="price_min" type="number" class="form-control" placeholder="300000">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Price Max</label>
-                        <input name="price_max" type="number" class="form-control" placeholder="600000">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Target Area</label>
-                        <input name="target_area" class="form-control" placeholder="Keyport, Hazlet, Netflix zone">
                     </div>
 
                     <!-- Subject and Current addresses, grouped -->
@@ -868,21 +889,6 @@ EDIT_TEMPLATE = """
                         </select>
                     </div>
 
-                    <div class="col-md-3">
-                        <label class="form-label">Price Min</label>
-                        <input name="price_min" type="number" class="form-control"
-                               value="{{ c['price_min'] if c['price_min'] is not none else '' }}">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Price Max</label>
-                        <input name="price_max" type="number" class="form-control"
-                               value="{{ c['price_max'] if c['price_max'] is not none else '' }}">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Target Area</label>
-                        <input name="target_area" class="form-control" value="{{ c['target_area'] or '' }}">
-                    </div>
-
                     <div class="col-12 mt-3">
                         <h6 class="fw-bold mb-2">Subject Property</h6>
                     </div>
@@ -1171,14 +1177,19 @@ BUYER_TEMPLATE = """
       body {
         background-color: #6eb8f9;
       }
+      .card-edit {
+        border-top: 4px solid #0d6efd;
+      }
+      .card-edit .card-header {
+        background-color: rgba(13, 110, 253, 0.08);
+        font-weight: 600;
+      }
     </style>
 </head>
 <body>
 
 <nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
-
-    <!-- Logo -->
     <a href="{{ url_for('dashboard') }}" class="navbar-brand d-flex align-items-center text-dark">
       <img
         src="{{ url_for('static', filename='ulysses-logo.svg') }}"
@@ -1188,7 +1199,6 @@ BUYER_TEMPLATE = """
       >
     </a>
 
-    <!-- Hamburger button -->
     <button class="navbar-toggler" type="button"
             data-bs-toggle="collapse"
             data-bs-target="#mainNav"
@@ -1198,31 +1208,26 @@ BUYER_TEMPLATE = """
       <span class="navbar-toggler-icon"></span>
     </button>
 
-    <!-- Collapsible nav links -->
     <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav ms-0 ms-md-2">
-
         <li class="nav-item">
           <a href="{{ url_for('dashboard') }}"
              class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
             Dashboard
           </a>
         </li>
-
         <li class="nav-item">
           <a href="{{ url_for('contacts') }}"
              class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
             Contacts
           </a>
         </li>
-
         <li class="nav-item">
           <a href="{{ url_for('followups') }}"
              class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
             Follow Up Dashboard
           </a>
         </li>
-
         <li class="nav-item">
           <a href="{{ url_for('followups_ics') }}"
              class="nav-link"
@@ -1230,7 +1235,6 @@ BUYER_TEMPLATE = """
             Calendar Feed
           </a>
         </li>
-
       </ul>
     </div>
   </div>
@@ -1238,99 +1242,105 @@ BUYER_TEMPLATE = """
 
 <div class="container py-4">
 
-  <h2 class="mb-3">Buyer Profile</h2>
-
-  <!-- Contact summary -->
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5 class="card-title mb-1">
-        {{ contact_name }}
-      </h5>
-      <p class="mb-0 small text-muted">
-        {% if contact_email %}Email: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>{% endif %}
-        {% if contact_email and contact_phone %} | {% endif %}
-        {% if contact_phone %}Phone: <a href="tel:{{ contact_phone }}">{{ contact_phone }}</a>{% endif %}
-      </p>
-    </div>
-  </div>
-
-  <!-- Buyer profile form -->
-  <div class="card">
-    <div class="card-header">
-      Commit as Buyer
-    </div>
-    <div class="card-body bg-white">
-      <form method="post">
-        <div class="row g-3">
-
-          <div class="col-md-4">
-            <label class="form-label">Timeframe</label>
-            <input name="timeframe" class="form-control"
-                   placeholder="0–3 months, 3–6 months"
-                   value="{{ bp['timeframe'] if bp else '' }}">
-          </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Pre-approval Status</label>
-            <input name="preapproval_status" class="form-control"
-                   placeholder="Not started / In process / Approved"
-                   value="{{ bp['preapproval_status'] if bp else '' }}">
-          </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Lender</label>
-            <input name="lender_name" class="form-control"
-                   placeholder="Lender name / contact"
-                   value="{{ bp['lender_name'] if bp else '' }}">
-          </div>
-
-          <div class="col-md-3">
-            <label class="form-label">Min Price</label>
-            <input name="min_price" type="number" class="form-control"
-                   value="{{ bp['min_price'] if bp and bp['min_price'] is not none else '' }}">
-          </div>
-
-          <div class="col-md-3">
-            <label class="form-label">Max Price</label>
-            <input name="max_price" type="number" class="form-control"
-                   value="{{ bp['max_price'] if bp and bp['max_price'] is not none else '' }}">
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label">Areas / Towns</label>
-            <input name="areas" class="form-control"
-                   placeholder="Keyport, Hazlet, Netflix zone"
-                   value="{{ bp['areas'] if bp else '' }}">
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label">Property Types</label>
-            <input name="property_types" class="form-control"
-                   placeholder="SFH, condo, multi, land"
-                   value="{{ bp['property_types'] if bp else '' }}">
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label">Referral Source</label>
-            <input name="referral_source" class="form-control"
-                   placeholder="Referred by, open house, online, etc."
-                   value="{{ bp['referral_source'] if bp else '' }}">
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Notes</label>
-            <textarea name="notes" class="form-control" rows="3"
-                      placeholder="Motivation, constraints, must-haves, etc.">{{ bp['notes'] if bp else '' }}</textarea>
-          </div>
+    <div class="mb-3">
+        <h2 class="mb-0">Buyer Profile</h2>
+        <div class="text-muted">
+            {{ contact_name }}
+            {% if contact_email %} · {{ contact_email }}{% endif %}
+            {% if contact_phone %} · {{ contact_phone }}{% endif %}
         </div>
-
-        <button class="btn btn-primary mt-3" type="submit">Save Buyer Profile</button>
-        <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary mt-3">
-          Back to Contact
-        </a>
-      </form>
     </div>
-  </div>
+
+    <div class="card card-edit">
+        <div class="card-header">
+            Buyer Details
+        </div>
+        <div class="card-body bg-white">
+            <form method="post">
+                <div class="row g-3">
+
+                    <div class="col-md-4">
+                        <label class="form-label">Property Type</label>
+                        <select name="property_type" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="Residential"
+                              {% if bp and bp['property_type'] == 'Residential' %}selected{% endif %}>
+                              Residential
+                            </option>
+                            <option value="Commercial"
+                              {% if bp and bp['property_type'] == 'Commercial' %}selected{% endif %}>
+                              Commercial
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Timeframe</label>
+                        <input name="timeframe" class="form-control"
+                               placeholder="Next 3 months"
+                               value="{{ bp['timeframe'] if bp else '' }}">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Pre-Approval Status</label>
+                        <input name="preapproval_status" class="form-control"
+                               placeholder="Pre-approved, needs lender, etc."
+                               value="{{ bp['preapproval_status'] if bp else '' }}">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Min Price</label>
+                        <input name="min_price" type="number" class="form-control"
+                               value="{{ bp['min_price'] if bp and bp['min_price'] is not none else '' }}">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Max Price</label>
+                        <input name="max_price" type="number" class="form-control"
+                               value="{{ bp['max_price'] if bp and bp['max_price'] is not none else '' }}">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Preferred Areas</label>
+                        <input name="areas" class="form-control"
+                               placeholder="Keyport, Hazlet, Netflix zone"
+                               value="{{ bp['areas'] if bp else '' }}">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Property Types</label>
+                        <input name="property_types" class="form-control"
+                               placeholder="Single family, condo, mixed-use, etc."
+                               value="{{ bp['property_types'] if bp else '' }}">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Lender Name</label>
+                        <input name="lender_name" class="form-control"
+                               value="{{ bp['lender_name'] if bp else '' }}">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Referral Source</label>
+                        <input name="referral_source" class="form-control"
+                               placeholder="Who sent them to you?"
+                               value="{{ bp['referral_source'] if bp else '' }}">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Notes</label>
+                        <textarea name="notes" class="form-control" rows="3"
+                                  placeholder="Motivation, non-negotiables, etc.">{{ bp['notes'] if bp else '' }}</textarea>
+                    </div>
+
+                </div>
+                <button class="btn btn-primary mt-3" type="submit">Save Buyer Profile</button>
+                <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary mt-3">
+                    Back to Contact
+                </a>
+            </form>
+        </div>
+    </div>
 
 </div>
 
@@ -1353,14 +1363,19 @@ SELLER_TEMPLATE = """
       body {
         background-color: #6eb8f9;
       }
+      .card-edit {
+        border-top: 4px solid #0d6efd;
+      }
+      .card-edit .card-header {
+        background-color: rgba(13, 110, 253, 0.08);
+        font-weight: 600;
+      }
     </style>
 </head>
 <body>
 
 <nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
-
-    <!-- Logo -->
     <a href="{{ url_for('dashboard') }}" class="navbar-brand d-flex align-items-center text-dark">
       <img
         src="{{ url_for('static', filename='ulysses-logo.svg') }}"
@@ -1370,7 +1385,6 @@ SELLER_TEMPLATE = """
       >
     </a>
 
-    <!-- Hamburger button -->
     <button class="navbar-toggler" type="button"
             data-bs-toggle="collapse"
             data-bs-target="#mainNav"
@@ -1380,31 +1394,26 @@ SELLER_TEMPLATE = """
       <span class="navbar-toggler-icon"></span>
     </button>
 
-    <!-- Collapsible nav links -->
     <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav ms-0 ms-md-2">
-
         <li class="nav-item">
           <a href="{{ url_for('dashboard') }}"
              class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
             Dashboard
           </a>
         </li>
-
         <li class="nav-item">
           <a href="{{ url_for('contacts') }}"
              class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
             Contacts
           </a>
         </li>
-
         <li class="nav-item">
           <a href="{{ url_for('followups') }}"
              class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
             Follow Up Dashboard
           </a>
         </li>
-
         <li class="nav-item">
           <a href="{{ url_for('followups_ics') }}"
              class="nav-link"
@@ -1412,7 +1421,6 @@ SELLER_TEMPLATE = """
             Calendar Feed
           </a>
         </li>
-
       </ul>
     </div>
   </div>
@@ -1420,83 +1428,91 @@ SELLER_TEMPLATE = """
 
 <div class="container py-4">
 
-  <h2 class="mb-3">Seller Profile</h2>
-
-  <!-- Contact summary -->
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5 class="card-title mb-1">
-        {{ contact_name }}
-      </h5>
-      <p class="mb-0 small text-muted">
-        {% if contact_email %}Email: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>{% endif %}
-        {% if contact_email and contact_phone %} | {% endif %}
-        {% if contact_phone %}Phone: <a href="tel:{{ contact_phone }}">{{ contact_phone }}</a>{% endif %}
-      </p>
-    </div>
-  </div>
-
-  <!-- Seller profile form -->
-  <div class="card">
-    <div class="card-header">
-      Commit as Seller
-    </div>
-    <div class="card-body bg-white">
-      <form method="post">
-        <div class="row g-3">
-
-          <div class="col-md-4">
-            <label class="form-label">Timeframe</label>
-            <input name="timeframe" class="form-control"
-                   placeholder="0–3 months, 3–6 months"
-                   value="{{ sp['timeframe'] if sp else '' }}">
-          </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Est. Price</label>
-            <input name="estimated_price" type="number" class="form-control"
-                   value="{{ sp['estimated_price'] if sp and sp['estimated_price'] is not none else '' }}">
-          </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Referral Source</label>
-            <input name="referral_source" class="form-control"
-                   placeholder="Referred by, farming, online, etc."
-                   value="{{ sp['referral_source'] if sp else '' }}">
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Property Address</label>
-            <input name="property_address" class="form-control"
-                   placeholder="Use subject property or specific address"
-                   value="{{ sp['property_address'] if sp else default_property_address }}">
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Motivation</label>
-            <textarea name="motivation" class="form-control" rows="2"
-                      placeholder="Upsizing, downsizing, relocation, estate, etc.">{{ sp['motivation'] if sp else '' }}</textarea>
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Condition / Notes</label>
-            <textarea name="condition_notes" class="form-control" rows="3"
-                      placeholder="Repairs, updates, issues, ideal prep plan">{{ sp['condition_notes'] if sp else '' }}</textarea>
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Additional Notes</label>
-            <textarea name="notes" class="form-control" rows="3">{{ sp['notes'] if sp else '' }}</textarea>
-          </div>
+    <div class="mb-3">
+        <h2 class="mb-0">Seller Profile</h2>
+        <div class="text-muted">
+            {{ contact_name }}
+            {% if contact_email %} · {{ contact_email }}{% endif %}
+            {% if contact_phone %} · {{ contact_phone }}{% endif %}
         </div>
-
-        <button class="btn btn-primary mt-3" type="submit">Save Seller Profile</button>
-        <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary mt-3">
-          Back to Contact
-        </a>
-      </form>
     </div>
-  </div>
+
+    <div class="card card-edit">
+        <div class="card-header">
+            Seller Details
+        </div>
+        <div class="card-body bg-white">
+            <form method="post">
+                <div class="row g-3">
+
+                    <div class="col-md-4">
+                        <label class="form-label">Property Type</label>
+                        <select name="property_type" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="Residential"
+                              {% if sp and sp['property_type'] == 'Residential' %}selected{% endif %}>
+                              Residential
+                            </option>
+                            <option value="Commercial"
+                              {% if sp and sp['property_type'] == 'Commercial' %}selected{% endif %}>
+                              Commercial
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Timeframe</label>
+                        <input name="timeframe" class="form-control"
+                               placeholder="Next 3-6 months"
+                               value="{{ sp['timeframe'] if sp else '' }}">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Motivation</label>
+                        <input name="motivation" class="form-control"
+                               placeholder="Downsizing, relocating, estate, etc."
+                               value="{{ sp['motivation'] if sp else '' }}">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Estimated Price</label>
+                        <input name="estimated_price" type="number" class="form-control"
+                               value="{{ sp['estimated_price'] if sp and sp['estimated_price'] is not none else '' }}">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Property Address</label>
+                        <input name="property_address" class="form-control"
+                               placeholder="123 Main St, Keyport NJ"
+                               value="{{ sp['property_address'] if sp else '' }}">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Condition / Notes</label>
+                        <textarea name="condition_notes" class="form-control" rows="3"
+                                  placeholder="Repairs, updates, known issues, etc.">{{ sp['condition_notes'] if sp else '' }}</textarea>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Referral Source</label>
+                        <input name="referral_source" class="form-control"
+                               placeholder="Who sent them to you?"
+                               value="{{ sp['referral_source'] if sp else '' }}">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Additional Notes</label>
+                        <textarea name="notes" class="form-control" rows="3">{{ sp['notes'] if sp else '' }}</textarea>
+                    </div>
+
+                </div>
+                <button class="btn btn-primary mt-3" type="submit">Save Seller Profile</button>
+                <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary mt-3">
+                    Back to Contact
+                </a>
+            </form>
+        </div>
+    </div>
 
 </div>
 
@@ -1504,7 +1520,6 @@ SELLER_TEMPLATE = """
 </body>
 </html>
 """
-
 
 FOLLOWUPS_TEMPLATE = """
 <!doctype html>
@@ -2395,7 +2410,7 @@ def buyer_profile(contact_id):
     conn = get_db()
     cur = conn.cursor()
 
-    # Load the base contact
+    # Load contact
     cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
     contact = cur.fetchone()
     if not contact:
@@ -2403,6 +2418,7 @@ def buyer_profile(contact_id):
         return "Contact not found", 404
 
     if request.method == "POST":
+        property_type = (request.form.get("property_type") or "").strip()
         timeframe = (request.form.get("timeframe") or "").strip()
         preapproval_status = (request.form.get("preapproval_status") or "").strip()
         lender_name = (request.form.get("lender_name") or "").strip()
@@ -2411,20 +2427,10 @@ def buyer_profile(contact_id):
         referral_source = (request.form.get("referral_source") or "").strip()
         notes = (request.form.get("notes") or "").strip()
 
-        # Prices can be blank
-        def parse_price(val):
-            val = (val or "").strip()
-            if not val:
-                return None
-            try:
-                return int(val)
-            except ValueError:
-                return None
+        min_price = parse_int_or_none(request.form.get("min_price"))
+        max_price = parse_int_or_none(request.form.get("max_price"))
 
-        min_price = parse_price(request.form.get("min_price"))
-        max_price = parse_price(request.form.get("max_price"))
-
-        # Check if profile already exists
+        # Check for existing profile
         cur.execute(
             "SELECT id FROM buyer_profiles WHERE contact_id = %s",
             (contact_id,),
@@ -2435,7 +2441,8 @@ def buyer_profile(contact_id):
             cur.execute(
                 """
                 UPDATE buyer_profiles
-                SET timeframe = %s,
+                SET property_type = %s,
+                    timeframe = %s,
                     min_price = %s,
                     max_price = %s,
                     areas = %s,
@@ -2447,6 +2454,7 @@ def buyer_profile(contact_id):
                 WHERE contact_id = %s
                 """,
                 (
+                    property_type,
                     timeframe,
                     min_price,
                     max_price,
@@ -2463,14 +2471,23 @@ def buyer_profile(contact_id):
             cur.execute(
                 """
                 INSERT INTO buyer_profiles (
-                    contact_id, timeframe, min_price, max_price,
-                    areas, property_types, preapproval_status,
-                    lender_name, referral_source, notes
+                    contact_id,
+                    property_type,
+                    timeframe,
+                    min_price,
+                    max_price,
+                    areas,
+                    property_types,
+                    preapproval_status,
+                    lender_name,
+                    referral_source,
+                    notes
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     contact_id,
+                    property_type,
                     timeframe,
                     min_price,
                     max_price,
@@ -2487,7 +2504,7 @@ def buyer_profile(contact_id):
         conn.close()
         return redirect(url_for("edit_contact", contact_id=contact_id))
 
-    # GET: load existing buyer profile if any
+    # GET: load profile
     cur.execute(
         "SELECT * FROM buyer_profiles WHERE contact_id = %s",
         (contact_id,),
@@ -2510,13 +2527,11 @@ def buyer_profile(contact_id):
         active_page="contacts",
     )
 
-
 @app.route("/seller/<int:contact_id>", methods=["GET", "POST"])
 def seller_profile(contact_id):
     conn = get_db()
     cur = conn.cursor()
 
-    # Load the base contact
     cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
     contact = cur.fetchone()
     if not contact:
@@ -2524,20 +2539,16 @@ def seller_profile(contact_id):
         return "Contact not found", 404
 
     if request.method == "POST":
+        property_type = (request.form.get("property_type") or "").strip()
         timeframe = (request.form.get("timeframe") or "").strip()
         motivation = (request.form.get("motivation") or "").strip()
-        property_address = (request.form.get("property_address") or "").strip()
         condition_notes = (request.form.get("condition_notes") or "").strip()
+        property_address = (request.form.get("property_address") or "").strip()
         referral_source = (request.form.get("referral_source") or "").strip()
         notes = (request.form.get("notes") or "").strip()
 
-        est_raw = (request.form.get("estimated_price") or "").strip()
-        try:
-            estimated_price = int(est_raw) if est_raw else None
-        except ValueError:
-            estimated_price = None
+        estimated_price = parse_int_or_none(request.form.get("estimated_price"))
 
-        # Check if profile already exists
         cur.execute(
             "SELECT id FROM seller_profiles WHERE contact_id = %s",
             (contact_id,),
@@ -2548,7 +2559,8 @@ def seller_profile(contact_id):
             cur.execute(
                 """
                 UPDATE seller_profiles
-                SET timeframe = %s,
+                SET property_type = %s,
+                    timeframe = %s,
                     motivation = %s,
                     estimated_price = %s,
                     property_address = %s,
@@ -2558,6 +2570,7 @@ def seller_profile(contact_id):
                 WHERE contact_id = %s
                 """,
                 (
+                    property_type,
                     timeframe,
                     motivation,
                     estimated_price,
@@ -2572,13 +2585,21 @@ def seller_profile(contact_id):
             cur.execute(
                 """
                 INSERT INTO seller_profiles (
-                    contact_id, timeframe, motivation, estimated_price,
-                    property_address, condition_notes, referral_source, notes
+                    contact_id,
+                    property_type,
+                    timeframe,
+                    motivation,
+                    estimated_price,
+                    property_address,
+                    condition_notes,
+                    referral_source,
+                    notes
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     contact_id,
+                    property_type,
                     timeframe,
                     motivation,
                     estimated_price,
@@ -2593,7 +2614,7 @@ def seller_profile(contact_id):
         conn.close()
         return redirect(url_for("edit_contact", contact_id=contact_id))
 
-    # GET: load existing seller profile if any
+    # GET
     cur.execute(
         "SELECT * FROM seller_profiles WHERE contact_id = %s",
         (contact_id,),
@@ -2606,17 +2627,6 @@ def seller_profile(contact_id):
     ) + (contact.get("last_name") or "")
     contact_name = contact_name.strip() or contact["name"]
 
-    # Default property address from subject_* fields if present
-    subject_addr_parts = [
-        contact.get("subject_address") or "",
-        contact.get("subject_city") or "",
-        contact.get("subject_state") or "",
-        contact.get("subject_zip") or "",
-    ]
-    default_property_address = ", ".join(
-        [p for p in subject_addr_parts if p]
-    )
-
     return render_template_string(
         SELLER_TEMPLATE,
         contact_id=contact_id,
@@ -2624,10 +2634,8 @@ def seller_profile(contact_id):
         contact_email=contact.get("email"),
         contact_phone=contact.get("phone"),
         sp=sp,
-        default_property_address=default_property_address,
         active_page="contacts",
     )
-
 
 @app.route("/followups")
 def followups():
