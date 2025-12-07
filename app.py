@@ -425,29 +425,7 @@ BASE_TEMPLATE = """
                         </select>
                     </div>
 
-                    <!-- Subject and Current addresses, grouped -->
-                    <div class="col-12 mt-3">
-                        <h6 class="fw-bold mb-2">Subject Property</h6>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Street Address</label>
-                        <input name="subject_address" class="form-control" placeholder="Property of interest">
-                    </div>
-
-                    <div class="col-md-2 col-6">
-                        <label class="form-label">City</label>
-                        <input name="subject_city" class="form-control" placeholder="Hazlet">
-                    </div>
-                    <div class="col-md-2 col-3">
-                        <label class="form-label">State</label>
-                        <input name="subject_state" class="form-control" placeholder="NJ">
-                    </div>
-                    <div class="col-md-2 col-3">
-                        <label class="form-label">ZIP</label>
-                        <input name="subject_zip" class="form-control" placeholder="07730">
-                    </div>
-
+                                        <!-- Current address -->
                     <div class="col-12 mt-3">
                         <h6 class="fw-bold mb-2">Current Address</h6>
                     </div>
@@ -2403,6 +2381,7 @@ def add_contact():
                 %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s)
+        RETURNING id
         """,
         (
             data["name"],
@@ -2431,10 +2410,13 @@ def add_contact():
             data["subject_zip"],
         ),
     )
+
+    new_contact = cur.fetchone()
+    new_id = new_contact["id"]
+
     conn.commit()
     conn.close()
-    return redirect(url_for("contacts"))
-
+    return redirect(url_for("edit_contact", contact_id=new_id))
 
 @app.route("/edit/<int:contact_id>", methods=["GET", "POST"])
 def edit_contact(contact_id):
