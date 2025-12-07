@@ -1916,31 +1916,6 @@ def delete_related(related_id):
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
 
-@app.route("/add_related/<int:contact_id>", methods=["POST"])
-def add_related(contact_id):
-    related_name = (request.form.get("related_name") or "").strip()
-    relationship = (request.form.get("relationship") or "").strip()
-    email = (request.form.get("related_email") or "").strip()
-    phone = (request.form.get("related_phone") or "").strip()
-    notes = (request.form.get("related_notes") or "").strip()
-
-    if not related_name:
-        return redirect(url_for("edit_contact", contact_id=contact_id))
-
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO related_contacts (contact_id, related_name, relationship, email, phone, notes)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """,
-        (contact_id, related_name, relationship, email, phone, notes),
-    )
-    conn.commit()
-    conn.close()
-    return redirect(url_for("edit_contact", contact_id=contact_id))
-
-
 @app.route("/delete_related/<int:related_id>")
 def delete_related(related_id):
     conn = get_db()
