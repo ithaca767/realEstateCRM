@@ -116,6 +116,44 @@ def init_db():
     )
     conn.commit()
 
+    # Buyer profiles table
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS buyer_profiles (
+            id SERIAL PRIMARY KEY,
+            contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+            timeframe TEXT,
+            min_price INTEGER,
+            max_price INTEGER,
+            areas TEXT,
+            property_types TEXT,
+            preapproval_status TEXT,
+            lender_name TEXT,
+            referral_source TEXT,
+            notes TEXT
+        )
+        """
+    )
+    conn.commit()
+
+    # Seller profiles table
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS seller_profiles (
+            id SERIAL PRIMARY KEY,
+            contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+            timeframe TEXT,
+            motivation TEXT,
+            estimated_price INTEGER,
+            property_address TEXT,
+            condition_notes TEXT,
+            referral_source TEXT,
+            notes TEXT
+        )
+        """
+    )
+    conn.commit()
+
     conn.close()
 
 
@@ -610,6 +648,16 @@ BASE_TEMPLATE = """
                            class="btn btn-sm btn-outline-primary">
                             Edit
                         </a>
+
+                        <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
+                           class="btn btn-sm btn-outline-dark">
+                            Commit as Buyer
+                        </a>
+
+                        <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
+                           class="btn btn-sm btn-outline-dark">
+                            Commit as Seller
+                        </a>
                     
                         <a href="{{ url_for('delete_contact', contact_id=c['id']) }}"
                            class="btn btn-sm btn-outline-danger"
@@ -768,6 +816,16 @@ EDIT_TEMPLATE = """
                                 Email
                             </a>
                         {% endif %}
+
+                        <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
+                           class="btn btn-sm btn-outline-dark">
+                            Commit as Buyer
+                        </a>
+
+                        <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
+                           class="btn btn-sm btn-outline-dark">
+                            Commit as Seller
+                        </a>
                     </div>
 
                     <div class="col-md-3">
@@ -1098,6 +1156,355 @@ EDIT_TEMPLATE = """
 </body>
 </html>
 """
+
+BUYER_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <title>Ulysses CRM - Buyer Profile</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    >
+    <style>
+      body {
+        background-color: #6eb8f9;
+      }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+
+    <!-- Logo -->
+    <a href="{{ url_for('dashboard') }}" class="navbar-brand d-flex align-items-center text-dark">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 32px;"
+        class="me-2"
+      >
+    </a>
+
+    <!-- Hamburger button -->
+    <button class="navbar-toggler" type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#mainNav"
+            aria-controls="mainNav"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <!-- Collapsible nav links -->
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-0 ms-md-2">
+
+        <li class="nav-item">
+          <a href="{{ url_for('dashboard') }}"
+             class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
+            Dashboard
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a href="{{ url_for('contacts') }}"
+             class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
+            Contacts
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a href="{{ url_for('followups') }}"
+             class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
+            Follow Up Dashboard
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a href="{{ url_for('followups_ics') }}"
+             class="nav-link"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
+
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+
+  <h2 class="mb-3">Buyer Profile</h2>
+
+  <!-- Contact summary -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title mb-1">
+        {{ contact_name }}
+      </h5>
+      <p class="mb-0 small text-muted">
+        {% if contact_email %}Email: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>{% endif %}
+        {% if contact_email and contact_phone %} | {% endif %}
+        {% if contact_phone %}Phone: <a href="tel:{{ contact_phone }}">{{ contact_phone }}</a>{% endif %}
+      </p>
+    </div>
+  </div>
+
+  <!-- Buyer profile form -->
+  <div class="card">
+    <div class="card-header">
+      Commit as Buyer
+    </div>
+    <div class="card-body bg-white">
+      <form method="post">
+        <div class="row g-3">
+
+          <div class="col-md-4">
+            <label class="form-label">Timeframe</label>
+            <input name="timeframe" class="form-control"
+                   placeholder="0–3 months, 3–6 months"
+                   value="{{ bp['timeframe'] if bp else '' }}">
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Pre-approval Status</label>
+            <input name="preapproval_status" class="form-control"
+                   placeholder="Not started / In process / Approved"
+                   value="{{ bp['preapproval_status'] if bp else '' }}">
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Lender</label>
+            <input name="lender_name" class="form-control"
+                   placeholder="Lender name / contact"
+                   value="{{ bp['lender_name'] if bp else '' }}">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Min Price</label>
+            <input name="min_price" type="number" class="form-control"
+                   value="{{ bp['min_price'] if bp and bp['min_price'] is not none else '' }}">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Max Price</label>
+            <input name="max_price" type="number" class="form-control"
+                   value="{{ bp['max_price'] if bp and bp['max_price'] is not none else '' }}">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Areas / Towns</label>
+            <input name="areas" class="form-control"
+                   placeholder="Keyport, Hazlet, Netflix zone"
+                   value="{{ bp['areas'] if bp else '' }}">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Property Types</label>
+            <input name="property_types" class="form-control"
+                   placeholder="SFH, condo, multi, land"
+                   value="{{ bp['property_types'] if bp else '' }}">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Referral Source</label>
+            <input name="referral_source" class="form-control"
+                   placeholder="Referred by, open house, online, etc."
+                   value="{{ bp['referral_source'] if bp else '' }}">
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-control" rows="3"
+                      placeholder="Motivation, constraints, must-haves, etc.">{{ bp['notes'] if bp else '' }}</textarea>
+          </div>
+        </div>
+
+        <button class="btn btn-primary mt-3" type="submit">Save Buyer Profile</button>
+        <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary mt-3">
+          Back to Contact
+        </a>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+"""
+
+SELLER_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <title>Ulysses CRM - Seller Profile</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    >
+    <style>
+      body {
+        background-color: #6eb8f9;
+      }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+
+    <!-- Logo -->
+    <a href="{{ url_for('dashboard') }}" class="navbar-brand d-flex align-items-center text-dark">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 32px;"
+        class="me-2"
+      >
+    </a>
+
+    <!-- Hamburger button -->
+    <button class="navbar-toggler" type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#mainNav"
+            aria-controls="mainNav"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <!-- Collapsible nav links -->
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-0 ms-md-2">
+
+        <li class="nav-item">
+          <a href="{{ url_for('dashboard') }}"
+             class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
+            Dashboard
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a href="{{ url_for('contacts') }}"
+             class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
+            Contacts
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a href="{{ url_for('followups') }}"
+             class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
+            Follow Up Dashboard
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a href="{{ url_for('followups_ics') }}"
+             class="nav-link"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
+
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+
+  <h2 class="mb-3">Seller Profile</h2>
+
+  <!-- Contact summary -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title mb-1">
+        {{ contact_name }}
+      </h5>
+      <p class="mb-0 small text-muted">
+        {% if contact_email %}Email: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>{% endif %}
+        {% if contact_email and contact_phone %} | {% endif %}
+        {% if contact_phone %}Phone: <a href="tel:{{ contact_phone }}">{{ contact_phone }}</a>{% endif %}
+      </p>
+    </div>
+  </div>
+
+  <!-- Seller profile form -->
+  <div class="card">
+    <div class="card-header">
+      Commit as Seller
+    </div>
+    <div class="card-body bg-white">
+      <form method="post">
+        <div class="row g-3">
+
+          <div class="col-md-4">
+            <label class="form-label">Timeframe</label>
+            <input name="timeframe" class="form-control"
+                   placeholder="0–3 months, 3–6 months"
+                   value="{{ sp['timeframe'] if sp else '' }}">
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Est. Price</label>
+            <input name="estimated_price" type="number" class="form-control"
+                   value="{{ sp['estimated_price'] if sp and sp['estimated_price'] is not none else '' }}">
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Referral Source</label>
+            <input name="referral_source" class="form-control"
+                   placeholder="Referred by, farming, online, etc."
+                   value="{{ sp['referral_source'] if sp else '' }}">
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Property Address</label>
+            <input name="property_address" class="form-control"
+                   placeholder="Use subject property or specific address"
+                   value="{{ sp['property_address'] if sp else default_property_address }}">
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Motivation</label>
+            <textarea name="motivation" class="form-control" rows="2"
+                      placeholder="Upsizing, downsizing, relocation, estate, etc.">{{ sp['motivation'] if sp else '' }}</textarea>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Condition / Notes</label>
+            <textarea name="condition_notes" class="form-control" rows="3"
+                      placeholder="Repairs, updates, issues, ideal prep plan">{{ sp['condition_notes'] if sp else '' }}</textarea>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Additional Notes</label>
+            <textarea name="notes" class="form-control" rows="3">{{ sp['notes'] if sp else '' }}</textarea>
+          </div>
+        </div>
+
+        <button class="btn btn-primary mt-3" type="submit">Save Seller Profile</button>
+        <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary mt-3">
+          Back to Contact
+        </a>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+"""
+
 
 FOLLOWUPS_TEMPLATE = """
 <!doctype html>
@@ -1982,7 +2389,245 @@ def delete_related(related_id):
     conn.close()
 
     return redirect(url_for("edit_contact", contact_id=contact_id))
-    
+
+@app.route("/buyer/<int:contact_id>", methods=["GET", "POST"])
+def buyer_profile(contact_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Load the base contact
+    cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
+    contact = cur.fetchone()
+    if not contact:
+        conn.close()
+        return "Contact not found", 404
+
+    if request.method == "POST":
+        timeframe = (request.form.get("timeframe") or "").strip()
+        preapproval_status = (request.form.get("preapproval_status") or "").strip()
+        lender_name = (request.form.get("lender_name") or "").strip()
+        areas = (request.form.get("areas") or "").strip()
+        property_types = (request.form.get("property_types") or "").strip()
+        referral_source = (request.form.get("referral_source") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+
+        # Prices can be blank
+        def parse_price(val):
+            val = (val or "").strip()
+            if not val:
+                return None
+            try:
+                return int(val)
+            except ValueError:
+                return None
+
+        min_price = parse_price(request.form.get("min_price"))
+        max_price = parse_price(request.form.get("max_price"))
+
+        # Check if profile already exists
+        cur.execute(
+            "SELECT id FROM buyer_profiles WHERE contact_id = %s",
+            (contact_id,),
+        )
+        existing = cur.fetchone()
+
+        if existing:
+            cur.execute(
+                """
+                UPDATE buyer_profiles
+                SET timeframe = %s,
+                    min_price = %s,
+                    max_price = %s,
+                    areas = %s,
+                    property_types = %s,
+                    preapproval_status = %s,
+                    lender_name = %s,
+                    referral_source = %s,
+                    notes = %s
+                WHERE contact_id = %s
+                """,
+                (
+                    timeframe,
+                    min_price,
+                    max_price,
+                    areas,
+                    property_types,
+                    preapproval_status,
+                    lender_name,
+                    referral_source,
+                    notes,
+                    contact_id,
+                ),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO buyer_profiles (
+                    contact_id, timeframe, min_price, max_price,
+                    areas, property_types, preapproval_status,
+                    lender_name, referral_source, notes
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    contact_id,
+                    timeframe,
+                    min_price,
+                    max_price,
+                    areas,
+                    property_types,
+                    preapproval_status,
+                    lender_name,
+                    referral_source,
+                    notes,
+                ),
+            )
+
+        conn.commit()
+        conn.close()
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    # GET: load existing buyer profile if any
+    cur.execute(
+        "SELECT * FROM buyer_profiles WHERE contact_id = %s",
+        (contact_id,),
+    )
+    bp = cur.fetchone()
+    conn.close()
+
+    contact_name = (contact.get("first_name") or "") + (
+        " " if contact.get("first_name") and contact.get("last_name") else ""
+    ) + (contact.get("last_name") or "")
+    contact_name = contact_name.strip() or contact["name"]
+
+    return render_template_string(
+        BUYER_TEMPLATE,
+        contact_id=contact_id,
+        contact_name=contact_name,
+        contact_email=contact.get("email"),
+        contact_phone=contact.get("phone"),
+        bp=bp,
+        active_page="contacts",
+    )
+
+
+@app.route("/seller/<int:contact_id>", methods=["GET", "POST"])
+def seller_profile(contact_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Load the base contact
+    cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
+    contact = cur.fetchone()
+    if not contact:
+        conn.close()
+        return "Contact not found", 404
+
+    if request.method == "POST":
+        timeframe = (request.form.get("timeframe") or "").strip()
+        motivation = (request.form.get("motivation") or "").strip()
+        property_address = (request.form.get("property_address") or "").strip()
+        condition_notes = (request.form.get("condition_notes") or "").strip()
+        referral_source = (request.form.get("referral_source") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+
+        est_raw = (request.form.get("estimated_price") or "").strip()
+        try:
+            estimated_price = int(est_raw) if est_raw else None
+        except ValueError:
+            estimated_price = None
+
+        # Check if profile already exists
+        cur.execute(
+            "SELECT id FROM seller_profiles WHERE contact_id = %s",
+            (contact_id,),
+        )
+        existing = cur.fetchone()
+
+        if existing:
+            cur.execute(
+                """
+                UPDATE seller_profiles
+                SET timeframe = %s,
+                    motivation = %s,
+                    estimated_price = %s,
+                    property_address = %s,
+                    condition_notes = %s,
+                    referral_source = %s,
+                    notes = %s
+                WHERE contact_id = %s
+                """,
+                (
+                    timeframe,
+                    motivation,
+                    estimated_price,
+                    property_address,
+                    condition_notes,
+                    referral_source,
+                    notes,
+                    contact_id,
+                ),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO seller_profiles (
+                    contact_id, timeframe, motivation, estimated_price,
+                    property_address, condition_notes, referral_source, notes
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    contact_id,
+                    timeframe,
+                    motivation,
+                    estimated_price,
+                    property_address,
+                    condition_notes,
+                    referral_source,
+                    notes,
+                ),
+            )
+
+        conn.commit()
+        conn.close()
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    # GET: load existing seller profile if any
+    cur.execute(
+        "SELECT * FROM seller_profiles WHERE contact_id = %s",
+        (contact_id,),
+    )
+    sp = cur.fetchone()
+    conn.close()
+
+    contact_name = (contact.get("first_name") or "") + (
+        " " if contact.get("first_name") and contact.get("last_name") else ""
+    ) + (contact.get("last_name") or "")
+    contact_name = contact_name.strip() or contact["name"]
+
+    # Default property address from subject_* fields if present
+    subject_addr_parts = [
+        contact.get("subject_address") or "",
+        contact.get("subject_city") or "",
+        contact.get("subject_state") or "",
+        contact.get("subject_zip") or "",
+    ]
+    default_property_address = ", ".join(
+        [p for p in subject_addr_parts if p]
+    )
+
+    return render_template_string(
+        SELLER_TEMPLATE,
+        contact_id=contact_id,
+        contact_name=contact_name,
+        contact_email=contact.get("email"),
+        contact_phone=contact.get("phone"),
+        sp=sp,
+        default_property_address=default_property_address,
+        active_page="contacts",
+    )
+
 
 @app.route("/followups")
 def followups():
