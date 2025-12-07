@@ -661,12 +661,20 @@ BASE_TEMPLATE = """
 
                         <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
                            class="btn btn-sm btn-outline-dark">
-                            Commit as Buyer
+                            {% if c['has_buyer_profile'] %}
+                                Committed Buyer Sheet
+                            {% else %}
+                                Commit as Buyer
+                            {% endif %}
                         </a>
 
                         <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
                            class="btn btn-sm btn-outline-dark">
-                            Commit as Seller
+                            {% if c['has_seller_profile'] %}
+                                Committed Seller Sheet
+                            {% else %}
+                                Commit as Seller
+                            {% endif %}
                         </a>
                     
                         <a href="{{ url_for('delete_contact', contact_id=c['id']) }}"
@@ -829,12 +837,20 @@ EDIT_TEMPLATE = """
 
                         <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
                            class="btn btn-sm btn-outline-dark">
-                            Commit as Buyer
+                            {% if has_buyer_profile %}
+                                Committed Buyer Sheet
+                            {% else %}
+                                Commit as Buyer
+                            {% endif %}
                         </a>
 
                         <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
                            class="btn btn-sm btn-outline-dark">
-                            Commit as Seller
+                            {% if has_seller_profile %}
+                                Committed Seller Sheet
+                            {% else %}
+                                Commit as Seller
+                            {% endif %}
                         </a>
                     </div>
 
@@ -2289,6 +2305,19 @@ def edit_contact(contact_id):
         conn.close()
         return "Contact not found", 404
 
+    # Flags to indicate if this contact has buyer/seller profiles
+    cur.execute(
+        "SELECT id FROM buyer_profiles WHERE contact_id = %s LIMIT 1",
+        (contact_id,),
+    )
+    has_buyer_profile = cur.fetchone() is not None
+
+    cur.execute(
+        "SELECT id FROM seller_profiles WHERE contact_id = %s LIMIT 1",
+        (contact_id,),
+    )
+    has_seller_profile = cur.fetchone() is not None
+
     # Pre-fill follow-up time selects if we have a stored time
     next_time_hour = None
     next_time_minute = None
@@ -2353,6 +2382,8 @@ def edit_contact(contact_id):
         next_time_minute=next_time_minute,
         next_time_ampm=next_time_ampm,
         active_page="contacts",
+        has_buyer_profile=has_buyer_profile,
+        has_seller_profile=has_seller_profile,
     )
 
 @app.route("/add_interaction/<int:contact_id>", methods=["POST"])
