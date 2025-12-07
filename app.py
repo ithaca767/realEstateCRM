@@ -136,13 +136,33 @@ def init_db():
     )
     conn.commit()
 
-    # Upgrades for buyer_profiles (property type + documents checklist)
+    # Upgrades for buyer_profiles (property type, documents checklist, professionals)
     buyer_profile_upgrades = [
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS property_type TEXT",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS cis_signed BOOLEAN",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_agreement_signed BOOLEAN",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS wire_fraud_notice_signed BOOLEAN",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS dual_agency_consent_signed BOOLEAN",
+
+        -- Buyer attorney
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_name TEXT",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_email TEXT",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_phone TEXT",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_referred BOOLEAN",
+
+        -- Buyer lender extensions
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_email TEXT",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_phone TEXT",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_referred BOOLEAN",
+
+        -- Buyer home inspector
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_name TEXT",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_email TEXT",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_phone TEXT",
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_referred BOOLEAN",
+
+        -- Any additional professionals you want to note
+        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS other_professionals TEXT"
     ]
     for stmt in buyer_profile_upgrades:
         try:
@@ -1325,6 +1345,31 @@ BUYER_TEMPLATE = """
                                value="{{ bp['lender_name'] if bp else '' }}">
                     </div>
 
+                    <div class="col-md-3">
+                        <label class="form-label">Lender Email</label>
+                        <input name="buyer_lender_email" class="form-control"
+                               value="{{ bp['buyer_lender_email'] if bp else '' }}">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Lender Phone</label>
+                        <input name="buyer_lender_phone" class="form-control"
+                               value="{{ bp['buyer_lender_phone'] if bp else '' }}">
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="buyer_lender_referred"
+                                   id="buyer_lender_referred"
+                                   {% if bp and bp['buyer_lender_referred'] %}checked{% endif %}>
+                            <label class="form-check-label" for="buyer_lender_referred">
+                                Lender referred by me
+                            </label>
+                        </div>
+                    </div>
+
                     <div class="col-md-6">
                         <label class="form-label">Referral Source</label>
                         <input name="referral_source" class="form-control"
@@ -1392,6 +1437,74 @@ BUYER_TEMPLATE = """
                                 Informed Consent to Dual Agency signed?
                             </label>
                         </div>
+                    </div>
+
+                    <div class="col-12 mt-4">
+                        <h6 class="fw-bold mb-2">Professionals</h6>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Attorney Name</label>
+                        <input name="buyer_attorney_name" class="form-control"
+                               value="{{ bp['buyer_attorney_name'] if bp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Attorney Email</label>
+                        <input name="buyer_attorney_email" class="form-control"
+                               value="{{ bp['buyer_attorney_email'] if bp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Attorney Phone</label>
+                        <input name="buyer_attorney_phone" class="form-control"
+                               value="{{ bp['buyer_attorney_phone'] if bp else '' }}">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="buyer_attorney_referred"
+                                   id="buyer_attorney_referred"
+                                   {% if bp and bp['buyer_attorney_referred'] %}checked{% endif %}>
+                            <label class="form-check-label" for="buyer_attorney_referred">
+                                Attorney referred by me
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Home Inspector Name</label>
+                        <input name="buyer_inspector_name" class="form-control"
+                               value="{{ bp['buyer_inspector_name'] if bp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Home Inspector Email</label>
+                        <input name="buyer_inspector_email" class="form-control"
+                               value="{{ bp['buyer_inspector_email'] if bp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Home Inspector Phone</label>
+                        <input name="buyer_inspector_phone" class="form-control"
+                               value="{{ bp['buyer_inspector_phone'] if bp else '' }}">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="buyer_inspector_referred"
+                                   id="buyer_inspector_referred"
+                                   {% if bp and bp['buyer_inspector_referred'] %}checked{% endif %}>
+                            <label class="form-check-label" for="buyer_inspector_referred">
+                                Home inspector referred by me
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Other Professionals</label>
+                        <textarea name="other_professionals"
+                                  class="form-control"
+                                  rows="2"
+                                  placeholder="Title company, contractor, etc.">{{ bp['other_professionals'] if bp else '' }}</textarea>
                     </div>
 
                 </div>
@@ -1564,6 +1677,102 @@ SELLER_TEMPLATE = """
                     <div class="col-12">
                         <label class="form-label">Additional Notes</label>
                         <textarea name="notes" class="form-control" rows="3">{{ sp['notes'] if sp else '' }}</textarea>
+                    </div>
+
+                    <div class="col-12 mt-4">
+                        <h6 class="fw-bold mb-2">Professionals</h6>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Attorney Name</label>
+                        <input name="seller_attorney_name" class="form-control"
+                               value="{{ sp['seller_attorney_name'] if sp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Attorney Email</label>
+                        <input name="seller_attorney_email" class="form-control"
+                               value="{{ sp['seller_attorney_email'] if sp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Attorney Phone</label>
+                        <input name="seller_attorney_phone" class="form-control"
+                               value="{{ sp['seller_attorney_phone'] if sp else '' }}">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="seller_attorney_referred"
+                                   id="seller_attorney_referred"
+                                   {% if sp and sp['seller_attorney_referred'] %}checked{% endif %}>
+                            <label class="form-check-label" for="seller_attorney_referred">
+                                Attorney referred by me
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Lender Name</label>
+                        <input name="seller_lender_name" class="form-control"
+                               value="{{ sp['seller_lender_name'] if sp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Lender Email</label>
+                        <input name="seller_lender_email" class="form-control"
+                               value="{{ sp['seller_lender_email'] if sp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Lender Phone</label>
+                        <input name="seller_lender_phone" class="form-control"
+                               value="{{ sp['seller_lender_phone'] if sp else '' }}">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="seller_lender_referred"
+                                   id="seller_lender_referred"
+                                   {% if sp and sp['seller_lender_referred'] %}checked{% endif %}>
+                            <label class="form-check-label" for="seller_lender_referred">
+                                Lender referred by me
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Home Inspector Name</label>
+                        <input name="seller_inspector_name" class="form-control"
+                               value="{{ sp['seller_inspector_name'] if sp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Home Inspector Email</label>
+                        <input name="seller_inspector_email" class="form-control"
+                               value="{{ sp['seller_inspector_email'] if sp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Home Inspector Phone</label>
+                        <input name="seller_inspector_phone" class="form-control"
+                               value="{{ sp['seller_inspector_phone'] if sp else '' }}">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="seller_inspector_referred"
+                                   id="seller_inspector_referred"
+                                   {% if sp and sp['seller_inspector_referred'] %}checked{% endif %}>
+                            <label class="form-check-label" for="seller_inspector_referred">
+                                Home inspector referred by me
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Other Professionals</label>
+                        <textarea name="other_professionals"
+                                  class="form-control"
+                                  rows="2"
+                                  placeholder="Title company, contractor, etc.">{{ sp['other_professionals'] if sp else '' }}</textarea>
                     </div>
 
                 </div>
@@ -2521,6 +2730,26 @@ def buyer_profile(contact_id):
         wire_fraud_notice_signed = bool(request.form.get("wire_fraud_notice_signed"))
         dual_agency_consent_signed = bool(request.form.get("dual_agency_consent_signed"))
 
+        # Professionals - Attorney
+        buyer_attorney_name = (request.form.get("buyer_attorney_name") or "").strip()
+        buyer_attorney_email = (request.form.get("buyer_attorney_email") or "").strip()
+        buyer_attorney_phone = (request.form.get("buyer_attorney_phone") or "").strip()
+        buyer_attorney_referred = bool(request.form.get("buyer_attorney_referred"))
+
+        # Professionals - Lender (extend existing lender_name)
+        buyer_lender_email = (request.form.get("buyer_lender_email") or "").strip()
+        buyer_lender_phone = (request.form.get("buyer_lender_phone") or "").strip()
+        buyer_lender_referred = bool(request.form.get("buyer_lender_referred"))
+
+        # Professionals - Home Inspector
+        buyer_inspector_name = (request.form.get("buyer_inspector_name") or "").strip()
+        buyer_inspector_email = (request.form.get("buyer_inspector_email") or "").strip()
+        buyer_inspector_phone = (request.form.get("buyer_inspector_phone") or "").strip()
+        buyer_inspector_referred = bool(request.form.get("buyer_inspector_referred"))
+
+        # Any other professionals
+        other_professionals = (request.form.get("other_professionals") or "").strip()
+
         # Check for existing profile
         cur.execute(
             "SELECT id FROM buyer_profiles WHERE contact_id = %s",
@@ -2545,7 +2774,19 @@ def buyer_profile(contact_id):
                     cis_signed = %s,
                     buyer_agreement_signed = %s,
                     wire_fraud_notice_signed = %s,
-                    dual_agency_consent_signed = %s
+                    dual_agency_consent_signed = %s,
+                    buyer_attorney_name = %s,
+                    buyer_attorney_email = %s,
+                    buyer_attorney_phone = %s,
+                    buyer_attorney_referred = %s,
+                    buyer_lender_email = %s,
+                    buyer_lender_phone = %s,
+                    buyer_lender_referred = %s,
+                    buyer_inspector_name = %s,
+                    buyer_inspector_email = %s,
+                    buyer_inspector_phone = %s,
+                    buyer_inspector_referred = %s,
+                    other_professionals = %s
                 WHERE contact_id = %s
                 """,
                 (
@@ -2563,6 +2804,18 @@ def buyer_profile(contact_id):
                     buyer_agreement_signed,
                     wire_fraud_notice_signed,
                     dual_agency_consent_signed,
+                    buyer_attorney_name,
+                    buyer_attorney_email,
+                    buyer_attorney_phone,
+                    buyer_attorney_referred,
+                    buyer_lender_email,
+                    buyer_lender_phone,
+                    buyer_lender_referred,
+                    buyer_inspector_name,
+                    buyer_inspector_email,
+                    buyer_inspector_phone,
+                    buyer_inspector_referred,
+                    other_professionals,
                     contact_id,
                 ),
             )
@@ -2584,9 +2837,21 @@ def buyer_profile(contact_id):
                     cis_signed,
                     buyer_agreement_signed,
                     wire_fraud_notice_signed,
-                    dual_agency_consent_signed
+                    dual_agency_consent_signed,
+                    buyer_attorney_name,
+                    buyer_attorney_email,
+                    buyer_attorney_phone,
+                    buyer_attorney_referred,
+                    buyer_lender_email,
+                    buyer_lender_phone,
+                    buyer_lender_referred,
+                    buyer_inspector_name,
+                    buyer_inspector_email,
+                    buyer_inspector_phone,
+                    buyer_inspector_referred,
+                    other_professionals
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     contact_id,
@@ -2604,6 +2869,18 @@ def buyer_profile(contact_id):
                     buyer_agreement_signed,
                     wire_fraud_notice_signed,
                     dual_agency_consent_signed,
+                    buyer_attorney_name,
+                    buyer_attorney_email,
+                    buyer_attorney_phone,
+                    buyer_attorney_referred,
+                    buyer_lender_email,
+                    buyer_lender_phone,
+                    buyer_lender_referred,
+                    buyer_inspector_name,
+                    buyer_inspector_email,
+                    buyer_inspector_phone,
+                    buyer_inspector_referred,
+                    other_professionals,
                 ),
             )
 
@@ -2656,6 +2933,27 @@ def seller_profile(contact_id):
 
         estimated_price = parse_int_or_none(request.form.get("estimated_price"))
 
+        # Professionals - Attorney
+        seller_attorney_name = (request.form.get("seller_attorney_name") or "").strip()
+        seller_attorney_email = (request.form.get("seller_attorney_email") or "").strip()
+        seller_attorney_phone = (request.form.get("seller_attorney_phone") or "").strip()
+        seller_attorney_referred = bool(request.form.get("seller_attorney_referred"))
+
+        # Professionals - Lender
+        seller_lender_name = (request.form.get("seller_lender_name") or "").strip()
+        seller_lender_email = (request.form.get("seller_lender_email") or "").strip()
+        seller_lender_phone = (request.form.get("seller_lender_phone") or "").strip()
+        seller_lender_referred = bool(request.form.get("seller_lender_referred"))
+
+        # Professionals - Home Inspector
+        seller_inspector_name = (request.form.get("seller_inspector_name") or "").strip()
+        seller_inspector_email = (request.form.get("seller_inspector_email") or "").strip()
+        seller_inspector_phone = (request.form.get("seller_inspector_phone") or "").strip()
+        seller_inspector_referred = bool(request.form.get("seller_inspector_referred"))
+
+        # Other professionals
+        other_professionals = (request.form.get("other_professionals") or "").strip()
+
         cur.execute(
             "SELECT id FROM seller_profiles WHERE contact_id = %s",
             (contact_id,),
@@ -2673,7 +2971,20 @@ def seller_profile(contact_id):
                     property_address = %s,
                     condition_notes = %s,
                     referral_source = %s,
-                    notes = %s
+                    notes = %s,
+                    seller_attorney_name = %s,
+                    seller_attorney_email = %s,
+                    seller_attorney_phone = %s,
+                    seller_attorney_referred = %s,
+                    seller_lender_name = %s,
+                    seller_lender_email = %s,
+                    seller_lender_phone = %s,
+                    seller_lender_referred = %s,
+                    seller_inspector_name = %s,
+                    seller_inspector_email = %s,
+                    seller_inspector_phone = %s,
+                    seller_inspector_referred = %s,
+                    other_professionals = %s
                 WHERE contact_id = %s
                 """,
                 (
@@ -2685,6 +2996,19 @@ def seller_profile(contact_id):
                     condition_notes,
                     referral_source,
                     notes,
+                    seller_attorney_name,
+                    seller_attorney_email,
+                    seller_attorney_phone,
+                    seller_attorney_referred,
+                    seller_lender_name,
+                    seller_lender_email,
+                    seller_lender_phone,
+                    seller_lender_referred,
+                    seller_inspector_name,
+                    seller_inspector_email,
+                    seller_inspector_phone,
+                    seller_inspector_referred,
+                    other_professionals,
                     contact_id,
                 ),
             )
@@ -2700,9 +3024,22 @@ def seller_profile(contact_id):
                     property_address,
                     condition_notes,
                     referral_source,
-                    notes
+                    notes,
+                    seller_attorney_name,
+                    seller_attorney_email,
+                    seller_attorney_phone,
+                    seller_attorney_referred,
+                    seller_lender_name,
+                    seller_lender_email,
+                    seller_lender_phone,
+                    seller_lender_referred,
+                    seller_inspector_name,
+                    seller_inspector_email,
+                    seller_inspector_phone,
+                    seller_inspector_referred,
+                    other_professionals
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     contact_id,
@@ -2714,6 +3051,19 @@ def seller_profile(contact_id):
                     condition_notes,
                     referral_source,
                     notes,
+                    seller_attorney_name,
+                    seller_attorney_email,
+                    seller_attorney_phone,
+                    seller_attorney_referred,
+                    seller_lender_name,
+                    seller_lender_email,
+                    seller_lender_phone,
+                    seller_lender_referred,
+                    seller_inspector_name,
+                    seller_inspector_email,
+                    seller_inspector_phone,
+                    seller_inspector_referred,
+                    other_professionals,
                 ),
             )
 
