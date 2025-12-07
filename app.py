@@ -913,7 +913,7 @@ EDIT_TEMPLATE = """
                     </div>
                 </div>
                 <button class="btn btn-primary mt-3" type="submit">Save Changes</button>
-                <a href="{{ url_for('index') }}" class="btn btn-secondary mt-3">Cancel</a>
+                <a href="{{ url_for('contacts') }}" class="btn btn-secondary mt-3">Cancel</a>
             </form>
         </div>
     </div>
