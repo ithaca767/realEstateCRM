@@ -2277,8 +2277,8 @@ def contacts():
     contacts = cur.fetchall()
     conn.close()
 
-    return render_template_string(
-        BASE_TEMPLATE,
+    return render_template(
+        "contacts.html",
         contacts=contacts,
         request=request,
         today=date.today().isoformat(),
@@ -3370,7 +3370,6 @@ try:
     init_db()
 except Exception as e:
     print("init_db() on import failed:", e)
-
 
 if __name__ == "__main__":
     init_db()
