@@ -675,23 +675,23 @@ BASE_TEMPLATE = """
                         </a>
 
                         <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
-                           class="btn btn-sm btn-outline-dark">
+                           class="btn btn-sm {% if c['has_buyer_profile'] %}btn-primary fw-semibold{% else %}btn-outline-dark{% endif %}">
                             {% if c['has_buyer_profile'] %}
-                                Committed Buyer Sheet
+                                <i class="bi bi-person-check me-1"></i> Committed Buyer Sheet
                             {% else %}
                                 Commit as Buyer
                             {% endif %}
                         </a>
 
                         <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
-                           class="btn btn-sm btn-outline-dark">
+                           class="btn btn-sm {% if c['has_seller_profile'] %}btn-success fw-semibold{% else %}btn-outline-dark{% endif %}">
                             {% if c['has_seller_profile'] %}
-                                Committed Seller Sheet
+                                <i class="bi bi-house-check me-1"></i> Committed Seller Sheet
                             {% else %}
                                 Commit as Seller
                             {% endif %}
                         </a>
-                    
+                                            
                         <a href="{{ url_for('delete_contact', contact_id=c['id']) }}"
                            class="btn btn-sm btn-outline-danger"
                            onclick="return confirm('Delete this contact?');">
@@ -851,18 +851,18 @@ EDIT_TEMPLATE = """
                         {% endif %}
 
                         <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
-                           class="btn btn-sm btn-outline-dark">
-                            {% if has_buyer_profile %}
-                                Committed Buyer Sheet
+                           class="btn btn-sm {% if c['has_buyer_profile'] %}btn-primary fw-semibold{% else %}btn-outline-dark{% endif %}">
+                            {% if c['has_buyer_profile'] %}
+                                <i class="bi bi-person-check me-1"></i> Committed Buyer Sheet
                             {% else %}
                                 Commit as Buyer
                             {% endif %}
                         </a>
 
                         <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
-                           class="btn btn-sm btn-outline-dark">
-                            {% if has_seller_profile %}
-                                Committed Seller Sheet
+                           class="btn btn-sm {% if c['has_seller_profile'] %}btn-success fw-semibold{% else %}btn-outline-dark{% endif %}">
+                            {% if c['has_seller_profile'] %}
+                                <i class="bi bi-house-check me-1"></i> Committed Seller Sheet
                             {% else %}
                                 Commit as Seller
                             {% endif %}
