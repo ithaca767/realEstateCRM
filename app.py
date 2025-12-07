@@ -100,6 +100,22 @@ def init_db():
     except Exception as e:
         print("Interaction schema update skipped:", e)
 
+    # Related contacts table (associated contacts)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS related_contacts (
+            id SERIAL PRIMARY KEY,
+            contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+            related_name TEXT NOT NULL,
+            relationship TEXT,
+            email TEXT,
+            phone TEXT,
+            notes TEXT
+        )
+        """
+    )
+    conn.commit()
+
     conn.close()
 
 
@@ -187,30 +203,35 @@ BASE_TEMPLATE = """
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
     <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo only -->
-      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+      <a href="{{ url_for('dashboard') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          style="height: 40px;"
+          style="height: 32px;"
           class="me-2"
         >
       </a>
 
-      <!-- Nav links with pipes -->
-      <a href="{{ url_for('index') }}"
-         class="text-decoration-none text-dark{% if request.endpoint == 'index' %} fw-semibold{% endif %}">
+      <a href="{{ url_for('dashboard') }}"
+         class="text-decoration-none text-dark">
+        Dashboard
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('contacts') }}"
+         class="text-decoration-none text-dark fw-semibold">
         Contacts
       </a>
 
-      <span class="text-secondary nav-pipe">|</span>
+      <span class="text-secondary">|</span>
 
       <a href="{{ url_for('followups') }}"
-         class="text-decoration-none text-dark{% if request.endpoint == 'followups' %} fw-semibold{% endif %}">
+         class="text-decoration-none text-dark">
         Follow Up Dashboard
       </a>
 
-      <span class="text-secondary nav-pipe">|</span>
+      <span class="text-secondary">|</span>
 
       <a href="{{ url_for('followups_ics') }}"
          class="text-decoration-none text-dark"
@@ -631,30 +652,35 @@ EDIT_TEMPLATE = """
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
     <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo only -->
-      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+      <a href="{{ url_for('dashboard') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          style="height: 40px;"
+          style="height: 32px;"
           class="me-2"
         >
       </a>
 
-      <!-- Nav links with pipes -->
-      <a href="{{ url_for('index') }}"
+      <a href="{{ url_for('dashboard') }}"
          class="text-decoration-none text-dark">
+        Dashboard
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('contacts') }}"
+         class="text-decoration-none text-dark fw-semibold">
         Contacts
       </a>
 
-      <span class="text-secondary nav-pipe">|</span>
+      <span class="text-secondary">|</span>
 
       <a href="{{ url_for('followups') }}"
          class="text-decoration-none text-dark">
         Follow Up Dashboard
       </a>
 
-      <span class="text-secondary nav-pipe">|</span>
+      <span class="text-secondary">|</span>
 
       <a href="{{ url_for('followups_ics') }}"
          class="text-decoration-none text-dark"
@@ -954,6 +980,84 @@ EDIT_TEMPLATE = """
             {% endif %}
         </div>
     </div>
+    <!-- Associated Contacts -->
+    <div class="card mt-4">
+        <div class="card-header">
+            Associated Contacts
+        </div>
+        <div class="card-body bg-white">
+
+            <!-- Add associated contact form -->
+            <form method="post" action="{{ url_for('add_related', contact_id=c['id']) }}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Name *</label>
+                        <input name="related_name" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Relationship</label>
+                        <input name="relationship" class="form-control" placeholder="Spouse, brother, partner">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Email</label>
+                        <input name="related_email" type="email" class="form-control">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Phone</label>
+                        <input name="related_phone" class="form-control">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Notes</label>
+                        <input name="related_notes" class="form-control" placeholder="Any helpful context">
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-outline-primary mt-2" type="submit">
+                            Add Associated Contact
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <hr>
+
+            {% if related_contacts and related_contacts|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Name</th>
+                                <th>Relationship</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Notes</th>
+                                <th style="width: 80px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for r in related_contacts %}
+                            <tr>
+                                <td>{{ r["related_name"] }}</td>
+                                <td>{{ r["relationship"] or "" }}</td>
+                                <td>{{ r["email"] or "" }}</td>
+                                <td>{{ r["phone"] or "" }}</td>
+                                <td>{{ r["notes"] or "" }}</td>
+                                <td>
+                                    <a href="{{ url_for('delete_related', related_id=r['id']) }}"
+                                       class="btn btn-sm btn-outline-danger"
+                                       onclick="return confirm('Delete this associated contact?');">
+                                        Delete
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="mb-0 text-muted">No associated contacts yet.</p>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -991,30 +1095,35 @@ FOLLOWUPS_TEMPLATE = """
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
     <div class="d-flex align-items-center flex-wrap gap-2">
 
-      <!-- Logo only -->
-      <a href="{{ url_for('index') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+      <a href="{{ url_for('dashboard') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
         <img
           src="{{ url_for('static', filename='ulysses-logo.svg') }}"
           alt="Ulysses CRM"
-          style="height: 40px;"
+          style="height: 32px;"
           class="me-2"
         >
       </a>
 
-      <!-- Nav links with pipes -->
-      <a href="{{ url_for('index') }}"
+      <a href="{{ url_for('dashboard') }}"
+         class="text-decoration-none text-dark">
+        Dashboard
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('contacts') }}"
          class="text-decoration-none text-dark">
         Contacts
       </a>
 
-      <span class="text-secondary nav-pipe">|</span>
+      <span class="text-secondary">|</span>
 
       <a href="{{ url_for('followups') }}"
          class="text-decoration-none text-dark fw-semibold">
         Follow Up Dashboard
       </a>
 
-      <span class="text-secondary nav-pipe">|</span>
+      <span class="text-secondary">|</span>
 
       <a href="{{ url_for('followups_ics') }}"
          class="text-decoration-none text-dark"
@@ -1025,6 +1134,7 @@ FOLLOWUPS_TEMPLATE = """
     </div>
   </div>
 </nav>
+
 
 <div class="container py-4">
 
@@ -1115,9 +1225,256 @@ FOLLOWUPS_TEMPLATE = """
 </html>
 """
 
+DASHBOARD_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <title>Ulysses CRM - Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    >
+    <style>
+      body {
+        background-color: #6eb8f9;
+      }
+      .card-followups .card-header {
+        font-weight: 600;
+      }
+    </style>
+</head>
+<body>
+
+<nav class="bg-white shadow-sm border-bottom sticky-top">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+    <div class="d-flex align-items-center flex-wrap gap-2">
+
+      <!-- Logo -->
+      <a href="{{ url_for('dashboard') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
+        <img
+          src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+          alt="Ulysses CRM"
+          style="height: 32px;"
+          class="me-2"
+        >
+      </a>
+
+      <a href="{{ url_for('dashboard') }}"
+         class="text-decoration-none text-dark fw-semibold">
+        Dashboard
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('contacts') }}"
+         class="text-decoration-none text-dark">
+        Contacts
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('followups') }}"
+         class="text-decoration-none text-dark">
+        Follow Up Dashboard
+      </a>
+
+      <span class="text-secondary">|</span>
+
+      <a href="{{ url_for('followups_ics') }}"
+         class="text-decoration-none text-dark"
+         target="_blank">
+        Calendar Feed
+      </a>
+
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+
+    <h2 class="mb-1">Dashboard</h2>
+    <p class="text-muted">Today: {{ today }}</p>
+
+    <!-- Summary cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card text-center">
+                <div class="card-body">
+                    <div class="text-muted small">Overdue Follow Ups</div>
+                    <div class="fs-4 fw-bold">{{ overdue|length }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center">
+                <div class="card-body">
+                    <div class="text-muted small">Today</div>
+                    <div class="fs-4 fw-bold">{{ today_list|length }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center">
+                <div class="card-body">
+                    <div class="text-muted small">Upcoming</div>
+                    <div class="fs-4 fw-bold">{{ upcoming|length }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center">
+                <div class="card-body">
+                    <div class="text-muted small">Total Contacts</div>
+                    <div class="fs-4 fw-bold">{{ total_contacts }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% macro followup_table(rows) %}
+        {% if rows and rows|length > 0 %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Stage</th>
+                            <th>Priority</th>
+                            <th>Area</th>
+                            <th style="width: 140px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for c in rows %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}">
+                                    {% if c["first_name"] or c["last_name"] %}
+                                        {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                                    {% else %}
+                                        {{ c["name"] }}
+                                    {% endif %}
+                                </a>
+                            </td>
+                            <td>{{ c["next_follow_up"] or "" }}</td>
+                            <td>{{ c["next_follow_up_time"] or "" }}</td>
+                            <td>{{ c["pipeline_stage"] or "" }}</td>
+                            <td>{{ c["priority"] or "" }}</td>
+                            <td>{{ c["target_area"] or "" }}</td>
+                            <td>
+                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
+                                   class="btn btn-sm btn-outline-primary">
+                                   Open
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="mb-0 text-muted">Nothing here.</p>
+        {% endif %}
+    {% endmacro %}
+
+    <!-- Overdue -->
+    <div class="card card-followups mb-4">
+        <div class="card-header bg-danger text-white">
+            Overdue Follow Ups
+        </div>
+        <div class="card-body bg-white">
+            {{ followup_table(overdue) }}
+        </div>
+    </div>
+
+    <!-- Today -->
+    <div class="card card-followups mb-4">
+        <div class="card-header bg-warning">
+            Today
+        </div>
+        <div class="card-body bg-white">
+            {{ followup_table(today_list) }}
+        </div>
+    </div>
+
+    <!-- Upcoming -->
+    <div class="card card-followups mb-4">
+        <div class="card-header bg-success text-white">
+            Upcoming
+        </div>
+        <div class="card-body bg-white">
+            {{ followup_table(upcoming) }}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+"""
+
 
 @app.route("/")
-def index():
+def dashboard():
+    today_str = date.today().isoformat()
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            id,
+            name,
+            first_name,
+            last_name,
+            next_follow_up,
+            next_follow_up_time,
+            pipeline_stage,
+            priority,
+            target_area
+        FROM contacts
+        WHERE next_follow_up IS NOT NULL
+          AND next_follow_up <> ''
+        ORDER BY next_follow_up, name
+        """
+    )
+    rows = cur.fetchall()
+
+    # Total contacts count
+    cur.execute("SELECT COUNT(*) AS cnt FROM contacts")
+    total_contacts = cur.fetchone()["cnt"]
+
+    conn.close()
+
+    overdue = []
+    today_list = []
+    upcoming = []
+
+    for row in rows:
+        nf = row["next_follow_up"]
+        if not nf:
+            continue
+        if nf < today_str:
+            overdue.append(row)
+        elif nf == today_str:
+            today_list.append(row)
+        else:
+            upcoming.append(row)
+
+    return render_template_string(
+        DASHBOARD_TEMPLATE,
+        overdue=overdue,
+        today_list=today_list,
+        upcoming=upcoming,
+        today=today_str,
+        total_contacts=total_contacts,
+    )
+
+@app.route("/contacts")
+def contacts():
     q = request.args.get("q", "").strip()
     lead_type = request.args.get("lead_type", "").strip()
     pipeline_stage = request.args.get("pipeline_stage", "").strip()
@@ -1167,7 +1524,6 @@ def index():
         priorities=PRIORITIES,
         sources=SOURCES,
     )
-
 
 def parse_int_or_none(value):
     value = (value or "").strip()
@@ -1244,7 +1600,7 @@ def add_contact():
     }
 
     if not data["name"]:
-        return redirect(url_for("index"))
+        return redirect(url_for("contacts"))
 
     conn = get_db()
     cur = conn.cursor()
@@ -1291,7 +1647,7 @@ def add_contact():
     )
     conn.commit()
     conn.close()
-    return redirect(url_for("index"))
+    return redirect(url_for("contacts"))
 
 
 @app.route("/edit/<int:contact_id>", methods=["GET", "POST"])
@@ -1336,7 +1692,7 @@ def edit_contact(contact_id):
 
         if not data["name"]:
             conn.close()
-            return redirect(url_for("index"))
+            return redirect(url_for("contacts"))
 
         cur.execute(
             """
@@ -1379,7 +1735,7 @@ def edit_contact(contact_id):
         )
         conn.commit()
         conn.close()
-        return redirect(url_for("index"))
+        return redirect(url_for("contacts"))
 
     # GET: load contact and its interactions
     cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
@@ -1425,12 +1781,25 @@ def edit_contact(contact_id):
         (contact_id,),
     )
     interactions = cur.fetchall()
+
+    # Associated contacts for this contact
+    cur.execute(
+        """
+        SELECT * FROM related_contacts
+        WHERE contact_id = %s
+        ORDER BY id
+        """,
+        (contact_id,),
+    )
+    related_contacts = cur.fetchall()
+
     conn.close()
 
     return render_template_string(
         EDIT_TEMPLATE,
         c=contact,
         interactions=interactions,
+        related_contacts=related_contacts,
         lead_types=LEAD_TYPES,
         pipeline_stages=PIPELINE_STAGES,
         priorities=PRIORITIES,
@@ -1485,7 +1854,7 @@ def delete_interaction(interaction_id):
     row = cur.fetchone()
     if not row:
         conn.close()
-        return redirect(url_for("index"))
+        return redirect(url_for("contacts"))
 
     contact_id = row["contact_id"]
 
@@ -1495,6 +1864,105 @@ def delete_interaction(interaction_id):
     conn.close()
 
     # Go back to that contact's edit page
+    return redirect(url_for("edit_contact", contact_id=contact_id))
+
+@app.route("/add_related/<int:contact_id>", methods=["POST"])
+def add_related(contact_id):
+    related_name = (request.form.get("related_name") or "").strip()
+    relationship = (request.form.get("relationship") or "").strip()
+    email = (request.form.get("related_email") or "").strip()
+    phone = (request.form.get("related_phone") or "").strip()
+    notes = (request.form.get("related_notes") or "").strip()
+
+    if not related_name:
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO related_contacts (contact_id, related_name, relationship, email, phone, notes)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (contact_id, related_name, relationship, email, phone, notes),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("edit_contact", contact_id=contact_id))
+
+
+@app.route("/delete_related/<int:related_id>")
+def delete_related(related_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Find parent contact
+    cur.execute(
+        "SELECT contact_id FROM related_contacts WHERE id = %s",
+        (related_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return redirect(url_for("contacts"))
+
+    contact_id = row["contact_id"]
+
+    # Delete associated-contact row
+    cur.execute("DELETE FROM related_contacts WHERE id = %s", (related_id,))
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("edit_contact", contact_id=contact_id))
+
+
+@app.route("/add_related/<int:contact_id>", methods=["POST"])
+def add_related(contact_id):
+    related_name = (request.form.get("related_name") or "").strip()
+    relationship = (request.form.get("relationship") or "").strip()
+    email = (request.form.get("related_email") or "").strip()
+    phone = (request.form.get("related_phone") or "").strip()
+    notes = (request.form.get("related_notes") or "").strip()
+
+    if not related_name:
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO related_contacts (contact_id, related_name, relationship, email, phone, notes)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (contact_id, related_name, relationship, email, phone, notes),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("edit_contact", contact_id=contact_id))
+
+
+@app.route("/delete_related/<int:related_id>")
+def delete_related(related_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Find parent contact
+    cur.execute(
+        "SELECT contact_id FROM related_contacts WHERE id = %s",
+        (related_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return redirect(url_for("contacts"))
+
+    contact_id = row["contact_id"]
+
+    # Delete associated-contact row
+    cur.execute("DELETE FROM related_contacts WHERE id = %s", (related_id,))
+    conn.commit()
+    conn.close()
+
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
 
@@ -1661,7 +2129,7 @@ def delete_contact(contact_id):
     cur.execute("DELETE FROM contacts WHERE id = %s", (contact_id,))
     conn.commit()
     conn.close()
-    return redirect(url_for("index"))
+    return redirect(url_for("contacts"))
 
 
 def normalize_phone_digits(phone: str) -> str:
