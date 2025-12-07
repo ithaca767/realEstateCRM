@@ -305,7 +305,7 @@ BASE_TEMPLATE = """
       <img
         src="{{ url_for('static', filename='ulysses-logo.svg') }}"
         alt="Ulysses CRM"
-        style="height: 32px;"
+        style="height: 50px;"
         class="me-2"
       >
     </a>
@@ -754,7 +754,7 @@ EDIT_TEMPLATE = """
       <img
         src="{{ url_for('static', filename='ulysses-logo.svg') }}"
         alt="Ulysses CRM"
-        style="height: 32px;"
+        style="height: 50px;"
         class="me-2"
       >
     </a>
@@ -1214,7 +1214,7 @@ BUYER_TEMPLATE = """
       <img
         src="{{ url_for('static', filename='ulysses-logo.svg') }}"
         alt="Ulysses CRM"
-        style="height: 32px;"
+        style="height: 50px;"
         class="me-2"
       >
     </a>
@@ -1549,7 +1549,7 @@ SELLER_TEMPLATE = """
       <img
         src="{{ url_for('static', filename='ulysses-logo.svg') }}"
         alt="Ulysses CRM"
-        style="height: 32px;"
+        style="height: 50px;"
         class="me-2"
       >
     </a>
