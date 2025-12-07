@@ -144,26 +144,23 @@ def init_db():
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS wire_fraud_notice_signed BOOLEAN",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS dual_agency_consent_signed BOOLEAN",
 
-        -- Buyer attorney
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_name TEXT",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_email TEXT",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_phone TEXT",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_referred BOOLEAN",
 
-        -- Buyer lender extensions
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_email TEXT",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_phone TEXT",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_referred BOOLEAN",
 
-        -- Buyer home inspector
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_name TEXT",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_email TEXT",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_phone TEXT",
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_referred BOOLEAN",
 
-        -- Any additional professionals you want to note
         "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS other_professionals TEXT"
     ]
+
     for stmt in buyer_profile_upgrades:
         try:
             cur.execute(stmt)
@@ -189,14 +186,34 @@ def init_db():
     )
     conn.commit()
 
-    # Upgrades for seller_profiles
-    try:
-        cur.execute(
-            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS property_type TEXT"
-        )
-        conn.commit()
-    except Exception as e:
-        print("seller_profiles schema update skipped:", e)
+    # Upgrades for seller_profiles (property type + professionals)
+    seller_profile_upgrades = [
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS property_type TEXT",
+
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_name TEXT",
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_email TEXT",
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_phone TEXT",
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_referred BOOLEAN",
+
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_name TEXT",
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_email TEXT",
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_phone TEXT",
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_referred BOOLEAN",
+
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_name TEXT",
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_email TEXT",
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_phone TEXT",
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_referred BOOLEAN",
+
+        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS other_professionals TEXT"
+    ]
+
+    for stmt in seller_profile_upgrades:
+        try:
+            cur.execute(stmt)
+            conn.commit()
+        except Exception as e:
+            print("seller_profiles schema update skipped:", e)
 
     conn.close()
 
