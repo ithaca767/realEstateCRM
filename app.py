@@ -199,46 +199,63 @@ BASE_TEMPLATE = """
 </head>
 <body>
 
-<nav class="bg-white shadow-sm border-bottom sticky-top">
+<nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
-    <div class="d-flex align-items-center flex-wrap gap-2">
+    
+    <!-- Logo -->
+    <a href="{{ url_for('dashboard') }}" class="navbar-brand d-flex align-items-center text-dark">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 32px;"
+        class="me-2"
+      >
+    </a>
 
-      <a href="{{ url_for('dashboard') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
-        <img
-          src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-          alt="Ulysses CRM"
-          style="height: 32px;"
-          class="me-2"
-        >
-      </a>
+    <!-- Hamburger button -->
+    <button class="navbar-toggler" type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#mainNav"
+            aria-controls="mainNav"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
-      <a href="{{ url_for('dashboard') }}"
-         class="text-decoration-none text-dark">
-        Dashboard
-      </a>
+    <!-- Collapsible nav links -->
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-0 ms-md-2">
 
-      <span class="text-secondary">|</span>
+        <li class="nav-item">
+          <a href="{{ url_for('dashboard') }}"
+             class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
+            Dashboard
+          </a>
+        </li>
 
-      <a href="{{ url_for('contacts') }}"
-         class="text-decoration-none text-dark fw-semibold">
-        Contacts
-      </a>
+        <li class="nav-item">
+          <a href="{{ url_for('contacts') }}"
+             class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
+            Contacts
+          </a>
+        </li>
 
-      <span class="text-secondary">|</span>
+        <li class="nav-item">
+          <a href="{{ url_for('followups') }}"
+             class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
+            Follow Up Dashboard
+          </a>
+        </li>
 
-      <a href="{{ url_for('followups') }}"
-         class="text-decoration-none text-dark">
-        Follow Up Dashboard
-      </a>
+        <li class="nav-item">
+          <a href="{{ url_for('followups_ics') }}"
+             class="nav-link"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
 
-      <span class="text-secondary">|</span>
-
-      <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-dark"
-         target="_blank">
-        Calendar Feed
-      </a>
-
+      </ul>
     </div>
   </div>
 </nav>
@@ -648,46 +665,63 @@ EDIT_TEMPLATE = """
 </head>
 <body>
 
-<nav class="bg-white shadow-sm border-bottom sticky-top">
+<nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
-    <div class="d-flex align-items-center flex-wrap gap-2">
+    
+    <!-- Logo -->
+    <a href="{{ url_for('dashboard') }}" class="navbar-brand d-flex align-items-center text-dark">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 32px;"
+        class="me-2"
+      >
+    </a>
 
-      <a href="{{ url_for('dashboard') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
-        <img
-          src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-          alt="Ulysses CRM"
-          style="height: 32px;"
-          class="me-2"
-        >
-      </a>
+    <!-- Hamburger button -->
+    <button class="navbar-toggler" type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#mainNav"
+            aria-controls="mainNav"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
-      <a href="{{ url_for('dashboard') }}"
-         class="text-decoration-none text-dark">
-        Dashboard
-      </a>
+    <!-- Collapsible nav links -->
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-0 ms-md-2">
 
-      <span class="text-secondary">|</span>
+        <li class="nav-item">
+          <a href="{{ url_for('dashboard') }}"
+             class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
+            Dashboard
+          </a>
+        </li>
 
-      <a href="{{ url_for('contacts') }}"
-         class="text-decoration-none text-dark fw-semibold">
-        Contacts
-      </a>
+        <li class="nav-item">
+          <a href="{{ url_for('contacts') }}"
+             class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
+            Contacts
+          </a>
+        </li>
 
-      <span class="text-secondary">|</span>
+        <li class="nav-item">
+          <a href="{{ url_for('followups') }}"
+             class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
+            Follow Up Dashboard
+          </a>
+        </li>
 
-      <a href="{{ url_for('followups') }}"
-         class="text-decoration-none text-dark">
-        Follow Up Dashboard
-      </a>
+        <li class="nav-item">
+          <a href="{{ url_for('followups_ics') }}"
+             class="nav-link"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
 
-      <span class="text-secondary">|</span>
-
-      <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-dark"
-         target="_blank">
-        Calendar Feed
-      </a>
-
+      </ul>
     </div>
   </div>
 </nav>
@@ -1091,50 +1125,66 @@ FOLLOWUPS_TEMPLATE = """
 </head>
 <body>
 
-<nav class="bg-white shadow-sm border-bottom sticky-top">
+<nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
-    <div class="d-flex align-items-center flex-wrap gap-2">
+    
+    <!-- Logo -->
+    <a href="{{ url_for('dashboard') }}" class="navbar-brand d-flex align-items-center text-dark">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 32px;"
+        class="me-2"
+      >
+    </a>
 
-      <a href="{{ url_for('dashboard') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
-        <img
-          src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-          alt="Ulysses CRM"
-          style="height: 32px;"
-          class="me-2"
-        >
-      </a>
+    <!-- Hamburger button -->
+    <button class="navbar-toggler" type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#mainNav"
+            aria-controls="mainNav"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
-      <a href="{{ url_for('dashboard') }}"
-         class="text-decoration-none text-dark">
-        Dashboard
-      </a>
+    <!-- Collapsible nav links -->
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-0 ms-md-2">
 
-      <span class="text-secondary">|</span>
+        <li class="nav-item">
+          <a href="{{ url_for('dashboard') }}"
+             class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
+            Dashboard
+          </a>
+        </li>
 
-      <a href="{{ url_for('contacts') }}"
-         class="text-decoration-none text-dark">
-        Contacts
-      </a>
+        <li class="nav-item">
+          <a href="{{ url_for('contacts') }}"
+             class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
+            Contacts
+          </a>
+        </li>
 
-      <span class="text-secondary">|</span>
+        <li class="nav-item">
+          <a href="{{ url_for('followups') }}"
+             class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
+            Follow Up Dashboard
+          </a>
+        </li>
 
-      <a href="{{ url_for('followups') }}"
-         class="text-decoration-none text-dark fw-semibold">
-        Follow Up Dashboard
-      </a>
+        <li class="nav-item">
+          <a href="{{ url_for('followups_ics') }}"
+             class="nav-link"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
 
-      <span class="text-secondary">|</span>
-
-      <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-dark"
-         target="_blank">
-        Calendar Feed
-      </a>
-
+      </ul>
     </div>
   </div>
 </nav>
-
 
 <div class="container py-4">
 
@@ -1246,47 +1296,63 @@ DASHBOARD_TEMPLATE = """
 </head>
 <body>
 
-<nav class="bg-white shadow-sm border-bottom sticky-top">
+<nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
-    <div class="d-flex align-items-center flex-wrap gap-2">
+    
+    <!-- Logo -->
+    <a href="{{ url_for('dashboard') }}" class="navbar-brand d-flex align-items-center text-dark">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 32px;"
+        class="me-2"
+      >
+    </a>
 
-      <!-- Logo -->
-      <a href="{{ url_for('dashboard') }}" class="d-flex align-items-center text-decoration-none text-dark me-3">
-        <img
-          src="{{ url_for('static', filename='ulysses-logo.svg') }}"
-          alt="Ulysses CRM"
-          style="height: 32px;"
-          class="me-2"
-        >
-      </a>
+    <!-- Hamburger button -->
+    <button class="navbar-toggler" type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#mainNav"
+            aria-controls="mainNav"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
-      <a href="{{ url_for('dashboard') }}"
-         class="text-decoration-none text-dark fw-semibold">
-        Dashboard
-      </a>
+    <!-- Collapsible nav links -->
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-0 ms-md-2">
 
-      <span class="text-secondary">|</span>
+        <li class="nav-item">
+          <a href="{{ url_for('dashboard') }}"
+             class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
+            Dashboard
+          </a>
+        </li>
 
-      <a href="{{ url_for('contacts') }}"
-         class="text-decoration-none text-dark">
-        Contacts
-      </a>
+        <li class="nav-item">
+          <a href="{{ url_for('contacts') }}"
+             class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
+            Contacts
+          </a>
+        </li>
 
-      <span class="text-secondary">|</span>
+        <li class="nav-item">
+          <a href="{{ url_for('followups') }}"
+             class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
+            Follow Up Dashboard
+          </a>
+        </li>
 
-      <a href="{{ url_for('followups') }}"
-         class="text-decoration-none text-dark">
-        Follow Up Dashboard
-      </a>
+        <li class="nav-item">
+          <a href="{{ url_for('followups_ics') }}"
+             class="nav-link"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
 
-      <span class="text-secondary">|</span>
-
-      <a href="{{ url_for('followups_ics') }}"
-         class="text-decoration-none text-dark"
-         target="_blank">
-        Calendar Feed
-      </a>
-
+      </ul>
     </div>
   </div>
 </nav>
@@ -1471,6 +1537,7 @@ def dashboard():
         upcoming=upcoming,
         today=today_str,
         total_contacts=total_contacts,
+        active_page="dashboard",
     )
 
 @app.route("/contacts")
@@ -1523,6 +1590,7 @@ def contacts():
         pipeline_stages=PIPELINE_STAGES,
         priorities=PRIORITIES,
         sources=SOURCES,
+        active_page="contacts",
     )
 
 def parse_int_or_none(value):
@@ -1808,8 +1876,8 @@ def edit_contact(contact_id):
         next_time_hour=next_time_hour,
         next_time_minute=next_time_minute,
         next_time_ampm=next_time_ampm,
+        active_page="contacts",
     )
-
 
 @app.route("/add_interaction/<int:contact_id>", methods=["POST"])
 def add_interaction(contact_id):
@@ -1967,8 +2035,8 @@ def followups():
         today_list=today_list,
         upcoming=upcoming,
         today=today_str,
+        active_page="followups",
     )
-
 
 @app.route("/followups.ics")
 def followups_ics():
