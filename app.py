@@ -2018,31 +2018,40 @@ def contacts():
     conn = get_db()
     cur = conn.cursor()
 
-    sql = "SELECT * FROM contacts WHERE 1=1"
+    sql = """
+        SELECT
+            c.*,
+            (bp.id IS NOT NULL) AS has_buyer_profile,
+            (sp.id IS NOT NULL) AS has_seller_profile
+        FROM contacts c
+        LEFT JOIN buyer_profiles bp ON bp.contact_id = c.id
+        LEFT JOIN seller_profiles sp ON sp.contact_id = c.id
+        WHERE 1=1
+    """
     params = []
 
     if q:
-        sql += " AND (name ILIKE %s OR email ILIKE %s OR phone ILIKE %s)"
+        sql += " AND (c.name ILIKE %s OR c.email ILIKE %s OR c.phone ILIKE %s)"
         like = f"%{q}%"
         params.extend([like, like, like])
 
     if lead_type:
-        sql += " AND lead_type = %s"
+        sql += " AND c.lead_type = %s"
         params.append(lead_type)
 
     if pipeline_stage:
-        sql += " AND pipeline_stage = %s"
+        sql += " AND c.pipeline_stage = %s"
         params.append(pipeline_stage)
 
     if priority:
-        sql += " AND priority = %s"
+        sql += " AND c.priority = %s"
         params.append(priority)
 
     if target_area:
-        sql += " AND target_area ILIKE %s"
+        sql += " AND c.target_area ILIKE %s"
         params.append(f"%{target_area}%")
 
-    sql += " ORDER BY next_follow_up IS NULL, next_follow_up, name"
+    sql += " ORDER BY c.next_follow_up IS NULL, c.next_follow_up, c.name"
 
     cur.execute(sql, params)
     contacts = cur.fetchall()
