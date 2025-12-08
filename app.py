@@ -3033,6 +3033,7 @@ def buyer_profile(contact_id):
         c=contact,
         profile=bp_row,
         checklist=bp_row,
+        contact_id=contact_id,
         today=date.today().isoformat(),
         active_page="contacts",
     )
@@ -3214,8 +3215,8 @@ def seller_profile(contact_id):
     return render_template(
         "seller_profile.html",
         c=contact,
-        profile=profile,
-        checklist=checklist,
+        profile=sp,
+        checklist=sp,
         today=date.today().isoformat(),
         active_page="contacts",
     )
