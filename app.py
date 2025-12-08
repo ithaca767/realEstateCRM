@@ -11,12 +11,52 @@ from flask import (
     render_template_string,
     jsonify,
     Response,
+    session,
 )
+
+from functools import wraps
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
+
+# --- Security & session config ---
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    # Fail fast so you remember to set this in Render / .env
+    raise RuntimeError("SECRET_KEY environment variable is required")
+
+app.secret_key = SECRET_KEY
+
+# Cookie settings
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
+
+# In production (e.g., Render), force HTTPS-only cookies if FLASK_ENV=production
+if os.environ.get("FLASK_ENV") == "production":
+    app.config["SESSION_COOKIE_SECURE"] = True
+
+# Single-admin credentials
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+if not ADMIN_PASSWORD:
+    raise RuntimeError("ADMIN_PASSWORD environment variable is required")
+
+# Optional token for calendar feed protection
+ICS_TOKEN = os.environ.get("ICS_TOKEN")
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if not session.get("logged_in"):
+            # Remember where the user was trying to go
+            next_url = request.path
+            return redirect(url_for("login", next=next_url))
+        return view_func(*args, **kwargs)
+    return wrapped
 
 @app.context_processor
 def inject_current_year():
@@ -2173,8 +2213,83 @@ DASHBOARD_TEMPLATE = """
 </html>
 """
 
+LOGIN_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <title>Ulysses CRM - Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    >
+    <style>
+      body { background-color: #6eb8f9; }
+      .login-card {
+        max-width: 420px;
+        margin: 80px auto;
+      }
+    </style>
+</head>
+<body>
+<div class="container">
+  <div class="card login-card shadow-sm">
+    <div class="card-header fw-semibold">
+      Ulysses CRM Login
+    </div>
+    <div class="card-body bg-white">
+      {% if error %}
+        <div class="alert alert-danger py-2">{{ error }}</div>
+      {% endif %}
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <input name="username" class="form-control" autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input name="password" type="password" class="form-control">
+        </div>
+        <button class="btn btn-primary w-100" type="submit">Sign In</button>
+      </form>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+"""
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("logged_in"):
+        # Already logged in
+        return redirect(url_for("dashboard"))
+
+    error = None
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+
+        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+            session.clear()
+            session["logged_in"] = True
+            session["username"] = username
+
+            next_url = request.args.get("next") or url_for("dashboard")
+            return redirect(next_url)
+        else:
+            error = "Invalid username or password"
+
+    return render_template_string(LOGIN_TEMPLATE, error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 @app.route("/")
+@login_required
 def dashboard():
     today_str = date.today().isoformat()
 
@@ -2232,6 +2347,7 @@ def dashboard():
     )
 
 @app.route("/contacts")
+@login_required
 def contacts():
     q = request.args.get("q", "").strip()
     lead_type = request.args.get("lead_type", "").strip()
@@ -2331,6 +2447,7 @@ def parse_follow_up_time_from_form(prefix: str = "next_follow_up_"):
 
 
 @app.route("/add", methods=["POST"])
+@login_required
 def add_contact():
     first_name = (request.form.get("first_name") or "").strip()
     last_name = (request.form.get("last_name") or "").strip()
@@ -2423,6 +2540,7 @@ def add_contact():
     return redirect(url_for("edit_contact", contact_id=new_id))
 
 @app.route("/edit/<int:contact_id>", methods=["GET", "POST"])
+@login_required
 def edit_contact(contact_id):
     conn = get_db()
     cur = conn.cursor()
@@ -2599,6 +2717,7 @@ def edit_contact(contact_id):
     )
 
 @app.route("/add_interaction/<int:contact_id>", methods=["POST"])
+@login_required
 def add_interaction(contact_id):
     kind = (request.form.get("kind") or "").strip()
     happened_at = request.form.get("happened_at") or None
@@ -2630,6 +2749,7 @@ def add_interaction(contact_id):
 
 
 @app.route("/delete_interaction/<int:interaction_id>")
+@login_required
 def delete_interaction(interaction_id):
     conn = get_db()
     cur = conn.cursor()
@@ -2654,6 +2774,7 @@ def delete_interaction(interaction_id):
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
 @app.route("/add_related/<int:contact_id>", methods=["POST"])
+@login_required
 def add_related(contact_id):
     related_name = (request.form.get("related_name") or "").strip()
     relationship = (request.form.get("relationship") or "").strip()
@@ -2679,6 +2800,7 @@ def add_related(contact_id):
 
 
 @app.route("/delete_related/<int:related_id>")
+@login_required
 def delete_related(related_id):
     conn = get_db()
     cur = conn.cursor()
@@ -2703,6 +2825,7 @@ def delete_related(related_id):
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
 @app.route("/buyer/<int:contact_id>", methods=["GET", "POST"])
+@login_required
 def buyer_profile(contact_id):
     conn = get_db()
     cur = conn.cursor()
@@ -2915,6 +3038,7 @@ def buyer_profile(contact_id):
     )
 
 @app.route("/seller/<int:contact_id>", methods=["GET", "POST"])
+@login_required
 def seller_profile(contact_id):
     conn = get_db()
     cur = conn.cursor()
@@ -3097,6 +3221,7 @@ def seller_profile(contact_id):
     )
 
 @app.route("/followups")
+@login_required
 def followups():
     """
     Dashboard view of overdue, today's, and upcoming follow-ups.
@@ -3152,6 +3277,14 @@ def followups():
 
 @app.route("/followups.ics")
 def followups_ics():
+    """
+    Calendar feed of upcoming follow-ups.
+    Subscribe to: https://<your-domain>/followups.ics?key=YOUR_ICS_TOKEN
+    """
+    if ICS_TOKEN:
+        key = request.args.get("key", "")
+        if key != ICS_TOKEN:
+            return Response("Unauthorized", status=401, mimetype="text/plain")
     """
     Calendar feed of upcoming follow-ups.
     Subscribe to: https://<your-domain>/followups.ics
@@ -3253,6 +3386,7 @@ def followups_ics():
 
 
 @app.route("/delete/<int:contact_id>")
+@login_required
 def delete_contact(contact_id):
     conn = get_db()
     cur = conn.cursor()
@@ -3376,4 +3510,4 @@ except Exception as e:
 
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True)
+    app.run(debug=False)
