@@ -3018,7 +3018,7 @@ def buyer_profile(contact_id):
         conn.close()
         return redirect(url_for("edit_contact", contact_id=contact_id))
 
-    # GET: load profile
+    # GET – load existing buyer profile (if any)
     cur.execute(
         "SELECT * FROM buyer_profiles WHERE contact_id = %s",
         (contact_id,),
@@ -3026,8 +3026,6 @@ def buyer_profile(contact_id):
     bp_row = cur.fetchone()
     conn.close()
 
-    # We pass the same row as both "profile" and "checklist" so the template
-    # can use either naming convention we ended up with.
     return render_template(
         "buyer_profile.html",
         c=contact,
@@ -3199,18 +3197,13 @@ def seller_profile(contact_id):
         conn.close()
         return redirect(url_for("edit_contact", contact_id=contact_id))
 
-    # GET
+    # GET – load existing seller profile (if any)
     cur.execute(
         "SELECT * FROM seller_profiles WHERE contact_id = %s",
         (contact_id,),
     )
     sp = cur.fetchone()
     conn.close()
-
-    contact_name = (contact.get("first_name") or "") + (
-        " " if contact.get("first_name") and contact.get("last_name") else ""
-    ) + (contact.get("last_name") or "")
-    contact_name = contact_name.strip() or contact["name"]
 
     return render_template(
         "seller_profile.html",
