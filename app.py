@@ -3138,8 +3138,8 @@ def followups():
         else:
             upcoming.append(row)
 
-    return render_template_string(
-        FOLLOWUPS_TEMPLATE,
+    return render_template(
+        "followups.html",
         overdue=overdue,
         today_list=today_list,
         upcoming=upcoming,

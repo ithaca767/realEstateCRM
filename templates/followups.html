@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+    <title>Ulysses CRM - Follow Ups</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    >
+    <style>
+      body {
+        background-color: #6eb8f9;
+      }
+      .card-followups .card-header {
+        font-weight: 600;
+      }
+      @media (max-width: 576px) {
+        .nav-pipe {
+          display: none;
+        }
+      }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
+  <div class="container-fluid py-2" style="font-size: 0.9rem;">
+    
+    <!-- Logo -->
+    <a href="{{ url_for('dashboard') }}" class="navbar-brand d-flex align-items-center text-dark">
+      <img
+        src="{{ url_for('static', filename='ulysses-logo.svg') }}"
+        alt="Ulysses CRM"
+        style="height: 50px;"
+        class="me-2"
+      >
+    </a>
+
+    <!-- Hamburger button -->
+    <button class="navbar-toggler" type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#mainNav"
+            aria-controls="mainNav"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <!-- Collapsible nav links -->
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-0 ms-md-2">
+
+        <li class="nav-item">
+          <a href="{{ url_for('dashboard') }}"
+             class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
+            Dashboard
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a href="{{ url_for('contacts') }}"
+             class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
+            Contacts
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a href="{{ url_for('followups') }}"
+             class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
+            Follow Up Dashboard
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a href="{{ url_for('followups_ics') }}"
+             class="nav-link"
+             target="_blank">
+            Calendar Feed
+          </a>
+        </li>
+
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+
+    <h2 class="mb-1">Follow Up Dashboard</h2>
+    <p class="text-muted">Today: {{ today }}</p>
+
+    {% macro followup_table(rows) %}
+        {% if rows and rows|length > 0 %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Stage</th>
+                            <th>Priority</th>
+                            <th>Area</th>
+                            <th style="width: 140px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for c in rows %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}">
+                                    {% if c["first_name"] or c["last_name"] %}
+                                        {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                                    {% else %}
+                                        {{ c["name"] }}
+                                    {% endif %}
+                                </a>
+                            </td>
+                            <td>{{ c["next_follow_up"] or "" }}</td>
+                            <td>{{ c["next_follow_up_time"] or "" }}</td>
+                            <td>{{ c["pipeline_stage"] or "" }}</td>
+                            <td>{{ c["priority"] or "" }}</td>
+                            <td>{{ c["target_area"] or "" }}</td>
+                            <td>
+                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
+                                   class="btn btn-sm btn-outline-primary">
+                                   Open
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="mb-0 text-muted">Nothing here.</p>
+        {% endif %}
+    {% endmacro %}
+
+    <!-- Overdue -->
+    <div class="card card-followups mb-4">
+        <div class="card-header bg-danger text-white">
+            Overdue Follow Ups
+        </div>
+        <div class="card-body bg-white">
+            {{ followup_table(overdue) }}
+        </div>
+    </div>
+
+    <!-- Today -->
+    <div class="card card-followups mb-4">
+        <div class="card-header bg-warning">
+            Today
+        </div>
+        <div class="card-body bg-white">
+            {{ followup_table(today_list) }}
+        </div>
+    </div>
+
+    <!-- Upcoming -->
+    <div class="card card-followups mb-4">
+        <div class="card-header bg-success text-white">
+            Upcoming
+        </div>
+        <div class="card-body bg-white">
+            {{ followup_table(upcoming) }}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
