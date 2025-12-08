@@ -3018,7 +3018,7 @@ def buyer_profile(contact_id):
         conn.close()
         return redirect(url_for("edit_contact", contact_id=contact_id))
 
-    # GET – load existing buyer profile (if any)
+    # GET: load buyer profile
     cur.execute(
         "SELECT * FROM buyer_profiles WHERE contact_id = %s",
         (contact_id,),
@@ -3026,12 +3026,22 @@ def buyer_profile(contact_id):
     bp_row = cur.fetchone()
     conn.close()
 
+    # Build a nice display name
+    contact_name = (contact.get("first_name") or "") + (
+        " " if contact.get("first_name") and contact.get("last_name") else ""
+    ) + (contact.get("last_name") or "")
+    contact_name = contact_name.strip() or contact["name"]
+
     return render_template(
         "buyer_profile.html",
         c=contact,
-        profile=bp_row,
-        checklist=bp_row,
-        contact_id=contact_id,
+        contact_name=contact_name,
+        contact_email=contact.get("email"),
+        contact_phone=contact.get("phone"),
+        bp=bp_row,               # what the template actually uses
+        profile=bp_row,          # keep for backward compatibility
+        checklist=bp_row,        # same
+        contact_id=contact_id,   # needed for the Back to Contact link
         today=date.today().isoformat(),
         active_page="contacts",
     )
@@ -3197,7 +3207,7 @@ def seller_profile(contact_id):
         conn.close()
         return redirect(url_for("edit_contact", contact_id=contact_id))
 
-    # GET – load existing seller profile (if any)
+    # GET
     cur.execute(
         "SELECT * FROM seller_profiles WHERE contact_id = %s",
         (contact_id,),
@@ -3205,12 +3215,21 @@ def seller_profile(contact_id):
     sp = cur.fetchone()
     conn.close()
 
+    contact_name = (contact.get("first_name") or "") + (
+        " " if contact.get("first_name") and contact.get("last_name") else ""
+    ) + (contact.get("last_name") or "")
+    contact_name = contact_name.strip() or contact["name"]
+
     return render_template(
         "seller_profile.html",
         c=contact,
-        profile=sp,
-        checklist=sp,
-        contact_id=contact_id,
+        contact_name=contact_name,
+        contact_email=contact.get("email"),
+        contact_phone=contact.get("phone"),
+        sp=sp,                  # what the seller template actually uses
+        profile=sp,             # keep for flexibility
+        checklist=sp,           # same
+        contact_id=contact_id,  # needed for Back to Contact link if used
         today=date.today().isoformat(),
         active_page="contacts",
     )
