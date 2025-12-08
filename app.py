@@ -3059,6 +3059,7 @@ def seller_profile(contact_id):
     conn = get_db()
     cur = conn.cursor()
 
+    # Load contact
     cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
     contact = cur.fetchone()
     if not contact:
@@ -3066,15 +3067,24 @@ def seller_profile(contact_id):
         return "Contact not found", 404
 
     if request.method == "POST":
+        # Basic seller info
         property_type = (request.form.get("property_type") or "").strip()
         timeframe = (request.form.get("timeframe") or "").strip()
         motivation = (request.form.get("motivation") or "").strip()
         condition_notes = (request.form.get("condition_notes") or "").strip()
         property_address = (request.form.get("property_address") or "").strip()
+
+        # Estimated price: allow blank and commas
+        estimated_price_raw = (request.form.get("estimated_price") or "").replace(",", "").strip()
+        estimated_price = None
+        if estimated_price_raw:
+            try:
+                estimated_price = int(estimated_price_raw)
+            except ValueError:
+                estimated_price = None
+
         referral_source = (request.form.get("referral_source") or "").strip()
         notes = (request.form.get("notes") or "").strip()
-
-        estimated_price = parse_int_or_none(request.form.get("estimated_price"))
 
         # Professionals - Attorney
         seller_attorney_name = (request.form.get("seller_attorney_name") or "").strip()
@@ -3097,6 +3107,7 @@ def seller_profile(contact_id):
         # Other professionals
         other_professionals = (request.form.get("other_professionals") or "").strip()
 
+        # Does a row already exist?
         cur.execute(
             "SELECT id FROM seller_profiles WHERE contact_id = %s",
             (contact_id,),
@@ -3104,6 +3115,7 @@ def seller_profile(contact_id):
         existing = cur.fetchone()
 
         if existing:
+            # UPDATE existing row
             cur.execute(
                 """
                 UPDATE seller_profiles
@@ -3156,6 +3168,7 @@ def seller_profile(contact_id):
                 ),
             )
         else:
+            # INSERT new row
             cur.execute(
                 """
                 INSERT INTO seller_profiles (
@@ -3182,7 +3195,11 @@ def seller_profile(contact_id):
                     seller_inspector_referred,
                     other_professionals
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s
+                )
                 """,
                 (
                     contact_id,
@@ -3214,7 +3231,7 @@ def seller_profile(contact_id):
         conn.close()
         return redirect(url_for("edit_contact", contact_id=contact_id))
 
-    # GET
+    # GET – load existing seller profile (if any)
     cur.execute(
         "SELECT * FROM seller_profiles WHERE contact_id = %s",
         (contact_id,),
@@ -3233,10 +3250,10 @@ def seller_profile(contact_id):
         contact_name=contact_name,
         contact_email=contact.get("email"),
         contact_phone=contact.get("phone"),
-        sp=sp,                  # what the seller template actually uses
-        profile=sp,             # keep for flexibility
-        checklist=sp,           # same
-        contact_id=contact_id,  # needed for Back to Contact link if used
+        sp=sp,
+        profile=sp,
+        checklist=sp,
+        contact_id=contact_id,
         today=date.today().isoformat(),
         active_page="contacts",
     )
