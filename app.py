@@ -3083,8 +3083,8 @@ def seller_profile(contact_id):
     ) + (contact.get("last_name") or "")
     contact_name = contact_name.strip() or contact["name"]
 
-    return render_template_string(
-        SELLER_TEMPLATE,
+    return render_template(
+        "seller_profile.html",
         contact_id=contact_id,
         contact_name=contact_name,
         contact_email=contact.get("email"),
