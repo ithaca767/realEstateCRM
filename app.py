@@ -17,6 +17,10 @@ from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
+@app.context_processor
+def inject_current_year():
+    return {"current_year": datetime.now().year}
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
 SHORTCUT_API_KEY = os.environ.get("SHORTCUT_API_KEY")  # optional shared secret
 
@@ -2900,15 +2904,14 @@ def buyer_profile(contact_id):
     ) + (contact.get("last_name") or "")
     contact_name = contact_name.strip() or contact["name"]
 
-    return render_template(
-        "buyer_profile.html",
-        contact_id=contact_id,
-        contact_name=contact_name,
-        contact_email=contact.get("email"),
-        contact_phone=contact.get("phone"),
-        bp=bp,
-        active_page="contacts",
-    )
+return render_template(
+    "buyer_profile.html",
+    c=contact,
+    profile=profile,
+    checklist=checklist,
+    today=date.today().isoformat(),
+    active_page="contacts",
+)
 
 @app.route("/seller/<int:contact_id>", methods=["GET", "POST"])
 def seller_profile(contact_id):
@@ -3085,11 +3088,10 @@ def seller_profile(contact_id):
 
     return render_template(
         "seller_profile.html",
-        contact_id=contact_id,
-        contact_name=contact_name,
-        contact_email=contact.get("email"),
-        contact_phone=contact.get("phone"),
-        sp=sp,
+        c=contact,
+        profile=profile,
+        checklist=checklist,
+        today=date.today().isoformat(),
         active_page="contacts",
     )
 
