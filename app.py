@@ -2218,7 +2218,7 @@ def dashboard():
             upcoming.append(row)
 
     return render_template_string(
-        DASHBOARD_TEMPLATE,
+        "dashboard.html",
         overdue=overdue,
         today_list=today_list,
         upcoming=upcoming,
