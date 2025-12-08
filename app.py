@@ -25,7 +25,6 @@ def inject_current_year():
 DATABASE_URL = os.environ.get("DATABASE_URL")
 SHORTCUT_API_KEY = os.environ.get("SHORTCUT_API_KEY")  # optional shared secret
 
-
 def get_db():
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is not set")
@@ -2734,27 +2733,24 @@ def buyer_profile(contact_id):
         wire_fraud_notice_signed = bool(request.form.get("wire_fraud_notice_signed"))
         dual_agency_consent_signed = bool(request.form.get("dual_agency_consent_signed"))
 
-        # Professionals - Attorney
+        # Professionals
         buyer_attorney_name = (request.form.get("buyer_attorney_name") or "").strip()
         buyer_attorney_email = (request.form.get("buyer_attorney_email") or "").strip()
         buyer_attorney_phone = (request.form.get("buyer_attorney_phone") or "").strip()
         buyer_attorney_referred = bool(request.form.get("buyer_attorney_referred"))
 
-        # Professionals - Lender (extend existing lender_name)
         buyer_lender_email = (request.form.get("buyer_lender_email") or "").strip()
         buyer_lender_phone = (request.form.get("buyer_lender_phone") or "").strip()
         buyer_lender_referred = bool(request.form.get("buyer_lender_referred"))
 
-        # Professionals - Home Inspector
         buyer_inspector_name = (request.form.get("buyer_inspector_name") or "").strip()
         buyer_inspector_email = (request.form.get("buyer_inspector_email") or "").strip()
         buyer_inspector_phone = (request.form.get("buyer_inspector_phone") or "").strip()
         buyer_inspector_referred = bool(request.form.get("buyer_inspector_referred"))
 
-        # Any other professionals
         other_professionals = (request.form.get("other_professionals") or "").strip()
 
-        # Check for existing profile
+        # Check if a buyer profile already exists
         cur.execute(
             "SELECT id FROM buyer_profiles WHERE contact_id = %s",
             (contact_id,),
@@ -2762,10 +2758,12 @@ def buyer_profile(contact_id):
         existing = cur.fetchone()
 
         if existing:
+            # Update existing profile
             cur.execute(
                 """
                 UPDATE buyer_profiles
-                SET property_type = %s,
+                SET
+                    property_type = %s,
                     timeframe = %s,
                     min_price = %s,
                     max_price = %s,
@@ -2824,6 +2822,7 @@ def buyer_profile(contact_id):
                 ),
             )
         else:
+            # Insert new profile
             cur.execute(
                 """
                 INSERT INTO buyer_profiles (
@@ -2855,7 +2854,11 @@ def buyer_profile(contact_id):
                     buyer_inspector_referred,
                     other_professionals
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s
+                )
                 """,
                 (
                     contact_id,
@@ -2897,22 +2900,19 @@ def buyer_profile(contact_id):
         "SELECT * FROM buyer_profiles WHERE contact_id = %s",
         (contact_id,),
     )
-    bp = cur.fetchone()
+    bp_row = cur.fetchone()
     conn.close()
 
-    contact_name = (contact.get("first_name") or "") + (
-        " " if contact.get("first_name") and contact.get("last_name") else ""
-    ) + (contact.get("last_name") or "")
-    contact_name = contact_name.strip() or contact["name"]
-
-return render_template(
-    "buyer_profile.html",
-    c=contact,
-    profile=profile,
-    checklist=checklist,
-    today=date.today().isoformat(),
-    active_page="contacts",
-)
+    # We pass the same row as both "profile" and "checklist" so the template
+    # can use either naming convention we ended up with.
+    return render_template(
+        "buyer_profile.html",
+        c=contact,
+        profile=bp_row,
+        checklist=bp_row,
+        today=date.today().isoformat(),
+        active_page="contacts",
+    )
 
 @app.route("/seller/<int:contact_id>", methods=["GET", "POST"])
 def seller_profile(contact_id):
