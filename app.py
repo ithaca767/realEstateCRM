@@ -266,6 +266,22 @@ def init_db():
         except Exception as e:
             print("seller_profiles schema update skipped:", e)
 
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS professionals (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            company TEXT,
+            phone TEXT,
+            email TEXT,
+            category TEXT,          -- Attorney, Lender, Inspector, Contractor, etc
+            grade TEXT NOT NULL,    -- core, preferred, vetting, blacklist
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
     conn.close()
 
 LEAD_TYPES = [
