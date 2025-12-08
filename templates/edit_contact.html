@@ -99,6 +99,32 @@
         <div class="card-header">
             Edit Contact
         </div>
+        <div class="mb-3">
+            {% if has_buyer_profile %}
+                <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
+                   class="btn btn-sm btn-primary me-2">
+                    Open Buyer Sheet
+                </a>
+            {% else %}
+                <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
+                   class="btn btn-sm btn-outline-primary me-2">
+                    Create Buyer Sheet
+                </a>
+            {% endif %}
+        
+            {% if has_seller_profile %}
+                <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
+                   class="btn btn-sm btn-secondary">
+                    Open Seller Sheet
+                </a>
+            {% else %}
+                <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
+                   class="btn btn-sm btn-outline-secondary">
+                    Create Seller Sheet
+                </a>
+            {% endif %}
+        </div>
+        
         <div class="card-body bg-white">
             <form method="post">
                 <div class="row g-3">
