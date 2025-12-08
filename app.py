@@ -2576,8 +2576,8 @@ def edit_contact(contact_id):
 
     conn.close()
 
-    return render_template_string(
-        EDIT_TEMPLATE,
+    return render_template(
+        "edit_contact.html",
         c=contact,
         interactions=interactions,
         related_contacts=related_contacts,
