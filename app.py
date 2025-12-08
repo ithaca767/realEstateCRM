@@ -3217,6 +3217,7 @@ def seller_profile(contact_id):
         c=contact,
         profile=sp,
         checklist=sp,
+        contact_id=contact_id,
         today=date.today().isoformat(),
         active_page="contacts",
     )
