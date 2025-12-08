@@ -59,6 +59,13 @@ def login_required(view_func):
     return wrapped
 
 @app.context_processor
+def inject_calendar_feed_url():
+    calendar_url = url_for("followups_ics")
+    if ICS_TOKEN:
+        calendar_url = calendar_url + f"?key={ICS_TOKEN}"
+    return {"calendar_feed_url": calendar_url}
+
+@app.context_processor
 def inject_current_year():
     return {"current_year": datetime.now().year}
 
@@ -3280,12 +3287,18 @@ def followups():
         else:
             upcoming.append(row)
 
+    # Build calendar feed URL, include key if ICS_TOKEN is set
+    calendar_url = url_for("followups_ics")
+    if ICS_TOKEN:
+        calendar_url = calendar_url + f"?key={ICS_TOKEN}"
+
     return render_template(
         "followups.html",
         overdue=overdue,
         today_list=today_list,
         upcoming=upcoming,
         today=today_str,
+        calendar_url=calendar_url,
         active_page="followups",
     )
 
