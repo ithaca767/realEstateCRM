@@ -1,6 +1,8 @@
 import os
 import re
 from datetime import date, datetime, timedelta
+from flask import jsonify
+from flask_login import login_required
 
 from flask import (
     Flask,
@@ -3492,9 +3494,6 @@ def followups():
         calendar_url=calendar_url,
         active_page="followups",
     )
-
-from flask import jsonify
-from flask_login import login_required
 
 @app.route("/api/reminders/due")
 @login_required
