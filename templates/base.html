@@ -142,5 +142,69 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 {% block extra_scripts %}{% endblock %}
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Do nothing if the browser doesn't support notifications
+    if (!("Notification" in window)) {
+      console.log("Browser does not support notifications.");
+      return;
+    }
+
+    // Ask permission on first visit
+    if (Notification.permission === "default") {
+      Notification.requestPermission().then(function (permission) {
+        if (permission !== "granted") {
+          console.log("Notifications not granted.");
+        }
+      });
+    }
+
+    function checkDueReminders() {
+      if (Notification.permission !== "granted") {
+        return;
+      }
+
+      fetch("{{ url_for('api_reminders_due') }}", {
+        credentials: "include"
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (!Array.isArray(data)) return;
+
+          data.forEach((reminder) => {
+            let title = "Ulysses CRM Reminder";
+
+            let body = "";
+            if (reminder.contact_name) {
+              body += reminder.contact_name + ": ";
+            }
+            body += reminder.title || "Reminder due.";
+
+            // Show the system notification
+            let notification = new Notification(title, {
+              body: body,
+              icon: "{{ url_for('static', filename='ulysses-logo.svg') }}"
+            });
+
+            // Clicking the notification should focus the CRM tab
+            notification.onclick = function () {
+              window.focus();
+            };
+          });
+        })
+        .catch((err) => {
+          console.error("Error checking reminders:", err);
+        });
+    }
+
+    // Check immediately on page load
+    checkDueReminders();
+
+    // Then check every 60 seconds
+    setInterval(checkDueReminders, 60000);
+  });
+</script>
+
 </body>
 </html>
