@@ -3811,6 +3811,7 @@ def normalize_phone_digits(phone: str) -> str:
 
 
 @app.route("/api/add_interaction", methods=["POST"])
+@login_required
 def api_add_interaction():
     """
     Lightweight API endpoint so macOS/iOS Shortcuts can log interactions.
