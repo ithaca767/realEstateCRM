@@ -10,14 +10,55 @@
       rel="stylesheet"
     >
 
-    <style>
-      body {
-        background-color: #6eb8f9;
-      }
-      .card-followups .card-header {
-        font-weight: 600;
-      }
-    </style>
+
+        <style>
+          body {
+            background-color: #6eb8f9;
+          }
+        
+          .card-header {
+              font-size: 0.95rem;
+              font-weight: 600;
+          }
+        
+          .page-title {
+              font-size: 1.1rem;
+              font-weight: 600;
+              margin-bottom: 0.5rem;
+          }
+        
+          .section-title {
+              font-size: 0.9rem;
+              font-weight: 600;
+              text-transform: uppercase;
+              letter-spacing: 0.04em;
+              margin-bottom: 0.5rem;
+          }
+        
+          .card-followups .card-header {
+              font-weight: 600;
+          }
+        
+          /* Tighten table header appearance */
+          table.table thead th {
+              font-size: 0.8rem;
+              font-weight: 600;
+              text-transform: uppercase;
+              letter-spacing: 0.04em;
+          }
+        
+          /* Tighten table body appearance */
+          table.table tbody td {
+              font-size: 0.85rem;
+              vertical-align: middle;
+          }
+        
+          /* Slightly tighter card body spacing */
+          .card .card-body {
+              padding-top: 0.9rem;
+              padding-bottom: 0.9rem;
+          }
+        </style>
 
     {% block extra_head %}{% endblock %}
 </head>
