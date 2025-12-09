@@ -3495,55 +3495,6 @@ def followups():
         active_page="followups",
     )
 
-@app.route("/api/reminders/due")
-@login_required
-def api_reminders_due():
-    conn = get_db()
-    cur = conn.cursor()
-
-    cur.execute(
-        """
-        SELECT i.id,
-               i.notes,           -- change this if your text column uses a different name
-               i.due_at,
-               c.name
-        FROM interactions i
-        JOIN contacts c ON i.contact_id = c.id
-        WHERE i.due_at IS NOT NULL
-          AND i.due_at <= NOW()
-          AND i.due_at >= NOW() - INTERVAL '10 minutes'
-          AND (i.notified IS FALSE OR i.notified IS NULL)
-        """
-    )
-    rows = cur.fetchall()
-
-    # Mark them as notified so they only alert once
-    interaction_ids = [row[0] for row in rows]
-    if interaction_ids:
-        cur.execute(
-            "UPDATE interactions SET notified = TRUE WHERE id = ANY(%s)",
-            (interaction_ids,)
-        )
-        conn.commit()
-
-    reminders = []
-    for row in rows:
-        reminder_id = row[0]
-        text = row[1]
-        due_at = row[2]
-        contact_name = row[3]
-        reminders.append(
-            {
-                "id": reminder_id,
-                "title": text,
-                "due_at": due_at.isoformat() if due_at else None,
-                "contact_name": contact_name,
-            }
-        )
-
-    conn.close()
-    return jsonify(reminders)
-
 @app.route("/interaction/<int:interaction_id>/complete", methods=["POST"])
 @login_required
 def complete_interaction(interaction_id):
