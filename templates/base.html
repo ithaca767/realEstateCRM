@@ -13,7 +13,16 @@
 
         <style>
           body {
-            background-color: #6eb8f9;
+              background:
+                linear-gradient(
+                  rgba(255, 255, 255, 0.90),
+                  rgba(255, 255, 255, 0.90)
+                ),
+                url("{{ url_for('static', filename='backgrounds/house-bg.jpg') }}");
+            
+              background-size: cover;
+              background-position: center;
+              background-attachment: fixed;
           }
         
           .card-header {
