@@ -3577,11 +3577,6 @@ def api_reminders_due():
     conn = get_db()
     cur = conn.cursor()
 
-    # Find interactions that:
-    # - have a due_at time
-    # - are due now or within the last 10 minutes
-    # - are not completed
-    # - have not already sent a notification
     cur.execute(
         """
         SELECT i.id,
@@ -3600,22 +3595,22 @@ def api_reminders_due():
     )
     rows = cur.fetchall()
 
-    # Mark them as notified so they only fire once
-    interaction_ids = [row[0] for row in rows]
+    # rows is a list of dicts, so use keys not indexes
+    interaction_ids = [row["id"] for row in rows]
     if interaction_ids:
         cur.execute(
             "UPDATE interactions SET notified = TRUE WHERE id = ANY(%s)",
-            (interaction_ids,)
+            (interaction_ids,),
         )
         conn.commit()
 
     reminders = []
     for row in rows:
-        interaction_id = row[0]
-        notes = row[1] or ""
-        due_at = row[2]
-        first_name = row[3] or ""
-        last_name = row[4] or ""
+        interaction_id = row["id"]
+        notes = row["notes"] or ""
+        due_at = row["due_at"]
+        first_name = row["first_name"] or ""
+        last_name = row["last_name"] or ""
         contact_name = (first_name + " " + last_name).strip()
 
         reminders.append(
