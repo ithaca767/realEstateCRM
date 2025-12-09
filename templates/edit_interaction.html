@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Interaction{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <h3>Edit interaction</h3>
+
+  <form method="post" class="mt-3">
+    {# Add CSRF token here if you use Flask-WTF #}
+    {# {{ form.csrf_token }} #}
+
+    <div class="mb-3">
+      <label class="form-label">Date</label>
+      <input
+        type="date"
+        name="happened_at"
+        class="form-control"
+        value="{% if interaction.happened_at %}{{ interaction.happened_at.strftime('%Y-%m-%d') }}{% endif %}"
+      >
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Kind</label>
+      <input
+        type="text"
+        name="kind"
+        class="form-control"
+        value="{{ interaction.kind or '' }}"
+      >
+      <div class="form-text">
+        Examples: Phone call, Text, Email, Meeting
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Time of day</label>
+      <input
+        type="text"
+        name="time_of_day"
+        class="form-control"
+        value="{{ interaction.time_of_day or '' }}"
+      >
+      <div class="form-text">
+        Examples: Morning, Afternoon, or 2:30 pm
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea
+        name="notes"
+        class="form-control"
+        rows="4"
+      >{{ interaction.notes or '' }}</textarea>
+    </div>
+
+    <div class="form-check mb-3">
+      <input
+        class="form-check-input"
+        type="checkbox"
+        name="is_completed"
+        id="is_completed"
+        {% if interaction.is_completed %}checked{% endif %}
+      >
+      <label class="form-check-label" for="is_completed">
+        Mark as completed
+      </label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">
+      Save changes
+    </button>
+
+    <a
+      href="{{ url_for('edit_contact', contact_id=interaction.contact_id) }}"
+      class="btn btn-outline-secondary ms-2"
+    >
+      Cancel
+    </a>
+  </form>
+</div>
+{% endblock %}

@@ -2732,15 +2732,30 @@ def edit_contact(contact_id):
             next_time_minute = None
             next_time_ampm = None
 
+    # NEW: split interactions into open and completed
     cur.execute(
         """
-        SELECT * FROM interactions
-        WHERE contact_id = %s
+        SELECT *
+        FROM interactions
+        WHERE contact_id = %s AND is_completed = FALSE
         ORDER BY happened_at DESC NULLS LAST, id DESC
         """,
         (contact_id,),
     )
-    interactions = cur.fetchall()
+    open_interactions = cur.fetchall()
+
+    cur.execute(
+        """
+        SELECT *
+        FROM interactions
+        WHERE contact_id = %s AND is_completed = TRUE
+        ORDER BY completed_at DESC NULLS LAST,
+                 happened_at DESC NULLS LAST,
+                 id DESC
+        """,
+        (contact_id,),
+    )
+    completed_interactions = cur.fetchall()
 
     # Associated contacts for this contact
     cur.execute(
@@ -2758,7 +2773,8 @@ def edit_contact(contact_id):
     return render_template(
         "edit_contact.html",
         c=contact,
-        interactions=interactions,
+        open_interactions=open_interactions,
+        completed_interactions=completed_interactions,
         related_contacts=related_contacts,
         lead_types=LEAD_TYPES,
         pipeline_stages=PIPELINE_STAGES,
@@ -3476,6 +3492,82 @@ def followups():
         calendar_url=calendar_url,
         active_page="followups",
     )
+
+@app.route("/interaction/<int:interaction_id>/complete", methods=["POST"])
+@login_required
+def complete_interaction(interaction_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Get the contact_id so we know where to send you back
+    cur.execute(
+        "SELECT contact_id FROM interactions WHERE id = %s",
+        (interaction_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return "Interaction not found", 404
+
+    contact_id = row["contact_id"]
+
+    # Mark as completed
+    cur.execute(
+        """
+        UPDATE interactions
+        SET is_completed = TRUE,
+            completed_at = NOW()
+        WHERE id = %s
+        """,
+        (interaction_id,),
+    )
+
+    conn.commit()
+    conn.close()
+
+    # Back to the edit page for that contact
+    return redirect(url_for("edit_contact", contact_id=contact_id))
+
+@app.route("/interaction/<int:interaction_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_interaction(interaction_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM interactions WHERE id = %s", (interaction_id,))
+    interaction = cur.fetchone()
+    if not interaction:
+        conn.close()
+        return "Interaction not found", 404
+
+    contact_id = interaction["contact_id"]
+
+    if request.method == "POST":
+        happened_at = request.form.get("happened_at") or None
+        kind = (request.form.get("kind") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+        time_of_day = (request.form.get("time_of_day") or "").strip()
+        is_completed = bool(request.form.get("is_completed"))
+
+        cur.execute(
+            """
+            UPDATE interactions
+            SET happened_at = %s,
+                kind = %s,
+                notes = %s,
+                time_of_day = %s,
+                is_completed = %s
+            WHERE id = %s
+            """,
+            (happened_at, kind, notes, time_of_day, is_completed, interaction_id),
+        )
+
+        conn.commit()
+        conn.close()
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    conn.close()
+    return render_template("edit_interaction.html", interaction=interaction)
 
 @app.route("/followups.ics")
 def followups_ics():

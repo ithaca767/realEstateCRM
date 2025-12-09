@@ -1,0 +1,30 @@
+/* Global CRM styles */
+
+body {
+    background-color: #6eb8f9;
+}
+
+/* Card tweaks */
+.card-header {
+    font-weight: 600;
+}
+
+/* Form spacing */
+.form-section {
+    margin-bottom: 1.5rem;
+}
+
+/* Buttons */
+.btn-primary {
+    font-weight: 500;
+}
+
+/* Placeholder text styling */
+.placeholder-box {
+    padding: 2rem;
+    background: #ffffff;
+    border: 1px dashed #ccc;
+    border-radius: 6px;
+    text-align: center;
+    color: #777;
+}
