@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Professional – Ulysses CRM{% endblock %}
+
+{% block content %}
+
+<div class="mb-3">
+    <h2 class="mb-0">Edit Professional</h2>
+</div>
+
+<div class="card">
+    <div class="card-body bg-white">
+        <form method="post">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Name *</label>
+                    <input name="name" class="form-control"
+                           value="{{ professional.name }}" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Company</label>
+                    <input name="company" class="form-control"
+                           value="{{ professional.company }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Category</label>
+                    <select name="category" class="form-select">
+                        {% set categories = ["Attorney", "Lender", "Inspector", "Contractor", "Title", "Accountant", "Other"] %}
+                        <option value="">Select...</option>
+                        {% for c in categories %}
+                            <option value="{{ c }}"
+                              {% if professional.category == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Phone</label>
+                    <input name="phone" class="form-control"
+                           value="{{ professional.phone }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="email" class="form-control"
+                           value="{{ professional.email }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Grade *</label>
+                    <select name="grade" class="form-select" required>
+                        {% set grades = ["core", "preferred", "vetting", "blacklist"] %}
+                        {% for g in grades %}
+                            <option value="{{ g }}"
+                              {% if professional.grade == g %}selected{% endif %}>
+                                {{ g|capitalize }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" rows="3" class="form-control">{{ professional.notes }}</textarea>
+                </div>
+            </div>
+
+            <a href="{{ url_for('professionals') }}" class="btn btn-secondary mt-3">
+                Cancel
+            </a>
+            <button class="btn btn-primary mt-3" type="submit">Save Changes</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

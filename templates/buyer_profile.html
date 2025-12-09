@@ -176,23 +176,45 @@
                         </div>
                     </div>
 
+                    <!-- Professionals -->
                     <div class="col-12 mt-4">
                         <h6 class="fw-bold mb-2">Professionals</h6>
                     </div>
 
+                    <!-- Buyer Attorney dropdown and fields -->
+                    <div class="col-md-6">
+                        <label class="form-label">Select Buyer Attorney (optional)</label>
+                        <select id="buyer_attorney_select" class="form-select">
+                            <option value="">Choose from my list</option>
+                            {% for p in pros_attorneys %}
+                                <option
+                                    value="{{ p.id }}"
+                                    data-name="{{ p.name }}"
+                                    data-phone="{{ p.phone }}"
+                                    data-email="{{ p.email }}"
+                                >
+                                    {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">
+                            Core, preferred and vetting attorneys. Blacklisted are hidden.
+                        </small>
+                    </div>
+
                     <div class="col-md-4">
                         <label class="form-label">Attorney Name</label>
-                        <input name="buyer_attorney_name" class="form-control"
+                        <input name="buyer_attorney_name" id="buyer_attorney_name" class="form-control"
                                value="{{ bp['buyer_attorney_name'] if bp else '' }}">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Attorney Email</label>
-                        <input name="buyer_attorney_email" class="form-control"
+                        <input name="buyer_attorney_email" id="buyer_attorney_email" class="form-control"
                                value="{{ bp['buyer_attorney_email'] if bp else '' }}">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Attorney Phone</label>
-                        <input name="buyer_attorney_phone" class="form-control"
+                        <input name="buyer_attorney_phone" id="buyer_attorney_phone" class="form-control"
                                value="{{ bp['buyer_attorney_phone'] if bp else '' }}">
                     </div>
                     <div class="col-12">
@@ -208,19 +230,83 @@
                         </div>
                     </div>
 
+                    <!-- Buyer Lender dropdown and fields -->
+                    <div class="col-md-6">
+                        <label class="form-label">Select Lender (optional)</label>
+                        <select id="buyer_lender_select" class="form-select">
+                            <option value="">Choose from my list</option>
+                            {% for p in pros_lenders %}
+                                <option
+                                    value="{{ p.id }}"
+                                    data-name="{{ p.name }}"
+                                    data-phone="{{ p.phone }}"
+                                    data-email="{{ p.email }}"
+                                >
+                                    {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Lender Name</label>
+                        <input name="lender_name" id="buyer_lender_name" class="form-control"
+                               value="{{ bp['lender_name'] if bp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Lender Email</label>
+                        <input name="buyer_lender_email" id="buyer_lender_email" class="form-control"
+                               value="{{ bp['buyer_lender_email'] if bp else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Lender Phone</label>
+                        <input name="buyer_lender_phone" id="buyer_lender_phone" class="form-control"
+                               value="{{ bp['buyer_lender_phone'] if bp else '' }}">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="buyer_lender_referred"
+                                   id="buyer_lender_referred"
+                                   {% if bp and bp['buyer_lender_referred'] %}checked{% endif %}>
+                            <label class="form-check-label" for="buyer_lender_referred">
+                                Lender referred by me
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Buyer Inspector dropdown and fields -->
+                    <div class="col-md-6">
+                        <label class="form-label">Select Home Inspector (optional)</label>
+                        <select id="buyer_inspector_select" class="form-select">
+                            <option value="">Choose from my list</option>
+                            {% for p in pros_inspectors %}
+                                <option
+                                    value="{{ p.id }}"
+                                    data-name="{{ p.name }}"
+                                    data-phone="{{ p.phone }}"
+                                    data-email="{{ p.email }}"
+                                >
+                                    {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
                     <div class="col-md-4">
                         <label class="form-label">Home Inspector Name</label>
-                        <input name="buyer_inspector_name" class="form-control"
+                        <input name="buyer_inspector_name" id="buyer_inspector_name" class="form-control"
                                value="{{ bp['buyer_inspector_name'] if bp else '' }}">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Home Inspector Email</label>
-                        <input name="buyer_inspector_email" class="form-control"
+                        <input name="buyer_inspector_email" id="buyer_inspector_email" class="form-control"
                                value="{{ bp['buyer_inspector_email'] if bp else '' }}">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Home Inspector Phone</label>
-                        <input name="buyer_inspector_phone" class="form-control"
+                        <input name="buyer_inspector_phone" id="buyer_inspector_phone" class="form-control"
                                value="{{ bp['buyer_inspector_phone'] if bp else '' }}">
                     </div>
                     <div class="col-12">
@@ -252,5 +338,28 @@
             </form>
         </div>
     </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    function wireSelect(selectId, nameId, phoneId, emailId) {
+        var select = document.getElementById(selectId);
+        if (!select) return;
+        select.addEventListener("change", function () {
+            var opt = select.options[select.selectedIndex];
+            if (!opt || !opt.value) return;
+            var nameInput = document.getElementById(nameId);
+            var phoneInput = document.getElementById(phoneId);
+            var emailInput = document.getElementById(emailId);
+            if (nameInput) nameInput.value = opt.getAttribute("data-name") || "";
+            if (phoneInput) phoneInput.value = opt.getAttribute("data-phone") || "";
+            if (emailInput) emailInput.value = opt.getAttribute("data-email") || "";
+        });
+    }
+
+    wireSelect("buyer_attorney_select", "buyer_attorney_name", "buyer_attorney_phone", "buyer_attorney_email");
+    wireSelect("buyer_lender_select", "buyer_lender_name", "buyer_lender_phone", "buyer_lender_email");
+    wireSelect("buyer_inspector_select", "buyer_inspector_name", "buyer_inspector_phone", "buyer_inspector_email");
+});
+</script>
 
 {% endblock %}

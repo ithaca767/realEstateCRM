@@ -12,6 +12,7 @@ from flask import (
     jsonify,
     Response,
     session,
+    flash
 )
 
 from functools import wraps
@@ -78,6 +79,39 @@ def get_db():
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
 
+def get_professionals_for_dropdown(category=None):
+    """
+    Return a list of professionals for dropdowns.
+    Excludes blacklist. Orders by grade priority and then by name.
+    If category is given (for example 'Attorney') filters to that category.
+    """
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    base_sql = """
+        SELECT id, name, company, phone, email, category, grade
+        FROM professionals
+        WHERE grade != %s
+    """
+    params = ['blacklist']
+
+    if category:
+        base_sql += " AND category = %s"
+        params.append(category)
+
+    base_sql += """
+        ORDER BY
+            CASE grade
+                WHEN 'core' THEN 1
+                WHEN 'preferred' THEN 2
+                WHEN 'vetting' THEN 3
+                ELSE 4
+            END,
+            name
+    """
+
+    cur.execute(base_sql, params)
+    return cur.fetchall()
 
 def init_db():
     conn = get_db()
@@ -3054,6 +3088,9 @@ def buyer_profile(contact_id):
         " " if contact.get("first_name") and contact.get("last_name") else ""
     ) + (contact.get("last_name") or "")
     contact_name = contact_name.strip() or contact["name"]
+    pros_attorneys = get_professionals_for_dropdown(category="Attorney")
+    pros_lenders = get_professionals_for_dropdown(category="Lender")
+    pros_inspectors = get_professionals_for_dropdown(category="Inspector")
 
     return render_template(
         "buyer_profile.html",
@@ -3067,7 +3104,106 @@ def buyer_profile(contact_id):
         contact_id=contact_id,   # needed for the Back to Contact link
         today=date.today().isoformat(),
         active_page="contacts",
+        pros_attorneys=pros_attorneys,
+        pros_lenders=pros_lenders,
+        pros_inspectors=pros_inspectors,
+
     )
+
+@app.route("/professionals", methods=["GET", "POST"])
+@login_required
+def professionals():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    if request.method == "POST":
+        name = request.form.get("name")
+        company = request.form.get("company")
+        phone = request.form.get("phone")
+        email = request.form.get("email")
+        category = request.form.get("category")
+        grade = request.form.get("grade")
+        notes = request.form.get("notes")
+
+        if not name or not grade:
+            flash("Name and grade are required.", "danger")
+        else:
+            cur.execute(
+                """
+                INSERT INTO professionals
+                    (name, company, phone, email, category, grade, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (name, company, phone, email, category, grade, notes),
+            )
+            conn.commit()
+            flash("Professional saved.", "success")
+
+        return redirect(url_for("professionals"))
+
+    professionals_list = get_professionals_for_dropdown()
+    return render_template(
+        "professionals.html",
+        professionals=professionals_list,
+        active_page="professionals"
+    )
+    
+@app.route("/professionals/<int:prof_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_professional(prof_id):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    if request.method == "POST":
+        name = request.form.get("name")
+        company = request.form.get("company")
+        phone = request.form.get("phone")
+        email = request.form.get("email")
+        category = request.form.get("category")
+        grade = request.form.get("grade")
+        notes = request.form.get("notes")
+
+        cur.execute(
+            """
+            UPDATE professionals
+            SET name = %s,
+                company = %s,
+                phone = %s,
+                email = %s,
+                category = %s,
+                grade = %s,
+                notes = %s
+            WHERE id = %s
+            """,
+            (name, company, phone, email, category, grade, notes, prof_id),
+        )
+        conn.commit()
+        flash("Professional updated.", "success")
+        return redirect(url_for("professionals"))
+
+    cur.execute("SELECT * FROM professionals WHERE id = %s", (prof_id,))
+    professional = cur.fetchone()
+    if not professional:
+        flash("Professional not found.", "danger")
+        return redirect(url_for("professionals"))
+
+    return render_template(
+        "edit_professional.html",
+        professional=professional,
+        active_page="professionals"
+    )
+
+@app.route("/professionals/<int:prof_id>/delete", methods=["POST"])
+@login_required
+def delete_professional(prof_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM professionals WHERE id = %s", (prof_id,))
+    conn.commit()
+    flash("Professional deleted.", "info")
+    return redirect(url_for("professionals"))
+
+
 
 @app.route("/seller/<int:contact_id>", methods=["GET", "POST"])
 @login_required
@@ -3259,6 +3395,9 @@ def seller_profile(contact_id):
         " " if contact.get("first_name") and contact.get("last_name") else ""
     ) + (contact.get("last_name") or "")
     contact_name = contact_name.strip() or contact["name"]
+    pros_attorneys = get_professionals_for_dropdown(category="Attorney")
+    pros_lenders = get_professionals_for_dropdown(category="Lender")
+    pros_inspectors = get_professionals_for_dropdown(category="Inspector")
 
     return render_template(
         "seller_profile.html",
@@ -3272,6 +3411,9 @@ def seller_profile(contact_id):
         contact_id=contact_id,
         today=date.today().isoformat(),
         active_page="contacts",
+        pros_attorneys=pros_attorneys,
+        pros_lenders=pros_lenders,
+        pros_inspectors=pros_inspectors,
     )
 
 @app.route("/followups")
