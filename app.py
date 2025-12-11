@@ -2954,7 +2954,19 @@ def buyer_profile(contact_id):
         form_action = (request.form.get("form_action") or "").strip()
 
         # Branch 1: adding a subject property with Offer? status
-        if form_action == "add_property" and buyer_profile:
+        if form_action == "add_property":
+            # Ensure a buyer_profile exists for this contact
+            if not buyer_profile:
+                cur.execute(
+                    """
+                    INSERT INTO buyer_profiles (contact_id)
+                    VALUES (%s)
+                    RETURNING *
+                    """,
+                    (contact_id,),
+                )
+                buyer_profile = cur.fetchone()
+
             address_line = (request.form.get("address_line") or "").strip()
             city = (request.form.get("city") or "").strip()
             state = (request.form.get("state") or "").strip()
@@ -2983,8 +2995,8 @@ def buyer_profile(contact_id):
                         offer_status,
                     ),
                 )
-                conn.commit()
 
+            conn.commit()
             return redirect(url_for("buyer_profile", contact_id=contact_id))
 
         # Branch 2: saving the main buyer profile
@@ -3116,6 +3128,74 @@ def buyer_profile(contact_id):
         pros_attorneys=pros_attorneys,
         pros_lenders=pros_lenders,
         pros_inspectors=pros_inspectors,
+    )
+
+@app.route("/buyer/property/<int:property_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_buyer_property(property_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Load the property along with its contact info
+    cur.execute(
+        """
+        SELECT
+            bp.id,
+            bp.buyer_profile_id,
+            bp.address_line,
+            bp.city,
+            bp.state,
+            bp.postal_code,
+            bp.offer_status,
+            c.id AS contact_id,
+            c.first_name,
+            c.last_name
+        FROM buyer_properties bp
+        JOIN buyer_profiles b ON bp.buyer_profile_id = b.id
+        JOIN contacts c ON b.contact_id = c.id
+        WHERE bp.id = %s
+        """,
+        (property_id,),
+    )
+    prop = cur.fetchone()
+
+    if not prop:
+        conn.close()
+        return "Subject property not found", 404
+
+    contact_name = f"{prop['first_name']} {prop['last_name']}".strip()
+    contact_id = prop["contact_id"]
+
+    if request.method == "POST":
+        address_line = (request.form.get("address_line") or "").strip()
+        city = (request.form.get("city") or "").strip()
+        state = (request.form.get("state") or "").strip()
+        postal_code = (request.form.get("postal_code") or "").strip()
+        offer_status = (request.form.get("offer_status") or "").strip()
+
+        cur.execute(
+            """
+            UPDATE buyer_properties
+            SET address_line = %s,
+                city = %s,
+                state = %s,
+                postal_code = %s,
+                offer_status = %s
+            WHERE id = %s
+            """,
+            (address_line, city, state, postal_code, offer_status, property_id),
+        )
+
+        conn.commit()
+        conn.close()
+        return redirect(url_for("buyer_profile", contact_id=contact_id))
+
+    conn.close()
+    return render_template(
+        "edit_buyer_property.html",
+        prop=prop,
+        contact_name=contact_name,
+        contact_id=contact_id,
     )
 
 @app.route("/professionals", methods=["GET", "POST"])

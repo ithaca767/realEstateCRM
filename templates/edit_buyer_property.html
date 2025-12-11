@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Subject Property – Ulysses CRM{% endblock %}
+
+{% block content %}
+
+<div class="mb-3">
+  <h5 class="page-title mb-0">Edit Subject Property</h5>
+  <div class="text-muted">
+    {{ contact_name }}
+  </div>
+</div>
+
+<div class="card card-edit">
+  <div class="card-header">
+    Subject Property Details
+  </div>
+  <div class="card-body bg-white">
+    <form method="post">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Street Address</label>
+          <input
+            name="address_line"
+            class="form-control"
+            value="{{ prop.address_line }}"
+            required
+          >
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">City</label>
+          <input
+            name="city"
+            class="form-control"
+            value="{{ prop.city or '' }}"
+          >
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">State</label>
+          <input
+            name="state"
+            class="form-control"
+            value="{{ prop.state or '' }}"
+          >
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Zip</label>
+          <input
+            name="postal_code"
+            class="form-control"
+            value="{{ prop.postal_code or '' }}"
+          >
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Offer?</label>
+          <select name="offer_status" class="form-select">
+            <option value="considering"
+              {% if prop.offer_status == 'considering' %}selected{% endif %}>
+              Considering
+            </option>
+            <option value="accepted"
+              {% if prop.offer_status == 'accepted' %}selected{% endif %}>
+              Accepted
+            </option>
+            <option value="lost"
+              {% if prop.offer_status == 'lost' %}selected{% endif %}>
+              Lost
+            </option>
+            <option value="attorney review"
+              {% if prop.offer_status == 'attorney review' %}selected{% endif %}>
+              Attorney Review
+            </option>
+            <option value="under contract"
+              {% if prop.offer_status == 'under contract' %}selected{% endif %}>
+              Under Contract
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn-primary mt-3" type="submit">
+        Save Changes
+      </button>
+      <a
+        href="{{ url_for('buyer_profile', contact_id=contact_id) }}"
+        class="btn btn-secondary mt-3"
+      >
+        Cancel
+      </a>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

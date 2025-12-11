@@ -19,7 +19,6 @@
         </div>
         <div class="card-body bg-white">
             <form method="post">
-              <input type="hidden" name="form_action" value="save_profile">
                 <div class="row g-3">
                     <div class="col-12">
                         <label class="form-label">Contact</label>
@@ -99,6 +98,7 @@
                       <th>State</th>
                       <th>Zip</th>
                       <th>Offer?</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -109,6 +109,14 @@
                       <td>{{ p.state }}</td>
                       <td>{{ p.postal_code }}</td>
                       <td class="text-capitalize">{{ p.offer_status }}</td>
+                      <td>
+                        <a
+                          href="{{ url_for('edit_buyer_property', property_id=p.id) }}"
+                          class="btn btn-sm btn-outline-secondary"
+                        >
+                          Edit
+                        </a>
+                      </td>
                     </tr>
                   {% endfor %}
                   </tbody>
@@ -120,29 +128,27 @@
         
             <hr>
         
-            <form method="post" class="row g-2">
-              <input type="hidden" name="form_action" value="add_property">
-        
+            <div class="row g-2">
               <div class="col-md-4">
                 <label class="form-label mb-1">Address</label>
                 <input type="text" name="address_line" class="form-control form-control-sm" required>
               </div>
-        
+            
               <div class="col-md-2">
                 <label class="form-label mb-1">City</label>
                 <input type="text" name="city" class="form-control form-control-sm">
               </div>
-        
+            
               <div class="col-md-2">
                 <label class="form-label mb-1">State</label>
                 <input type="text" name="state" class="form-control form-control-sm">
               </div>
-        
+            
               <div class="col-md-2">
                 <label class="form-label mb-1">Zip</label>
                 <input type="text" name="postal_code" class="form-control form-control-sm">
               </div>
-        
+            
               <div class="col-md-2">
                 <label class="form-label mb-1">Offer?</label>
                 <select name="offer_status" class="form-select form-select-sm">
@@ -153,11 +159,17 @@
                   <option value="under contract">Under Contract</option>
                 </select>
               </div>
-        
+            
               <div class="col-12 text-end mt-2">
-                <button type="submit" class="btn btn-primary btn-sm">Add Property</button>
+                <button type="submit"
+                        class="btn btn-primary btn-sm"
+                        name="form_action"
+                        value="add_property">
+                  Add Property
+                </button>
               </div>
-            </form>
+            </div>
+
         
           </div>
         </div>
@@ -386,7 +398,12 @@
                     </div>
 
                 </div>
-                <button class="btn btn-primary mt-3" type="submit">Save Buyer Profile</button>
+                <button class="btn btn-primary mt-3"
+                        type="submit"
+                        name="form_action"
+                        value="save_profile">
+                    Save Buyer Profile
+                </button>
                 <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary mt-3">
                     Back to Contact
                 </a>
