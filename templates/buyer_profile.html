@@ -19,6 +19,7 @@
         </div>
         <div class="card-body bg-white">
             <form method="post">
+              <input type="hidden" name="form_action" value="save_profile">
                 <div class="row g-3">
                     <div class="col-12">
                         <label class="form-label">Contact</label>
@@ -311,6 +312,84 @@
                     Back to Contact
                 </a>
             </form>
+        </div>
+        <div class="card mb-3">
+          <div class="card-header">
+            Subject Properties and Offers
+          </div>
+          <div class="card-body">
+        
+            {% if subject_properties %}
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>Address</th>
+                      <th>City</th>
+                      <th>State</th>
+                      <th>Zip</th>
+                      <th>Offer?</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                  {% for p in subject_properties %}
+                    <tr>
+                      <td>{{ p.address_line }}</td>
+                      <td>{{ p.city }}</td>
+                      <td>{{ p.state }}</td>
+                      <td>{{ p.postal_code }}</td>
+                      <td class="text-capitalize">{{ p.offer_status }}</td>
+                    </tr>
+                  {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="text-muted mb-3">No subject properties added yet.</p>
+            {% endif %}
+        
+            <hr>
+        
+            <form method="post" class="row g-2">
+              <input type="hidden" name="form_action" value="add_property">
+        
+              <div class="col-md-4">
+                <label class="form-label mb-1">Address</label>
+                <input type="text" name="address_line" class="form-control form-control-sm" required>
+              </div>
+        
+              <div class="col-md-2">
+                <label class="form-label mb-1">City</label>
+                <input type="text" name="city" class="form-control form-control-sm">
+              </div>
+        
+              <div class="col-md-2">
+                <label class="form-label mb-1">State</label>
+                <input type="text" name="state" class="form-control form-control-sm">
+              </div>
+        
+              <div class="col-md-2">
+                <label class="form-label mb-1">Zip</label>
+                <input type="text" name="postal_code" class="form-control form-control-sm">
+              </div>
+        
+              <div class="col-md-2">
+                <label class="form-label mb-1">Offer?</label>
+                <select name="offer_status" class="form-select form-select-sm">
+                  <option value="considering">Considering</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="lost">Lost</option>
+                  <option value="attorney review">Attorney Review</option>
+                  <option value="under contract">Under Contract</option>
+                </select>
+              </div>
+        
+              <div class="col-12 text-end mt-2">
+                <button type="submit" class="btn btn-primary btn-sm">Add Property</button>
+              </div>
+            </form>
+        
+          </div>
         </div>
     </div>
 

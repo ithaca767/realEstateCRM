@@ -223,7 +223,31 @@ def init_db():
         )
         """
     )
+    
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS buyer_properties (
+            id SERIAL PRIMARY KEY,
+            buyer_profile_id INTEGER NOT NULL REFERENCES buyer_profiles(id) ON DELETE CASCADE,
+            address_line TEXT NOT NULL,
+            city TEXT,
+            state TEXT,
+            postal_code TEXT,
+            offer_status TEXT CHECK (
+                offer_status IN (
+                    'considering',
+                    'accepted',
+                    'lost',
+                    'attorney review',
+                    'under contract'
+                )
+            ),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     conn.commit()
+
 
     # Upgrades for buyer_profiles (property type, documents checklist, professionals)
     buyer_profile_upgrades = [
@@ -2914,220 +2938,160 @@ def buyer_profile(contact_id):
         conn.close()
         return "Contact not found", 404
 
-    if request.method == "POST":
-        property_type = (request.form.get("property_type") or "").strip()
-        timeframe = (request.form.get("timeframe") or "").strip()
-        preapproval_status = (request.form.get("preapproval_status") or "").strip()
-        lender_name = (request.form.get("lender_name") or "").strip()
-        areas = (request.form.get("areas") or "").strip()
-        property_types = (request.form.get("property_types") or "").strip()
-        referral_source = (request.form.get("referral_source") or "").strip()
-        notes = (request.form.get("notes") or "").strip()
-
-        min_price = parse_int_or_none(request.form.get("min_price"))
-        max_price = parse_int_or_none(request.form.get("max_price"))
-
-        # Buyer documents checklist fields
-        cis_signed = bool(request.form.get("cis_signed"))
-        buyer_agreement_signed = bool(request.form.get("buyer_agreement_signed"))
-        wire_fraud_notice_signed = bool(request.form.get("wire_fraud_notice_signed"))
-        dual_agency_consent_signed = bool(request.form.get("dual_agency_consent_signed"))
-
-        # Professionals
-        buyer_attorney_name = (request.form.get("buyer_attorney_name") or "").strip()
-        buyer_attorney_email = (request.form.get("buyer_attorney_email") or "").strip()
-        buyer_attorney_phone = (request.form.get("buyer_attorney_phone") or "").strip()
-        buyer_attorney_referred = bool(request.form.get("buyer_attorney_referred"))
-
-        buyer_lender_email = (request.form.get("buyer_lender_email") or "").strip()
-        buyer_lender_phone = (request.form.get("buyer_lender_phone") or "").strip()
-        buyer_lender_referred = bool(request.form.get("buyer_lender_referred"))
-
-        buyer_inspector_name = (request.form.get("buyer_inspector_name") or "").strip()
-        buyer_inspector_email = (request.form.get("buyer_inspector_email") or "").strip()
-        buyer_inspector_phone = (request.form.get("buyer_inspector_phone") or "").strip()
-        buyer_inspector_referred = bool(request.form.get("buyer_inspector_referred"))
-
-        other_professionals = (request.form.get("other_professionals") or "").strip()
-
-        # Check if a buyer profile already exists
-        cur.execute(
-            "SELECT id FROM buyer_profiles WHERE contact_id = %s",
-            (contact_id,),
-        )
-        existing = cur.fetchone()
-
-        if existing:
-            # Update existing profile
-            cur.execute(
-                """
-                UPDATE buyer_profiles
-                SET
-                    property_type = %s,
-                    timeframe = %s,
-                    min_price = %s,
-                    max_price = %s,
-                    areas = %s,
-                    property_types = %s,
-                    preapproval_status = %s,
-                    lender_name = %s,
-                    referral_source = %s,
-                    notes = %s,
-                    cis_signed = %s,
-                    buyer_agreement_signed = %s,
-                    wire_fraud_notice_signed = %s,
-                    dual_agency_consent_signed = %s,
-                    buyer_attorney_name = %s,
-                    buyer_attorney_email = %s,
-                    buyer_attorney_phone = %s,
-                    buyer_attorney_referred = %s,
-                    buyer_lender_email = %s,
-                    buyer_lender_phone = %s,
-                    buyer_lender_referred = %s,
-                    buyer_inspector_name = %s,
-                    buyer_inspector_email = %s,
-                    buyer_inspector_phone = %s,
-                    buyer_inspector_referred = %s,
-                    other_professionals = %s
-                WHERE contact_id = %s
-                """,
-                (
-                    property_type,
-                    timeframe,
-                    min_price,
-                    max_price,
-                    areas,
-                    property_types,
-                    preapproval_status,
-                    lender_name,
-                    referral_source,
-                    notes,
-                    cis_signed,
-                    buyer_agreement_signed,
-                    wire_fraud_notice_signed,
-                    dual_agency_consent_signed,
-                    buyer_attorney_name,
-                    buyer_attorney_email,
-                    buyer_attorney_phone,
-                    buyer_attorney_referred,
-                    buyer_lender_email,
-                    buyer_lender_phone,
-                    buyer_lender_referred,
-                    buyer_inspector_name,
-                    buyer_inspector_email,
-                    buyer_inspector_phone,
-                    buyer_inspector_referred,
-                    other_professionals,
-                    contact_id,
-                ),
-            )
-        else:
-            # Insert new profile
-            cur.execute(
-                """
-                INSERT INTO buyer_profiles (
-                    contact_id,
-                    property_type,
-                    timeframe,
-                    min_price,
-                    max_price,
-                    areas,
-                    property_types,
-                    preapproval_status,
-                    lender_name,
-                    referral_source,
-                    notes,
-                    cis_signed,
-                    buyer_agreement_signed,
-                    wire_fraud_notice_signed,
-                    dual_agency_consent_signed,
-                    buyer_attorney_name,
-                    buyer_attorney_email,
-                    buyer_attorney_phone,
-                    buyer_attorney_referred,
-                    buyer_lender_email,
-                    buyer_lender_phone,
-                    buyer_lender_referred,
-                    buyer_inspector_name,
-                    buyer_inspector_email,
-                    buyer_inspector_phone,
-                    buyer_inspector_referred,
-                    other_professionals
-                )
-                VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-                """,
-                (
-                    contact_id,
-                    property_type,
-                    timeframe,
-                    min_price,
-                    max_price,
-                    areas,
-                    property_types,
-                    preapproval_status,
-                    lender_name,
-                    referral_source,
-                    notes,
-                    cis_signed,
-                    buyer_agreement_signed,
-                    wire_fraud_notice_signed,
-                    dual_agency_consent_signed,
-                    buyer_attorney_name,
-                    buyer_attorney_email,
-                    buyer_attorney_phone,
-                    buyer_attorney_referred,
-                    buyer_lender_email,
-                    buyer_lender_phone,
-                    buyer_lender_referred,
-                    buyer_inspector_name,
-                    buyer_inspector_email,
-                    buyer_inspector_phone,
-                    buyer_inspector_referred,
-                    other_professionals,
-                ),
-            )
-
-        conn.commit()
-        conn.close()
-        return redirect(url_for("edit_contact", contact_id=contact_id))
-
-    # GET: load buyer profile
+    # Load existing buyer profile (if any)
     cur.execute(
-        "SELECT * FROM buyer_profiles WHERE contact_id = %s",
+        """
+        SELECT *
+        FROM buyer_profiles
+        WHERE contact_id = %s
+        """,
         (contact_id,),
     )
-    bp_row = cur.fetchone()
-    conn.close()
+    buyer_profile = cur.fetchone()
 
-    # Build a nice display name
-    contact_name = (contact.get("first_name") or "") + (
-        " " if contact.get("first_name") and contact.get("last_name") else ""
-    ) + (contact.get("last_name") or "")
-    contact_name = contact_name.strip() or contact["name"]
-    pros_attorneys = get_professionals_for_dropdown(category="Attorney")
-    pros_lenders = get_professionals_for_dropdown(category="Lender")
-    pros_inspectors = get_professionals_for_dropdown(category="Inspector")
+    # Handle form submissions
+    if request.method == "POST":
+        form_action = (request.form.get("form_action") or "").strip()
+
+        # Branch 1: adding a subject property with Offer? status
+        if form_action == "add_property" and buyer_profile:
+            address_line = (request.form.get("address_line") or "").strip()
+            city = (request.form.get("city") or "").strip()
+            state = (request.form.get("state") or "").strip()
+            postal_code = (request.form.get("postal_code") or "").strip()
+            offer_status = (request.form.get("offer_status") or "").strip()
+
+            if address_line:
+                cur.execute(
+                    """
+                    INSERT INTO buyer_properties (
+                        buyer_profile_id,
+                        address_line,
+                        city,
+                        state,
+                        postal_code,
+                        offer_status
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        buyer_profile["id"],
+                        address_line,
+                        city,
+                        state,
+                        postal_code,
+                        offer_status,
+                    ),
+                )
+                conn.commit()
+
+            return redirect(url_for("buyer_profile", contact_id=contact_id))
+
+        # Branch 2: saving the main buyer profile
+        else:
+            property_type = (request.form.get("property_type") or "").strip()
+            timeframe = (request.form.get("timeframe") or "").strip()
+            preapproval_status = (request.form.get("preapproval_status") or "").strip()
+            lender_name = (request.form.get("lender_name") or "").strip()
+            areas = (request.form.get("areas") or "").strip()
+            property_types = (request.form.get("property_types") or "").strip()
+            referral_source = (request.form.get("referral_source") or "").strip()
+            notes = (request.form.get("notes") or "").strip()
+
+            min_price = parse_int_or_none(request.form.get("min_price"))
+            max_price = parse_int_or_none(request.form.get("max_price"))
+
+            if buyer_profile:
+                # Update existing buyer profile
+                cur.execute(
+                    """
+                    UPDATE buyer_profiles
+                    SET timeframe = %s,
+                        min_price = %s,
+                        max_price = %s,
+                        areas = %s,
+                        property_types = %s,
+                        property_type = %s,
+                        preapproval_status = %s,
+                        lender_name = %s,
+                        referral_source = %s,
+                        notes = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        timeframe,
+                        min_price,
+                        max_price,
+                        areas,
+                        property_types,
+                        property_type,
+                        preapproval_status,
+                        lender_name,
+                        referral_source,
+                        notes,
+                        buyer_profile["id"],
+                    ),
+                )
+            else:
+                # Create new buyer profile
+                cur.execute(
+                    """
+                    INSERT INTO buyer_profiles (
+                        contact_id,
+                        timeframe,
+                        min_price,
+                        max_price,
+                        areas,
+                        property_types,
+                        property_type,
+                        preapproval_status,
+                        lender_name,
+                        referral_source,
+                        notes
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING *
+                    """,
+                    (
+                        contact_id,
+                        timeframe,
+                        min_price,
+                        max_price,
+                        areas,
+                        property_types,
+                        property_type,
+                        preapproval_status,
+                        lender_name,
+                        referral_source,
+                        notes,
+                    ),
+                )
+                buyer_profile = cur.fetchone()
+
+            conn.commit()
+            return redirect(url_for("buyer_profile", contact_id=contact_id))
+
+    # After any POST handling: load subject properties for display
+    if buyer_profile:
+        cur.execute(
+            """
+            SELECT id, address_line, city, state, postal_code, offer_status
+            FROM buyer_properties
+            WHERE buyer_profile_id = %s
+            ORDER BY created_at DESC
+            """,
+            (buyer_profile["id"],),
+        )
+        subject_properties = cur.fetchall()
+    else:
+        subject_properties = []
 
     return render_template(
         "buyer_profile.html",
-        c=contact,
-        contact_name=contact_name,
-        contact_email=contact.get("email"),
-        contact_phone=contact.get("phone"),
-        bp=bp_row,               # what the template actually uses
-        profile=bp_row,          # keep for backward compatibility
-        checklist=bp_row,        # same
-        contact_id=contact_id,   # needed for the Back to Contact link
-        today=date.today().isoformat(),
-        active_page="contacts",
-        pros_attorneys=pros_attorneys,
-        pros_lenders=pros_lenders,
-        pros_inspectors=pros_inspectors,
-
+        contact=contact,
+        buyer_profile=buyer_profile,
+        subject_properties=subject_properties,
+        contact_id=contact_id,
     )
 
 @app.route("/professionals", methods=["GET", "POST"])
