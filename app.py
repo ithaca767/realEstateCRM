@@ -3086,12 +3086,36 @@ def buyer_profile(contact_id):
     else:
         subject_properties = []
 
+    # Build contact display fields for the template
+    contact_name = f"{contact['first_name']} {contact['last_name']}".strip()
+    contact_email = contact.get("email")
+    contact_phone = contact.get("phone")
+
+    # For now, keep professional lists empty unless you already have queries elsewhere
+    pros_attorneys = []
+    pros_lenders = []
+    pros_inspectors = []
+
     return render_template(
         "buyer_profile.html",
+        # contact object + convenience display fields
         contact=contact,
+        c=contact,
+        contact_name=contact_name,
+        contact_email=contact_email,
+        contact_phone=contact_phone,
+
+        # buyer profile object under the name the template uses
+        bp=buyer_profile,
         buyer_profile=buyer_profile,
+        buyer=buyer_profile,
+
+        # subject properties and other context
         subject_properties=subject_properties,
         contact_id=contact_id,
+        pros_attorneys=pros_attorneys,
+        pros_lenders=pros_lenders,
+        pros_inspectors=pros_inspectors,
     )
 
 @app.route("/professionals", methods=["GET", "POST"])
@@ -3451,6 +3475,36 @@ def followups():
     if ICS_TOKEN:
         calendar_url = calendar_url + f"?key={ICS_TOKEN}"
 
+    # After any POST handling: load subject properties for display
+    if buyer_profile:
+        cur.execute(
+            """
+            SELECT id, address_line, city, state, postal_code, offer_status
+            FROM buyer_properties
+            WHERE buyer_profile_id = %s
+            ORDER BY created_at DESC
+            """,
+            (buyer_profile["id"],),
+        )
+        subject_properties = cur.fetchall()
+    else:
+        subject_properties = []
+
+    # DEBUG
+    print("DEBUG buyer_profile for contact", contact_id, "=>", buyer_profile)
+
+    return render_template(
+        "buyer_profile.html",
+        # contact info (multiple aliases)
+        contact=contact,
+        c=contact,
+        # buyer profile info (aliases)
+        buyer_profile=buyer_profile,
+        buyer=buyer_profile,
+        subject_properties=subject_properties,
+        contact_id=contact_id,
+    )
+    
     return render_template(
         "followups.html",
         overdue=overdue,
