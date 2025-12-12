@@ -2364,6 +2364,90 @@ LOGIN_TEMPLATE = """
 </html>
 """
 
+LISTING_CHECKLIST_DEFAULTS = [
+    ("mls_listing_agreement_signed", "MLS Listing Agreement Signed", 0),
+    ("addendum_to_listing_agreement", "Addendum to Listing Agreement", 0),
+    ("sellers_disclosure_signed", "Sellers Disclosure Signed", 0),
+    ("lead_paint_disclosure", "Lead Paint Signed Disclosure (if applicable)", 0),
+    ("input_form_completed", "Input Form Completed", 1),
+    ("home_warranty_decision", "Home Warranty (yes or no)", 1),
+
+    ("lockbox", "Lockbox", 1),
+    ("suprakey_set_up", "Suprakey Set Up", 1),
+    ("sign_on_property", "Sign on Property", 2),
+
+    ("property_brochure_prepared", "Property Brochure Prepared", 2),
+    ("feature_sheet", "Feature Sheet", 2),
+    ("town_information", "Town Information", 2),
+
+    ("post_on_vbd", "Post on VBD", 2),
+    ("social_media", "Social Media", 2),
+    ("list_trac", "List Trac", 2),
+    ("reverse_prospecting", "Reverse Prospecting", 3),
+    ("active_pipe_ecard", "Active Pipe E-Card", 3),
+    ("just_listed_postcard", "Just Listed Postcard", 4),
+
+    ("broker_open_house_scheduled", "Broker Open House Scheduled", 5),
+    ("public_open_house_1", "Public Open House 1", 7),
+    ("public_open_house_2", "Public Open House 2", 14),
+    ("public_open_house_3", "Public Open House 3", None),
+
+    ("dash_form", "Dash Form", 8),
+]
+
+
+def ensure_listing_checklist_initialized(contact_id: int) -> None:
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT 1 FROM listing_checklist_items WHERE contact_id = %s LIMIT 1",
+        (contact_id,)
+    )
+    if cur.fetchone():
+        conn.close()
+        return
+
+    today = date.today()
+    rows = []
+    for item_key, label, offset in LISTING_CHECKLIST_DEFAULTS:
+        due = today + timedelta(days=offset) if isinstance(offset, int) else None
+        rows.append((contact_id, item_key, label, due))
+
+    cur.executemany(
+        """
+        INSERT INTO listing_checklist_items (contact_id, item_key, label, due_date)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (contact_id, item_key) DO NOTHING
+        """,
+        rows
+    )
+
+    conn.commit()
+    conn.close()
+
+def get_listing_checklist(contact_id: int):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, item_key, label, due_date, is_complete
+        FROM listing_checklist_items
+        WHERE contact_id = %s
+        ORDER BY
+          CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+          due_date ASC,
+          label ASC
+        """,
+        (contact_id,)
+    )
+    rows = cur.fetchall()
+    conn.close()
+    total = len(rows)
+    complete = sum(1 for r in rows if r["is_complete"])
+    return rows, complete, total
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("logged_in"):
@@ -3558,6 +3642,9 @@ def seller_profile(contact_id):
     pros_lenders = get_professionals_for_dropdown(category="Lender")
     pros_inspectors = get_professionals_for_dropdown(category="Inspector")
 
+    ensure_listing_checklist_initialized(contact_id)
+    checklist_items, checklist_complete, checklist_total = get_listing_checklist(contact_id)
+    
     return render_template(
         "seller_profile.html",
         c=contact,
@@ -3566,13 +3653,16 @@ def seller_profile(contact_id):
         contact_phone=contact.get("phone"),
         sp=sp,
         profile=sp,
-        checklist=sp,
         contact_id=contact_id,
         today=date.today().isoformat(),
         active_page="contacts",
         pros_attorneys=pros_attorneys,
         pros_lenders=pros_lenders,
         pros_inspectors=pros_inspectors,
+    
+        checklist_items=checklist_items,
+        checklist_complete=checklist_complete,
+        checklist_total=checklist_total,
     )
 
 @app.route("/followups")
@@ -3886,6 +3976,32 @@ def normalize_phone_digits(phone: str) -> str:
         return ""
     return re.sub(r"\\D+", "", phone)
 
+@app.route("/api/listing-checklist/<int:item_id>/update", methods=["POST"])
+@login_required
+def update_listing_checklist_item(item_id):
+    is_complete = request.form.get("is_complete") == "on"
+    due_date_raw = (request.form.get("due_date") or "").strip()
+    due_date = due_date_raw if due_date_raw else None
+
+    completed_at = datetime.utcnow() if is_complete else None
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE listing_checklist_items
+        SET is_complete = %s,
+            due_date = %s,
+            completed_at = %s,
+            updated_at = NOW()
+        WHERE id = %s
+        """,
+        (is_complete, due_date, completed_at, item_id)
+    )
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("seller_profile", contact_id=request.form.get("contact_id")))
 
 @app.route("/api/add_interaction", methods=["POST"])
 @login_required

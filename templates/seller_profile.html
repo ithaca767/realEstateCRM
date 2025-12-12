@@ -246,6 +246,119 @@
             </form>
         </div>
     </div>
+    <div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div>
+      <div class="fw-semibold">New Listing Checklist</div>
+      <div class="text-muted small">
+        {{ checklist_complete }} / {{ checklist_total }} complete
+      </div>
+    </div>
+
+    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#listingChecklistModal">
+      Edit Checklist
+    </button>
+  </div>
+
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 56px;">Done</th>
+            <th>Item</th>
+            <th style="width: 140px;">Due</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in checklist_items %}
+          <tr>
+            <td>
+              {% if item.is_complete %}
+                <span class="badge text-bg-success">Yes</span>
+              {% else %}
+                <span class="badge text-bg-secondary">No</span>
+              {% endif %}
+            </td>
+            <td>{{ item.label }}</td>
+            <td>
+              {% if item.due_date %}
+                {{ item.due_date }}
+              {% else %}
+                <span class="text-muted">None</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="listingChecklistModal" tabindex="-1" aria-labelledby="listingChecklistModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="listingChecklistModalLabel">New Listing Checklist</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="text-muted small mb-3">
+          Check items off and set due dates. Changes save item by item.
+        </div>
+
+        <div class="list-group">
+          {% for item in checklist_items %}
+          <div class="list-group-item">
+            <form method="POST" action="{{ url_for('update_listing_checklist_item', item_id=item.id) }}" class="row g-2 align-items-center">
+              <input type="hidden" name="contact_id" value="{{ contact_id }}">
+
+              <div class="col-12 col-md-6">
+                <div class="form-check">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="chk_{{ item.id }}"
+                    name="is_complete"
+                    {% if item.is_complete %}checked{% endif %}
+                    onchange="this.form.submit()"
+                  >
+                  <label class="form-check-label" for="chk_{{ item.id }}">
+                    {{ item.label }}
+                  </label>
+                </div>
+              </div>
+
+              <div class="col-8 col-md-4">
+                <input
+                  type="date"
+                  class="form-control form-control-sm"
+                  name="due_date"
+                  value="{% if item.due_date %}{{ item.due_date }}{% endif %}"
+                  onchange="this.form.submit()"
+                >
+              </div>
+
+              <div class="col-4 col-md-2 text-end">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     function wireSelect(selectId, nameId, phoneId, emailId) {
