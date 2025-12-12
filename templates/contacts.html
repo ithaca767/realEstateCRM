@@ -3,371 +3,297 @@
 {% block title %}Contacts – Ulysses CRM{% endblock %}
 
 {% block content %}
-    
-    <!-- Add Contact form -->
-    <div id="add-contact" class="card card-add mb-4">
-        <div class="card-header">
-            Add New Contact
-        </div>
-        <div class="card-body bg-white">
-            <form method="post" action="{{ url_for('add_contact') }}">
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <label class="form-label">First Name *</label>
-                        <input name="first_name" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Last Name</label>
-                        <input name="last_name" class="form-control">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Email</label>
-                        <input name="email" type="email" class="form-control">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Phone</label>
-                        <input name="phone" class="form-control">
-                    </div>
+<div class="container mt-4">
 
-                    <div class="col-md-3">
-                        <label class="form-label">Lead Type</label>
-                        <select name="lead_type" class="form-select">
-                            <option value="">Select...</option>
-                            {% for t in lead_types %}
-                                <option value="{{ t }}">{{ t }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Pipeline Stage</label>
-                        <select name="pipeline_stage" class="form-select">
-                            <option value="">Select...</option>
-                            {% for s in pipeline_stages %}
-                                <option value="{{ s }}">{{ s }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Priority</label>
-                        <select name="priority" class="form-select">
-                            <option value="">Select...</option>
-                            {% for p in priorities %}
-                                <option value="{{ p }}">{{ p }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Source</label>
-                        <select name="source" class="form-select">
-                            <option value="">Select...</option>
-                            {% for s in sources %}
-                                <option value="{{ s }}">{{ s }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                                        <!-- Current address -->
-                    <div class="col-12 mt-3">
-                        <h6 class="fw-bold mb-2">Current Address</h6>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Street Address</label>
-                        <input name="current_address" class="form-control" placeholder="123 Main St">
-                    </div>
-
-                    <div class="col-md-2 col-6">
-                        <label class="form-label">City</label>
-                        <input name="current_city" class="form-control" placeholder="Keyport">
-                    </div>
-                    <div class="col-md-2 col-3">
-                        <label class="form-label">State</label>
-                        <input name="current_state" class="form-control" placeholder="NJ">
-                    </div>
-                    <div class="col-md-2 col-3">
-                        <label class="form-label">ZIP</label>
-                        <input name="current_zip" class="form-control" placeholder="07735">
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Last Contacted</label>
-                        <input name="last_contacted" type="date" class="form-control" value="{{ today }}">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Next Follow Up (Date)</label>
-                        <input name="next_follow_up" type="date" class="form-control">
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">Follow Up Hour</label>
-                        <select name="next_follow_up_hour" class="form-select">
-                            <option value="">HH</option>
-                            {% for h in range(1,13) %}
-                                <option value="{{ h }}">{{ h }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Follow Up Minute</label>
-                        <select name="next_follow_up_minute" class="form-select">
-                            <option value="">MM</option>
-                            {% for m in ["00", "15", "30", "45"] %}
-                                <option value="{{ m }}">{{ m }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">AM / PM</label>
-                        <select name="next_follow_up_ampm" class="form-select">
-                            <option value="">AM / PM</option>
-                            <option value="AM">AM</option>
-                            <option value="PM">PM</option>
-                        </select>
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label">Notes</label>
-                        <textarea name="notes" class="form-control" rows="2"
-                         placeholder="Motivation, timing, specific needs..."></textarea>
-                    </div>
-                </div>
-                <button class="btn btn-success mt-3" type="submit">Add Contact</button>
-            </form>
-        </div>
+  <!-- Add Contact form -->
+  <div id="add-contact" class="card card-add mb-4">
+    <div class="card-header">
+      Add New Contact
     </div>
+    <div class="card-body bg-white">
+      <form method="post" action="{{ url_for('add_contact') }}">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">First Name *</label>
+            <input name="first_name" class="form-control" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Last Name</label>
+            <input name="last_name" class="form-control">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Email</label>
+            <input name="email" type="email" class="form-control">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Phone</label>
+            <input name="phone" class="form-control">
+          </div>
 
-    <!-- Filters -->
-    <div class="card mb-3">
-        <div class="card-header fw-bold">
-            Filters
+          <div class="col-md-3">
+            <label class="form-label">Lead Type</label>
+            <select name="lead_type" class="form-select">
+              <option value="">Select...</option>
+              {% for t in lead_types %}
+                <option value="{{ t }}">{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Pipeline Stage</label>
+            <select name="pipeline_stage" class="form-select">
+              <option value="">Select...</option>
+              {% for s in pipeline_stages %}
+                <option value="{{ s }}">{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Priority</label>
+            <select name="priority" class="form-select">
+              <option value="">Select...</option>
+              {% for p in priorities %}
+                <option value="{{ p }}">{{ p }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Source</label>
+            <select name="source" class="form-select">
+              <option value="">Select...</option>
+              {% for s in sources %}
+                <option value="{{ s }}">{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Current address -->
+          <div class="col-12 mt-3">
+            <h6 class="fw-bold mb-2">Current Address</h6>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Street Address</label>
+            <input name="current_address" class="form-control" placeholder="123 Main St">
+          </div>
+
+          <div class="col-md-2 col-6">
+            <label class="form-label">City</label>
+            <input name="current_city" class="form-control" placeholder="Keyport">
+          </div>
+          <div class="col-md-2 col-3">
+            <label class="form-label">State</label>
+            <input name="current_state" class="form-control" placeholder="NJ">
+          </div>
+          <div class="col-md-2 col-3">
+            <label class="form-label">ZIP</label>
+            <input name="current_zip" class="form-control" placeholder="07735">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Last Contacted</label>
+            <input name="last_contacted" type="date" class="form-control" value="{{ today }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Next Follow Up (Date)</label>
+            <input name="next_follow_up" type="date" class="form-control">
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label">Follow Up Hour</label>
+            <select name="next_follow_up_hour" class="form-select">
+              <option value="">HH</option>
+              {% for h in range(1,13) %}
+                <option value="{{ h }}">{{ h }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Follow Up Minute</label>
+            <select name="next_follow_up_minute" class="form-select">
+              <option value="">MM</option>
+              {% for m in ["00", "15", "30", "45"] %}
+                <option value="{{ m }}">{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">AM / PM</label>
+            <select name="next_follow_up_ampm" class="form-select">
+              <option value="">AM / PM</option>
+              <option value="AM">AM</option>
+              <option value="PM">PM</option>
+            </select>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"
+              placeholder="Motivation, timing, specific needs..."></textarea>
+          </div>
         </div>
-        <div class="card-body bg-white">
-            <form class="row g-3 mb-0" method="get" action="{{ url_for('contacts') }}">
-                <div class="col-md-3">
-                    <input type="text" name="q" value="{{ request.args.get('q','') }}" class="form-control"
-                           placeholder="Search name, email, phone">
-                </div>
-                <div class="col-md-2">
-                    <select name="lead_type" class="form-select">
-                        <option value="">Lead Type</option>
-                        {% for t in lead_types %}
-                            <option value="{{ t }}" {% if request.args.get('lead_type') == t %}selected{% endif %}>{{ t }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <select name="pipeline_stage" class="form-select">
-                        <option value="">Stage</option>
-                        {% for s in pipeline_stages %}
-                            <option value="{{ s }}" {% if request.args.get('pipeline_stage') == s %}selected{% endif %}>{{ s }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <select name="priority" class="form-select">
-                        <option value="">Priority</option>
-                        {% for p in priorities %}
-                            <option value="{{ p }}" {% if request.args.get('priority') == p %}selected{% endif %}>{{ p }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <input type="text" name="target_area" value="{{ request.args.get('target_area','') }}" class="form-control"
-                           placeholder="Filter by area">
-                </div>
-                <div class="col-md-3">
-                    <button class="btn btn-outline-secondary" type="submit">Apply Filters</button>
-                    <a href="{{ url_for('contacts') }}" class="btn btn-link">Clear</a>
-                </div>
-            </form>
-        </div>
+        <button class="btn btn-success mt-3" type="submit">Add Contact</button>
+      </form>
     </div>
+  </div>
 
-    <!-- Contacts list -->
-    <div class="card">
-        <div class="card-header fw-bold">
-            Contacts ({{ contacts|length }})
-        </div>
-        <div class="list-group list-group-flush bg-white">
+  <!-- Contacts panel: tabs + search + table + pagination -->
+  <div class="card mt-3">
+    <div class="card-body">
+
+      <!-- Tabs + search bar -->
+      <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+        <ul class="nav nav-tabs border-0">
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'all' %}active{% endif %}"
+               href="{{ url_for('contacts', tab='all', q=search_query, page=1) }}">
+              All
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'buyers' %}active{% endif %}"
+               href="{{ url_for('contacts', tab='buyers', q=search_query, page=1) }}">
+              Buyers
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'sellers' %}active{% endif %}"
+               href="{{ url_for('contacts', tab='sellers', q=search_query, page=1) }}">
+              Sellers
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'leads' %}active{% endif %}"
+               href="{{ url_for('contacts', tab='leads', q=search_query, page=1) }}">
+              Leads
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'past_clients' %}active{% endif %}"
+               href="{{ url_for('contacts', tab='past_clients', q=search_query, page=1) }}">
+              Past Clients
+            </a>
+          </li>
+        </ul>
+
+        <!-- Search form -->
+        <form class="d-flex ms-3"
+              method="get"
+              action="{{ url_for('contacts') }}">
+          <input type="hidden" name="tab" value="{{ active_tab }}">
+          <input type="hidden" name="page" value="1">
+          <input
+            class="form-control form-control-sm"
+            type="search"
+            name="q"
+            placeholder="Search contacts"
+            value="{{ search_query or '' }}"
+            aria-label="Search"
+          >
+          <button class="btn btn-sm btn-outline-secondary ms-2" type="submit">
+            Search
+          </button>
+        </form>
+      </div>
+
+      <!-- Info line -->
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <small class="text-muted">
+          Showing page {{ page }} of {{ total_pages }}
+          ({{ total_rows }} contact{{ '' if total_rows == 1 else 's' }})
+        </small>
+      </div>
+
+      <!-- Contacts table -->
+      <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0 align-middle contacts-table">
+          <thead class="table-light">
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Type</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+          {% if contacts %}
             {% for c in contacts %}
-                <div class="list-group-item">
-                    <!-- Top row: name + quick status -->
-                    <div class="d-flex justify-content-between align-items-start flex-wrap">
-                        <div class="me-3">
-                        {% if c["has_buyer_profile"] %}
-                            <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
-                               class="fw-semibold text-decoration-none">
-                                {% if c["first_name"] or c["last_name"] %}
-                                    {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                                {% else %}
-                                    {{ c["name"] }}
-                                {% endif %}
-                            </a>
-                        {% elif c["has_seller_profile"] %}
-                            <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
-                               class="fw-semibold text-decoration-none">
-                                {% if c["first_name"] or c["last_name"] %}
-                                    {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                                {% else %}
-                                    {{ c["name"] }}
-                                {% endif %}
-                            </a>
-                        {% else %}
-                            <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
-                               class="fw-semibold text-decoration-none">
-                                {% if c["first_name"] or c["last_name"] %}
-                                    {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                                {% else %}
-                                    {{ c["name"] }}
-                                {% endif %}
-                            </a>
-                        {% endif %}
-                            <div class="small text-muted mt-1">
-                                {% if c["lead_type"] %}{{ c["lead_type"] }}{% endif %}
-                                {% if c["lead_type"] and c["pipeline_stage"] %} · {% endif %}
-                                {% if c["pipeline_stage"] %}{{ c["pipeline_stage"] }}{% endif %}
-                            </div>
-                        </div>
-                        <div class="text-end small mt-2 mt-sm-0">
-                            {% if c["priority"] %}
-                                {% if c["priority"] == "Hot" %}
-                                    <span class="badge bg-danger">Hot</span>
-                                {% elif c["priority"] == "Warm" %}
-                                    <span class="badge bg-warning text-dark">Warm</span>
-                                {% elif c["priority"] == "Cold" %}
-                                    <span class="badge bg-secondary">Cold</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">{{ c["priority"] }}</span>
-                                {% endif %}
-                            {% endif %}
-                            {% if c["next_follow_up"] %}
-                                <div class="mt-1">
-                                    <strong>Next:</strong>
-                                    {{ c["next_follow_up"] }}
-                                    {% if c["next_follow_up_time"] %}
-                                        {{ c["next_follow_up_time"] }}
-                                    {% endif %}
-                                </div>
-                            {% endif %}
-                            {% if c["last_contacted"] %}
-                                <div class="text-muted mt-1">
-                                    Last: {{ c["last_contacted"] }}
-                                </div>
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <!-- Middle rows: price, area, source -->
-                    <div class="row small mt-2">
-                        <div class="col-md-4 mb-1">
-                            {% if c["price_min"] or c["price_max"] %}
-                                <strong>Price:</strong>
-                                {% if c["price_min"] %}${{ "{:,}".format(c["price_min"]) }}{% endif %}
-                                {% if c["price_min"] and c["price_max"] %} – {% endif %}
-                                {% if c["price_max"] %}${{ "{:,}".format(c["price_max"]) }}{% endif %}
-                            {% endif %}
-                        </div>
-                        <div class="col-md-4 mb-1">
-                            {% if c["target_area"] %}
-                                <strong>Area:</strong> {{ c["target_area"] }}
-                            {% endif %}
-                        </div>
-                        <div class="col-md-4 mb-1">
-                            {% if c["source"] %}
-                                <strong>Source:</strong> {{ c["source"] }}
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <!-- Addresses -->
-                    <div class="row small mt-1">
-                        <div class="col-md-6 mb-1">
-                            {% if c["current_address"] or c["current_city"] or c["current_state"] or c["current_zip"] %}
-                                <strong>Current:</strong>
-                                {{ c["current_address"] or "" }}
-                                {% if c["current_city"] %}, {{ c["current_city"] }}{% endif %}
-                                {% if c["current_state"] %}, {{ c["current_state"] }}{% endif %}
-                                {% if c["current_zip"] %} {{ c["current_zip"] }}{% endif %}
-                            {% endif %}
-                        </div>
-                        <div class="col-md-6 mb-1">
-                            {% if c["subject_address"] or c["subject_city"] or c["subject_state"] or c["subject_zip"] %}
-                                <strong>Subject:</strong>
-                                {{ c["subject_address"] or "" }}
-                                {% if c["subject_city"] %}, {{ c["subject_city"] }}{% endif %}
-                                {% if c["subject_state"] %}, {{ c["subject_state"] }}{% endif %}
-                                {% if c["subject_zip"] %} {{ c["subject_zip"] }}{% endif %}
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <!-- Notes -->
-                    {% if c["notes"] %}
-                        <div class="small mt-2">
-                            <strong>Notes:</strong> {{ c["notes"] }}
-                        </div>
-                    {% endif %}
-
-                    <!-- Actions -->
-                    <div class="mt-2 d-flex flex-wrap gap-1">
-                    
-                        {% if c["phone"] %}
-                            <a href="tel:{{ c['phone'] }}"
-                               class="btn btn-sm btn-outline-success">
-                                Call
-                            </a>
-                    
-                            <a href="sms:{{ c['phone'] }}"
-                               class="btn btn-sm btn-outline-secondary">
-                                Text
-                            </a>
-                        {% endif %}
-                    
-                        {% if c["email"] %}
-                            <a href="mailto:{{ c['email'] }}"
-                               class="btn btn-sm btn-outline-info">
-                                Email
-                            </a>
-                        {% endif %}
-                    
-                        <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
-                           class="btn btn-sm btn-outline-primary">
-                            Edit
-                        </a>
-
-                        <a href="{{ url_for('buyer_profile', contact_id=c['id']) }}"
-                           class="btn btn-sm {% if c['has_buyer_profile'] %}btn-primary fw-semibold{% else %}btn-outline-dark{% endif %}">
-                            {% if c['has_buyer_profile'] %}
-                                <i class="bi bi-person-check me-1"></i> Committed Buyer Sheet
-                            {% else %}
-                                Commit as Buyer
-                            {% endif %}
-                        </a>
-
-                        <a href="{{ url_for('seller_profile', contact_id=c['id']) }}"
-                           class="btn btn-sm {% if c['has_seller_profile'] %}btn-success fw-semibold{% else %}btn-outline-dark{% endif %}">
-                            {% if c['has_seller_profile'] %}
-                                <i class="bi bi-house-check me-1"></i> Committed Seller Sheet
-                            {% else %}
-                                Commit as Seller
-                            {% endif %}
-                        </a>
-                                            
-                        <a href="{{ url_for('delete_contact', contact_id=c['id']) }}"
-                           class="btn btn-sm btn-outline-danger"
-                           onclick="return confirm('Delete this contact?');">
-                            Delete
-                        </a>
-                    </div>
-                </div>
-            {% else %}
-                <div class="list-group-item text-center text-muted">
-                    No contacts yet.
-                </div>
+              {% set full_name = c["name"] or ((c["first_name"] or '') ~ ' ' ~ (c["last_name"] or '')) %}
+              <tr>
+                <td>{{ full_name or 'Untitled' }}</td>
+                <td>{{ c["email"] }}</td>
+                <td>{{ c["phone"] }}</td>
+                <td>
+                  {{ c["lead_type"] or '' }}
+                  {% if c["pipeline_stage"] %}
+                    <br><small class="text-muted">{{ c["pipeline_stage"] }}</small>
+                  {% endif %}
+                </td>
+                <td class="text-truncate" style="max-width: 250px;">
+                  {{ c["notes"] }}
+                </td>
+                <td class="text-end">
+                  <a href="{{ url_for('edit_contact', contact_id=c["id"]) }}"
+                     class="btn btn-sm btn-primary">
+                    Open
+                  </a>
+                </td>
+              </tr>
             {% endfor %}
-        </div>
-   
-   {% endblock %}
+          {% else %}
+            <tr>
+              <td colspan="6" class="text-center py-3 text-muted">
+                No contacts found.
+              </td>
+            </tr>
+          {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      {% if total_pages > 1 %}
+      <nav aria-label="Contacts pagination" class="mt-3 mb-0">
+        <ul class="pagination justify-content-center mb-0">
+
+          <!-- Previous -->
+          <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+            <a class="page-link"
+               href="{% if page > 1 %}{{ url_for('contacts', tab=active_tab, q=search_query, page=page-1) }}{% else %}#{% endif %}">
+              Previous
+            </a>
+          </li>
+
+          {% set start_page = page - 2 if page - 2 > 1 else 1 %}
+          {% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+
+          {% for p in range(start_page, end_page + 1) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+              <a class="page-link"
+                 href="{{ url_for('contacts', tab=active_tab, q=search_query, page=p) }}">
+                {{ p }}
+              </a>
+            </li>
+          {% endfor %}
+
+          <!-- Next -->
+          <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+            <a class="page-link"
+               href="{% if page < total_pages %}{{ url_for('contacts', tab=active_tab, q=search_query, page=page+1) }}{% else %}#{% endif %}">
+              Next
+            </a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

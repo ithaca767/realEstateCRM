@@ -1,10 +1,12 @@
 import os
 import re
+from functools import wraps
+
+from datetime import date, datetime, timedelta
+from math import ceil
+
 from dotenv import load_dotenv
 load_dotenv()
-from datetime import date, datetime, timedelta
-from flask import jsonify
-from flask_login import login_required
 
 from flask import (
     Flask,
@@ -16,10 +18,9 @@ from flask import (
     jsonify,
     Response,
     session,
-    flash
+    flash,
 )
-
-from functools import wraps
+from flask_login import login_required
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -2434,102 +2435,129 @@ def dashboard():
 @app.route("/contacts")
 @login_required
 def contacts():
-    q = request.args.get("q", "").strip()
-    lead_type = request.args.get("lead_type", "").strip()
-    pipeline_stage = request.args.get("pipeline_stage", "").strip()
-    priority = request.args.get("priority", "").strip()
-    target_area = request.args.get("target_area", "").strip()
-
     conn = get_db()
     cur = conn.cursor()
 
-    sql = """
-        SELECT
-            c.*,
-            (bp.id IS NOT NULL) AS has_buyer_profile,
-            (sp.id IS NOT NULL) AS has_seller_profile
-        FROM contacts c
-        LEFT JOIN buyer_profiles bp ON bp.contact_id = c.id
-        LEFT JOIN seller_profiles sp ON sp.contact_id = c.id
-        WHERE 1=1
-    """
+    # Lookup lists for Add Contact form
+    lead_types = LEAD_TYPES
+    pipeline_stages = PIPELINE_STAGES
+    priorities = PRIORITIES
+    sources = SOURCES
+    today = date.today().isoformat()
+
+    # Query params
+    tab = (request.args.get("tab") or "all").lower()
+    search = (request.args.get("q") or "").strip()
+    try:
+        page = int(request.args.get("page", 1))
+        if page < 1:
+            page = 1
+    except ValueError:
+        page = 1
+
+    PAGE_SIZE = 50
+    offset = (page - 1) * PAGE_SIZE
+
+    # Build WHERE clause parts
+    where_clauses = []
     params = []
 
-    if q:
-        sql += " AND (c.name ILIKE %s OR c.email ILIKE %s OR c.phone ILIKE %s)"
-        like = f"%{q}%"
-        params.extend([like, like, like])
+    # Tabs mapped to your existing schema:
+    # Buyers  -> lead_type = "Buyer"
+    # Sellers -> lead_type = "Seller"
+    # Leads   -> pipeline_stage in ["New lead", "Nurture", "Active", "Under contract", "Closed", "Lost"]
+    # Past Clients -> pipeline_stage = "Past Client / Relationship"
+    if tab == "buyers":
+        where_clauses.append("lead_type = %s")
+        params.append("Buyer")
+    elif tab == "sellers":
+        where_clauses.append("lead_type = %s")
+        params.append("Seller")
+    elif tab == "leads":
+        lead_stages = [
+            "New lead",
+            "Nurture",
+            "Active",
+            "Under contract",
+            "Closed",
+            "Lost",
+        ]
+        placeholders = ", ".join(["%s"] * len(lead_stages))
+        where_clauses.append(f"pipeline_stage IN ({placeholders})")
+        params.extend(lead_stages)
+    elif tab == "past_clients":
+        where_clauses.append("pipeline_stage = %s")
+        params.append("Past Client / Relationship")
+    # tab == "all" has no extra filter
 
-    if lead_type:
-        sql += " AND c.lead_type = %s"
-        params.append(lead_type)
+    # Search filter (name / email / phone / notes)
+    if search:
+        where_clauses.append("""
+            (
+                COALESCE(name, '') ILIKE %s
+                OR COALESCE(first_name, '') ILIKE %s
+                OR COALESCE(last_name, '') ILIKE %s
+                OR COALESCE(email, '') ILIKE %s
+                OR COALESCE(phone, '') ILIKE %s
+                OR COALESCE(notes, '') ILIKE %s
+            )
+        """)
+        like_value = f"%{search}%"
+        params.extend([like_value] * 6)
 
-    if pipeline_stage:
-        sql += " AND c.pipeline_stage = %s"
-        params.append(pipeline_stage)
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
 
-    if priority:
-        sql += " AND c.priority = %s"
-        params.append(priority)
+    # Count total for pagination
+    count_sql = f"SELECT COUNT(*) AS total FROM contacts {where_sql}"
+    cur.execute(count_sql, tuple(params))
+    row = cur.fetchone()
+    total_rows = row["total"] if row and row["total"] is not None else 0
+    total_pages = max(1, ceil(total_rows / PAGE_SIZE))
 
-    if target_area:
-        sql += " AND c.target_area ILIKE %s"
-        params.append(f"%{target_area}%")
+    # Clamp page if requested page is too high
+    if page > total_pages:
+        page = total_pages
+        offset = (page - 1) * PAGE_SIZE
 
-    sql += " ORDER BY c.next_follow_up IS NULL, c.next_follow_up, c.name"
-
-    cur.execute(sql, params)
+    # Main query for current page
+    data_sql = f"""
+        SELECT
+            id,
+            name,
+            first_name,
+            last_name,
+            email,
+            phone,
+            lead_type,
+            pipeline_stage,
+            notes
+        FROM contacts
+        {where_sql}
+        ORDER BY last_name NULLS LAST, first_name NULLS LAST, id ASC
+        LIMIT %s OFFSET %s
+    """
+    data_params = params + [PAGE_SIZE, offset]
+    cur.execute(data_sql, tuple(data_params))
     contacts = cur.fetchall()
     conn.close()
 
     return render_template(
         "contacts.html",
         contacts=contacts,
-        request=request,
-        today=date.today().isoformat(),
-        lead_types=LEAD_TYPES,
-        pipeline_stages=PIPELINE_STAGES,
-        priorities=PRIORITIES,
-        sources=SOURCES,
-        active_page="contacts",
+        active_tab=tab,
+        search_query=search,
+        page=page,
+        total_pages=total_pages,
+        page_size=PAGE_SIZE,
+        total_rows=total_rows,
+        lead_types=lead_types,
+        pipeline_stages=pipeline_stages,
+        priorities=priorities,
+        sources=sources,
+        today=today,
     )
-
-def parse_int_or_none(value):
-    value = (value or "").strip()
-    if not value:
-        return None
-    try:
-        return int(value)
-    except ValueError:
-        return None
-
-
-def parse_follow_up_time_from_form(prefix: str = "next_follow_up_"):
-    """
-    Reads hour/minute/ampm from the form and returns a 24-hour "HH:MM" string or None.
-    Prefix is for field names like next_follow_up_hour, next_follow_up_minute, next_follow_up_ampm.
-    """
-    hour_raw = (request.form.get(prefix + "hour") or "").strip()
-    minute = (request.form.get(prefix + "minute") or "").strip()
-    ampm = (request.form.get(prefix + "ampm") or "").strip().upper()
-
-    if not hour_raw or not minute or ampm not in ("AM", "PM"):
-        return None
-
-    try:
-        hour_12 = int(hour_raw)
-        if hour_12 < 1 or hour_12 > 12:
-            return None
-    except ValueError:
-        return None
-
-    if ampm == "AM":
-        hour_24 = 0 if hour_12 == 12 else hour_12
-    else:
-        hour_24 = 12 if hour_12 == 12 else hour_12 + 12
-
-    return f"{hour_24:02d}:{minute}"
-
 
 @app.route("/add", methods=["POST"])
 @login_required
@@ -3958,6 +3986,10 @@ try:
     init_db()
 except Exception as e:
     print("init_db() on import failed:", e)
+
+
+import os  # near the top with other imports
+
 
 if __name__ == "__main__":
     init_db()
