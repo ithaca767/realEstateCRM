@@ -3979,9 +3979,8 @@ def normalize_phone_digits(phone: str) -> str:
 @app.route("/api/listing-checklist/<int:item_id>/update", methods=["POST"])
 @login_required
 def update_listing_checklist_item(item_id):
-    is_complete = request.form.get("is_complete") == "on"
-    due_date_raw = (request.form.get("due_date") or "").strip()
-    due_date = due_date_raw if due_date_raw else None
+    is_complete = request.form.get("is_complete") == "true"
+    due_date = request.form.get("due_date") or None
 
     completed_at = datetime.utcnow() if is_complete else None
 
@@ -4001,7 +4000,7 @@ def update_listing_checklist_item(item_id):
     conn.commit()
     conn.close()
 
-    return redirect(url_for("seller_profile", contact_id=request.form.get("contact_id")))
+    return jsonify(success=True)
 
 @app.route("/api/add_interaction", methods=["POST"])
 @login_required
