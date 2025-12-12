@@ -314,7 +314,7 @@
           {% for item in checklist_items %}
             <div class="list-group-item">
               <div class="row g-2 align-items-center">
-            
+        
                 <div class="col-12 col-md-6">
                   <div class="form-check">
                     <input
@@ -329,7 +329,7 @@
                     </label>
                   </div>
                 </div>
-            
+        
                 <div class="col-8 col-md-4">
                   <input
                     type="date"
@@ -338,31 +338,16 @@
                     value="{% if item.due_date %}{{ item.due_date }}{% endif %}"
                   >
                 </div>
-            
+        
                 <div class="col-4 col-md-2 text-end">
                   <span class="text-muted small save-status" id="status-{{ item.id }}"></span>
                 </div>
-            
+        
               </div>
             </div>
-
-              <div class="col-8 col-md-4">
-                <input
-                  type="date"
-                  class="form-control form-control-sm"
-                  name="due_date"
-                  value="{% if item.due_date %}{{ item.due_date }}{% endif %}"
-                >
-              </div>
-
-              <div class="col-4 col-md-2 text-end">
-                <button type="submit" class="btn btn-sm btn-outline-secondary">
-                  Save
-                </button>
-              </div>
-          </div>
           {% endfor %}
         </div>
+
       </div>
 
       <div class="modal-footer">
@@ -392,6 +377,45 @@ document.addEventListener("DOMContentLoaded", function () {
     wireSelect("seller_attorney_select", "seller_attorney_name", "seller_attorney_phone", "seller_attorney_email");
     wireSelect("seller_lender_select", "seller_lender_name", "seller_lender_phone", "seller_lender_email");
     wireSelect("seller_inspector_select", "seller_inspector_name", "seller_inspector_phone", "seller_inspector_email");
+});
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  function updateChecklistItem(itemId, isComplete, dueDate) {
+    fetch(`/api/listing-checklist/${itemId}/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        is_complete: isComplete ? "true" : "false",
+        due_date: dueDate || "",
+      }),
+    })
+    .then(r => r.json())
+    .then(() => {
+      const status = document.getElementById(`status-${itemId}`);
+      if (status) {
+        status.textContent = "Saved";
+        setTimeout(() => status.textContent = "", 1200);
+      }
+    });
+  }
+
+  document.querySelectorAll(".checklist-checkbox").forEach(cb => {
+    cb.addEventListener("change", function () {
+      const itemId = this.dataset.itemId;
+      const dateInput = document.querySelector(`.checklist-date[data-item-id="${itemId}"]`);
+      updateChecklistItem(itemId, this.checked, dateInput ? dateInput.value : "");
+    });
+  });
+
+  document.querySelectorAll(".checklist-date").forEach(input => {
+    input.addEventListener("change", function () {
+      const itemId = this.dataset.itemId;
+      const checkbox = document.querySelector(`.checklist-checkbox[data-item-id="${itemId}"]`);
+      updateChecklistItem(itemId, checkbox ? checkbox.checked : false, this.value);
+    });
+  });
 });
 </script>
 
