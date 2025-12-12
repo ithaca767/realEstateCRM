@@ -2,7 +2,7 @@ import os
 import re
 from functools import wraps
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time
 from math import ceil
 
 from dotenv import load_dotenv
@@ -83,6 +83,25 @@ def get_db():
         raise RuntimeError("DATABASE_URL is not set")
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
+
+def parse_int_or_none(value):
+    """
+    Convert a form field to an int, or return None if blank/invalid.
+    """
+    if value is None:
+        return None
+
+    s = str(value).strip()
+    if not s:
+        return None
+
+    # Optional: support "500,000" style input
+    s = s.replace(",", "")
+
+    try:
+        return int(s)
+    except ValueError:
+        return None
 
 def get_professionals_for_dropdown(category=None):
     """
@@ -2455,7 +2474,7 @@ def contacts():
     except ValueError:
         page = 1
 
-    PAGE_SIZE = 50
+    PAGE_SIZE = 10
     offset = (page - 1) * PAGE_SIZE
 
     # Build WHERE clause parts
@@ -2558,6 +2577,30 @@ def contacts():
         sources=sources,
         today=today,
     )
+
+def parse_follow_up_time_from_form():
+    hour = request.form.get("next_follow_up_hour")
+    minute = request.form.get("next_follow_up_minute")
+    ampm = request.form.get("next_follow_up_ampm")
+
+    # If any field is missing or blank, return None
+    if not hour or not minute or not ampm:
+        return None
+
+    try:
+        hour = int(hour)
+        minute = int(minute)
+
+        # Convert to 24-hour time
+        if ampm == "PM" and hour != 12:
+            hour += 12
+        elif ampm == "AM" and hour == 12:
+            hour = 0
+
+        return time(hour, minute)
+    except:
+        return None
+
 
 @app.route("/add", methods=["POST"])
 @login_required
@@ -3535,9 +3578,6 @@ def seller_profile(contact_id):
 @app.route("/followups")
 @login_required
 def followups():
-    """
-    Dashboard view of overdue, today's, and upcoming follow-ups.
-    """
     today_str = date.today().isoformat()
 
     conn = get_db()
@@ -3578,48 +3618,12 @@ def followups():
         else:
             upcoming.append(row)
 
-    # Build calendar feed URL, include key if ICS_TOKEN is set
-    calendar_url = url_for("followups_ics")
-    if ICS_TOKEN:
-        calendar_url = calendar_url + f"?key={ICS_TOKEN}"
-
-    # After any POST handling: load subject properties for display
-    if buyer_profile:
-        cur.execute(
-            """
-            SELECT id, address_line, city, state, postal_code, offer_status
-            FROM buyer_properties
-            WHERE buyer_profile_id = %s
-            ORDER BY created_at DESC
-            """,
-            (buyer_profile["id"],),
-        )
-        subject_properties = cur.fetchall()
-    else:
-        subject_properties = []
-
-    # DEBUG
-    print("DEBUG buyer_profile for contact", contact_id, "=>", buyer_profile)
-
-    return render_template(
-        "buyer_profile.html",
-        # contact info (multiple aliases)
-        contact=contact,
-        c=contact,
-        # buyer profile info (aliases)
-        buyer_profile=buyer_profile,
-        buyer=buyer_profile,
-        subject_properties=subject_properties,
-        contact_id=contact_id,
-    )
-    
     return render_template(
         "followups.html",
         overdue=overdue,
         today_list=today_list,
         upcoming=upcoming,
         today=today_str,
-        calendar_url=calendar_url,
         active_page="followups",
     )
 
