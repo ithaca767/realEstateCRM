@@ -3654,7 +3654,7 @@ def seller_profile(contact_id):
         sp=sp,
         profile=sp,
         contact_id=contact_id,
-        today=date.today().isoformat(),
+        today=date.today(),
         active_page="contacts",
         pros_attorneys=pros_attorneys,
         pros_lenders=pros_lenders,
