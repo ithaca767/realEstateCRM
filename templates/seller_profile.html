@@ -4,16 +4,19 @@
 
 {% block content %}
 
-<div class="bg-white rounded shadow-sm p-3 mb-3">
-  <div class="mb-2">
+<div class="rounded shadow-sm mb-3">
+
+  <!-- Header strip -->
+  <div class="bg-light px-3 py-2 border-bottom rounded-top">
     <h5 class="page-title mb-0">Seller Profile</h5>
-    <div class="text-muted">
+    <div class="text-muted small">
       {{ contact_name }}
       {% if contact_email %} · {{ contact_email }}{% endif %}
       {% if contact_phone %} · {{ contact_phone }}{% endif %}
     </div>
   </div>
 
+<!-- Tabs live below, NOT inside the gray header -->
 <!-- Tabs nav (placed BEFORE the form) -->
 <ul class="nav nav-tabs" id="sellerProfileTabs" role="tablist">
   <li class="nav-item" role="presentation">
