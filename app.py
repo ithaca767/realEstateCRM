@@ -2892,7 +2892,7 @@ def edit_contact(contact_id):
     next_time_hour = None
     next_time_minute = None
     next_time_ampm = None
-    t_str = contact.get("next_follow_up_time")
+    t_str = contact.get("next_follow_up_time") if contact else None
     if t_str:
         try:
             hh, mm = t_str.split(":")
@@ -2965,7 +2965,7 @@ def edit_contact(contact_id):
 
     return render_template(
         "edit_contact.html",
-        c=c,
+        c=contact,
         special_dates=special_dates,
         open_interactions=open_interactions,
         completed_interactions=completed_interactions,
