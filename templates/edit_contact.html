@@ -301,11 +301,12 @@
                                     <td>{{ i["time_of_day"] or "" }}</td>
                                     <td>{{ i["kind"] }}</td>
                                     <td>{{ i["notes"] or "" }}</td>
-                                    <td class="text-end">
+                                    <td>
+                                      <div class="d-flex justify-content-end align-items-center gap-1">
                                         <form
                                           action="{{ url_for('complete_interaction', interaction_id=i['id']) }}"
                                           method="post"
-                                          class="d-inline"
+                                          class="m-0"
                                         >
                                             <button type="submit" class="btn btn-sm btn-success">
                                                 Complete
@@ -322,6 +323,7 @@
                                            onclick="return confirm('Delete this interaction?');">
                                             Delete
                                         </a>
+                                      </div>  
                                     </td>
                                 </tr>
                             {% endfor %}
@@ -373,7 +375,8 @@
                                         <td>{{ i["kind"] }}</td>
                                         <td>{{ i["notes"] or "" }}</td>  <!-- no strikethrough -->
                                         <td>{{ i["completed_at"] or "" }}</td>
-                                        <td class="text-end">
+                                        <td>
+                                          <div class="d-flex justify-content-end align-items-center gap-1">
                                             <a href="{{ url_for('edit_interaction', interaction_id=i['id']) }}"
                                                class="btn btn-sm btn-outline-secondary">
                                                 Edit
@@ -384,6 +387,7 @@
                                                onclick="return confirm('Delete this interaction?');">
                                                 Delete
                                             </a>
+                                          </div>
                                         </td>
                                     </tr>
                                 {% endfor %}
