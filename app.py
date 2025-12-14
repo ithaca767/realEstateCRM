@@ -2940,6 +2940,16 @@ def edit_contact(contact_id):
     )
     completed_interactions = cur.fetchall()
 
+    #Load Special Dates
+    cur.execute("""
+        SELECT id, label, special_date, is_recurring, notes
+        FROM contact_special_dates
+        WHERE contact_id = %s
+        ORDER BY special_date ASC, label ASC
+        """, (contact_id,))
+    special_dates = cur.fetchall()
+
+
     # Associated contacts for this contact
     cur.execute(
         """
@@ -2970,6 +2980,10 @@ def edit_contact(contact_id):
         active_page="contacts",
         has_buyer_profile=has_buyer_profile,
         has_seller_profile=has_seller_profile,
+            "edit_contact.html",
+        c=c,
+        special_dates=special_dates,
+
     )
 
 @app.route("/add_interaction/<int:contact_id>", methods=["POST"])
@@ -4001,6 +4015,53 @@ def update_listing_checklist_item(item_id):
     conn.close()
 
     return jsonify(success=True)
+
+@app.route("/contact/<int:contact_id>/special-dates/add", methods=["POST"])
+@login_required
+def add_special_date(contact_id):
+    label = (request.form.get("label") or "").strip()
+    special_date = (request.form.get("special_date") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+    is_recurring = True if request.form.get("is_recurring") == "on" else False
+
+    if not label or not special_date:
+        flash("Please provide a label and a date.", "warning")
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO contact_special_dates (contact_id, label, special_date, is_recurring, notes)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (contact_id, label, special_date, is_recurring, notes))
+    conn.commit()
+    conn.close()
+
+    flash("Special date saved.", "success")
+    return redirect(url_for("edit_contact", contact_id=contact_id))
+
+
+@app.route("/special-dates/<int:special_date_id>/delete", methods=["POST"])
+@login_required
+def delete_special_date(special_date_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT contact_id FROM contact_special_dates WHERE id = %s", (special_date_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        flash("Special date not found.", "warning")
+        return redirect(url_for("contacts"))
+
+    contact_id = row["contact_id"] if isinstance(row, dict) else row[0]
+
+    cur.execute("DELETE FROM contact_special_dates WHERE id = %s", (special_date_id,))
+    conn.commit()
+    conn.close()
+
+    flash("Special date deleted.", "success")
+    return redirect(url_for("edit_contact", contact_id=contact_id))
 
 @app.route("/api/add_interaction", methods=["POST"])
 @login_required
