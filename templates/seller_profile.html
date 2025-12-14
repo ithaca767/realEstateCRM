@@ -4,17 +4,18 @@
 
 {% block content %}
 
-<div class="mb-3">
-  <h5 class="page-title mb-0">Seller Profile</h5>
-  <div class="text-muted">
-    {{ contact_name }}
-    {% if contact_email %} · {{ contact_email }}{% endif %}
-    {% if contact_phone %} · {{ contact_phone }}{% endif %}
+<div class="bg-white rounded shadow-sm p-3 mb-3">
+  <div class="mb-2">
+    <h5 class="page-title mb-0">Seller Profile</h5>
+    <div class="text-muted">
+      {{ contact_name }}
+      {% if contact_email %} · {{ contact_email }}{% endif %}
+      {% if contact_phone %} · {{ contact_phone }}{% endif %}
+    </div>
   </div>
-</div>
 
 <!-- Tabs nav (placed BEFORE the form) -->
-<ul class="nav nav-tabs mb-3" id="sellerProfileTabs" role="tablist">
+<ul class="nav nav-tabs" id="sellerProfileTabs" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link active" id="tab-overview" data-bs-toggle="tab" data-bs-target="#pane-overview" type="button" role="tab">
       Overview
