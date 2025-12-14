@@ -2963,25 +2963,25 @@ def edit_contact(contact_id):
 
     conn.close()
 
-return render_template(
-    "edit_contact.html",
-    c=c,
-    special_dates=special_dates,
-    open_interactions=open_interactions,
-    completed_interactions=completed_interactions,
-    related_contacts=related_contacts,
-    lead_types=LEAD_TYPES,
-    pipeline_stages=PIPELINE_STAGES,
-    priorities=PRIORITIES,
-    sources=SOURCES,
-    today=date.today().isoformat(),
-    next_time_hour=next_time_hour,
-    next_time_minute=next_time_minute,
-    next_time_ampm=next_time_ampm,
-    active_page="contacts",
-    has_buyer_profile=has_buyer_profile,
-    has_seller_profile=has_seller_profile,
-)
+    return render_template(
+        "edit_contact.html",
+        c=c,
+        special_dates=special_dates,
+        open_interactions=open_interactions,
+        completed_interactions=completed_interactions,
+        related_contacts=related_contacts,
+        lead_types=LEAD_TYPES,
+        pipeline_stages=PIPELINE_STAGES,
+        priorities=PRIORITIES,
+        sources=SOURCES,
+        today=date.today().isoformat(),
+        next_time_hour=next_time_hour,
+        next_time_minute=next_time_minute,
+        next_time_ampm=next_time_ampm,
+        active_page="contacts",
+        has_buyer_profile=has_buyer_profile,
+        has_seller_profile=has_seller_profile,
+    )
 
 @app.route("/add_interaction/<int:contact_id>", methods=["POST"])
 @login_required
