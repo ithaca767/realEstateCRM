@@ -3624,7 +3624,7 @@ def seller_profile(contact_id):
 
         conn.commit()
         conn.close()
-        return redirect(url_for("edit_contact", contact_id=contact_id))
+        return redirect(url_for("seller_profile", contact_id=contact_id))
 
     # GET – load existing seller profile (if any)
     cur.execute(
