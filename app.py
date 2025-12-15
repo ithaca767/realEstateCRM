@@ -3950,10 +3950,13 @@ def openhouse_public_signin(token):
         notes = (request.form.get("notes") or "").strip() or None
         consent_to_contact = truthy_checkbox(request.form.get("consent_to_contact"))
 
-        if working_with_agent_bool is True and not agent_name:
-            flash("If you are working with an agent, please enter the agent name.", "danger")
-            return render_template("public/openhouse_signin.html", openhouse=oh)
-
+if working_with_agent_bool is True and not agent_name:
+    flash("If you are working with an agent, please enter the agent name.", "danger")
+    return render_template(
+        "public/openhouse_signin.html",
+        openhouse=oh,
+        hide_nav=True
+    )
         # Match or create contact (email first, then phone)
         contact_id = None
 
@@ -4009,11 +4012,14 @@ def openhouse_public_signin(token):
         flash("Thanks. You are signed in.", "success")
         return redirect(url_for("openhouse_public_signin", token=token))
 
-    return render_template("public/openhouse_signin.html", openhouse=oh)
+    return render_template(
+        "public/openhouse_signin.html", 
+        openhouse=oh, 
+        hide_nav=True)
 
 @app.route("/openhouse-privacy")
 def openhouse_privacy():
-    return render_template("public/openhouse_privacy.html")
+    return render_template("public/openhouse_privacy.html", hide_nav=True)
 
 @app.route("/openhouses/<int:open_house_id>/export.csv")
 @login_required
