@@ -17,23 +17,28 @@
 
   <hr style="border-top: 1px solid rgba(153,153,153,0.5);">
 
-  <h3 class="mt-3 mb-1">Open House Sign In</h3>
-  <div class="text-muted mb-3">
-    {{ openhouse["address_line1"] }},
-    {{ openhouse["city"] }},
-    {{ openhouse["state"] }} {{ openhouse["zip"] }}
+<div class="d-flex align-items-start gap-3 mb-3">
+
+  <div>
+    <h3 class="mb-1">Open House Sign In</h3>
+    <div class="text-muted">
+      {{ openhouse["address_line1"] }},
+      {{ openhouse["city"] }},
+      {{ openhouse["state"] }} {{ openhouse["zip"] }}
+    </div>
   </div>
 
-    {% if openhouse["house_photo_url"] %}
-      <div class="mb-3">
-        <img
-          src="{{ openhouse["house_photo_url"] }}"
-          alt="House photo"
-          style="max-width: 200px; width: 100%; height: auto;"
-          class="rounded"
-        >
-      </div>
-    {% endif %}
+  {% if openhouse["house_photo_url"] %}
+    <img
+      src="{{ openhouse["house_photo_url"] }}"
+      alt="House photo"
+      style="width: 200px; height: auto;"
+      class="rounded ms-auto"
+    >
+  {% endif %}
+
+</div>
+
 <div
   style="
     background: rgba(153,153,153,0.12);
