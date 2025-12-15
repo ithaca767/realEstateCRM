@@ -18,17 +18,10 @@
         background-position: center;
         background-attachment: fixed;
       }
-      body.openhouse-public {
-        background: #ffffff;
-      }
-
-      body.openhouse-public {
-        background: #ffffff !important;
+        body.openhouse-public {
+         background: #ffffff !important;
       }
     
-      body.openhouse-public .navbar {
-        display: none;
-      }
       .content-panel {
         background-color: rgba(245, 246, 248, 0.96);
         border-radius: 12px;
@@ -58,7 +51,9 @@
 </head>
 <body class="{% block body_class %}{% endblock %}">
 
-{% if block('body_class') != 'openhouse-public' %}
+{% set hide_nav = hide_nav|default(false) %}
+
+{% if not hide_nav %}
 
 <nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm border-bottom sticky-top">
   <div class="container-fluid py-2" style="font-size: 0.9rem;">
