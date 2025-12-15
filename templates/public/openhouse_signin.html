@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Open House Sign In{% endblock %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 720px;">
+  <div class="content-panel">
+
+  <div class="mb-3">
+    <h2 class="mb-0">Open House Sign In</h2>
+    <div class="text-muted">
+       {{ openhouse["address_line1"] }}, {{ openhouse["city"] }}, {{ openhouse["state"] }} {{ openhouse["zip"] }}
+    </div>
+  </div>
+
+    {% if openhouse["house_photo_url"] %}
+      <div class="mb-3">
+        <img src="{{ openhouse["house_photo_url"] }}" alt="House photo" class="img-fluid rounded">
+      </div>
+    {% endif %}
+
+  <form method="POST">
+    <div class="row g-2">
+      <div class="col-md-6">
+        <label class="form-label">First Name</label>
+        <input name="first_name" class="form-control" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Last Name</label>
+        <input name="last_name" class="form-control" required>
+      </div>
+    </div>
+
+    <div class="row g-2 mt-1">
+      <div class="col-md-6">
+        <label class="form-label">Email</label>
+        <input name="email" type="email" class="form-control">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Phone</label>
+        <input name="phone" class="form-control">
+      </div>
+    </div>
+
+    <div class="mt-3">
+      <label class="form-label">Are you currently working with an agent?</label>
+      <select name="working_with_agent" id="working_with_agent" class="form-select">
+        <option value="">Select</option>
+        <option value="no">No</option>
+        <option value="yes">Yes</option>
+      </select>
+    </div>
+
+    <div id="agent_fields" class="border rounded p-3 mt-2" style="display:none;">
+      <div class="row g-2">
+        <div class="col-md-6">
+          <label class="form-label">Agent Name</label>
+          <input name="agent_name" class="form-control">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Agent Phone</label>
+          <input name="agent_phone" class="form-control">
+        </div>
+      </div>
+      <div class="mt-2">
+        <label class="form-label">Agent Brokerage</label>
+        <input name="agent_brokerage" class="form-control">
+      </div>
+    </div>
+
+    <!-- Optional bullets must be below the agent question -->
+    <div class="mt-3">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="looking_to_buy" id="looking_to_buy">
+        <label class="form-check-label" for="looking_to_buy">I am looking to buy</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="looking_to_sell" id="looking_to_sell">
+        <label class="form-check-label" for="looking_to_sell">I am looking to sell</label>
+      </div>
+
+      <div class="mt-2">
+        <label class="form-label">Timeline</label>
+        <select name="timeline" class="form-select">
+          <option value="">Select</option>
+          <option value="0-3 months">0-3 months</option>
+          <option value="3-6 months">3-6 months</option>
+          <option value="6-12 months">6-12 months</option>
+          <option value="12+ months">12+ months</option>
+        </select>
+      </div>
+
+      <div class="mt-2">
+        <label class="form-label">Notes</label>
+        <textarea name="notes" class="form-control" rows="3"></textarea>
+      </div>
+    </div>
+
+    <div class="form-check mt-3">
+      <input class="form-check-input" type="checkbox" name="consent_to_contact" id="consent_to_contact" checked>
+      <label class="form-check-label" for="consent_to_contact">
+        It is OK to contact me about this property and similar opportunities.
+      </label>
+    </div>
+
+    <button class="btn btn-success mt-3 w-100" type="submit">Sign In</button>
+  </form>
+</div>
+</div>
+
+<script>
+  const sel = document.getElementById("working_with_agent");
+  const box = document.getElementById("agent_fields");
+
+  function toggleAgentFields() {
+    if (sel.value === "yes") {
+      box.style.display = "block";
+    } else {
+      box.style.display = "none";
+    }
+  }
+
+  sel.addEventListener("change", toggleAgentFields);
+  toggleAgentFields();
+</script>
+{% endblock %}

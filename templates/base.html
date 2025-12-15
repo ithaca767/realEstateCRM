@@ -18,6 +18,13 @@
         background-position: center;
         background-attachment: fixed;
       }
+
+      .content-panel {
+        background-color: rgba(245, 246, 248, 0.96);
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      }
     
       .contacts-table,
       .contacts-table thead th,
@@ -94,6 +101,9 @@
              class="nav-link {% if active_page == 'followups' %}fw-semibold{% endif %}">
             Follow Up Dashboard
           </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('openhouse_list') }}">Open Houses</a>
         </li>
 
         <li class="nav-item">

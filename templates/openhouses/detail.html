@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Open House{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="content-panel">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+      <h2 class="mb-0">{{ openhouse["address_line1"] }}</h2>
+      <div class="text-muted">{{ openhouse["city"] }}, {{ openhouse["state"] }} {{ openhouse["zip"] }}</div>
+      <div class="text-muted small">Start: {{ openhouse["start_datetime"] }} | End: {{ openhouse["end_datetime"] }}</div>
+    </div>
+    <div class="text-end">
+      <a class="btn btn-outline-secondary" href="{{ url_for('openhouse_list') }}">Back</a>
+      <a class="btn btn-outline-success" href="{{ url_for('openhouse_export_csv', open_house_id=openhouse['id']) }}">Export CSV</a>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="fw-bold">Public Sign-In Link</div>
+      <div class="small">
+        <a href="{{ url_for('openhouse_public_signin', token=openhouse['public_token'], _external=True) }}" target="_blank">
+          {{ url_for('openhouse_public_signin', token=openhouse['public_token'], _external=True) }}
+        </a>
+      </div>
+      <div class="text-muted small mt-2">
+        Later we can add a print page and QR code. For now, open this link on your iPad.
+      </div>
+    </div>
+  </div>
+
+  <h5 class="mb-2">Sign-Ins</h5>
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Working with agent</th>
+        <th>Agent</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in signins %}
+        <tr>
+          <td>{{ s["submitted_at"] }}</td>
+          <td>{{ s["first_name"] }} {{ s["last_name"] }}</td>
+          <td>{{ s["email"] }}</td>
+          <td>{{ s["phone"] }}</td>
+          <td>
+            {% if s["working_with_agent"] is sameas true %}Yes{% elif s["working_with_agent"] is sameas false %}No{% else %}Unknown{% endif %}
+          </td>
+          <td>{{ s["agent_name"] }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+
+{% endblock %}

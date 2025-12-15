@@ -1,5 +1,9 @@
 import os
 import re
+import secrets
+import csv
+import io
+
 from functools import wraps
 
 from datetime import date, datetime, timedelta, time
@@ -19,6 +23,7 @@ from flask import (
     Response,
     session,
     flash,
+    abort,
 )
 from flask_login import login_required
 
@@ -83,6 +88,18 @@ def get_db():
         raise RuntimeError("DATABASE_URL is not set")
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
+
+def generate_public_token() -> str:
+    return secrets.token_urlsafe(24)
+
+def truthy_checkbox(value):
+    return value in ("on", "true", "1", "yes")
+
+def normalize_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+def normalize_phone(phone: str) -> str:
+    return (phone or "").strip()
 
 def parse_int_or_none(value):
     """
@@ -3803,6 +3820,250 @@ def edit_interaction(interaction_id):
 
     conn.close()
     return render_template("edit_interaction.html", interaction=interaction)
+
+@app.route("/openhouses")
+@login_required
+def openhouse_list():
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, address_line1, city, state, zip, start_datetime, end_datetime, public_token
+        FROM open_houses
+        ORDER BY start_datetime DESC
+    """)
+    rows = cur.fetchall()
+    return render_template("openhouses/list.html", openhouses=rows)
+
+
+@app.route("/openhouses/new", methods=["GET", "POST"])
+@login_required
+def openhouse_new():
+    conn = get_db()
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        address_line1 = (request.form.get("address_line1") or "").strip()
+        city = (request.form.get("city") or "").strip()
+        state = (request.form.get("state") or "NJ").strip()
+        zip_code = (request.form.get("zip") or "").strip()
+
+        start_dt = request.form.get("start_datetime")
+        end_dt = request.form.get("end_datetime")
+
+        house_photo_url = (request.form.get("house_photo_url") or "").strip() or None
+        notes = (request.form.get("notes") or "").strip() or None
+
+        if not (address_line1 and city and state and zip_code and start_dt and end_dt):
+            flash("Please fill out address, date/time, and required fields.", "danger")
+            return render_template("openhouses/new.html")
+
+        token = generate_public_token()
+
+        cur.execute("""
+            INSERT INTO open_houses
+              (created_by_user_id, address_line1, city, state, zip, start_datetime, end_datetime, public_token, house_photo_url, notes)
+            VALUES
+              (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (1, address_line1, city, state, zip_code, start_dt, end_dt, token, house_photo_url, notes))
+
+        open_house_id = cur.fetchone()["id"] if isinstance(cur.fetchone, object) else None
+
+        # Safer: fetch id properly depending on cursor type
+        conn.commit()
+
+        # Re-fetch the inserted id the reliable way for RealDictCursor
+        cur.execute("SELECT id FROM open_houses WHERE public_token = %s", (token,))
+        open_house_id = cur.fetchone()["id"]
+
+        flash("Open house created.", "success")
+        return redirect(url_for("openhouse_detail", open_house_id=open_house_id))
+
+    return render_template("openhouses/new.html")
+
+
+@app.route("/openhouses/<int:open_house_id>")
+@login_required
+def openhouse_detail(open_house_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, address_line1, city, state, zip, start_datetime, end_datetime, public_token, house_photo_url, notes
+        FROM open_houses
+        WHERE id = %s
+    """, (open_house_id,))
+    oh = cur.fetchone()
+    if not oh:
+        abort(404)
+
+    cur.execute("""
+        SELECT id, first_name, last_name, email, phone, working_with_agent, agent_name, submitted_at
+        FROM open_house_signins
+        WHERE open_house_id = %s
+        ORDER BY submitted_at DESC
+    """, (open_house_id,))
+    signins = cur.fetchall()
+
+    return render_template("openhouses/detail.html", openhouse=oh, signins=signins)
+
+
+@app.route("/openhouse/<token>", methods=["GET", "POST"])
+def openhouse_public_signin(token):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, address_line1, city, state, zip, start_datetime, end_datetime, house_photo_url
+        FROM open_houses
+        WHERE public_token = %s
+    """, (token,))
+    oh = cur.fetchone()
+    if not oh:
+        abort(404)
+
+    open_house_id = oh["id"] if isinstance(oh, dict) else oh[0]
+
+    if request.method == "POST":
+        first_name = (request.form.get("first_name") or "").strip()
+        last_name = (request.form.get("last_name") or "").strip()
+        email = normalize_email(request.form.get("email"))
+        phone = normalize_phone(request.form.get("phone"))
+
+        working_with_agent = request.form.get("working_with_agent")
+        if working_with_agent == "yes":
+            working_with_agent_bool = True
+        elif working_with_agent == "no":
+            working_with_agent_bool = False
+        else:
+            working_with_agent_bool = None
+
+        agent_name = (request.form.get("agent_name") or "").strip() or None
+        agent_phone = (request.form.get("agent_phone") or "").strip() or None
+        agent_brokerage = (request.form.get("agent_brokerage") or "").strip() or None
+
+        # Optional bullets (must remain below agent question in template)
+        looking_to_buy = truthy_checkbox(request.form.get("looking_to_buy"))
+        looking_to_sell = truthy_checkbox(request.form.get("looking_to_sell"))
+        timeline = (request.form.get("timeline") or "").strip() or None
+        notes = (request.form.get("notes") or "").strip() or None
+        consent_to_contact = truthy_checkbox(request.form.get("consent_to_contact"))
+
+        if working_with_agent_bool is True and not agent_name:
+            flash("If you are working with an agent, please enter the agent name.", "danger")
+            return render_template("public/openhouse_signin.html", openhouse=oh)
+
+        # Match or create contact (email first, then phone)
+        contact_id = None
+
+        if email:
+            cur.execute("SELECT id FROM contacts WHERE LOWER(email) = %s LIMIT 1", (email,))
+            r = cur.fetchone()
+            if r:
+                contact_id = r["id"] if isinstance(r, dict) else r[0]
+
+        if not contact_id and phone:
+            cur.execute("SELECT id FROM contacts WHERE phone = %s LIMIT 1", (phone,))
+            r = cur.fetchone()
+            if r:
+                contact_id = r["id"] if isinstance(r, dict) else r[0]
+
+        if contact_id:
+            cur.execute("""
+                UPDATE contacts
+                SET working_with_agent = %s,
+                    agent_name = %s,
+                    agent_phone = %s,
+                    agent_brokerage = %s,
+                    lead_source = COALESCE(lead_source, 'Open House'),
+                    last_open_house_id = %s
+                WHERE id = %s
+            """, (working_with_agent_bool, agent_name, agent_phone, agent_brokerage, open_house_id, contact_id))
+        else:
+            full_name = f"{first_name} {last_name}".strip()
+            cur.execute("""
+                INSERT INTO contacts
+                  (name, first_name, last_name, email, phone, working_with_agent, agent_name, agent_phone, agent_brokerage, lead_source, last_open_house_id)
+                VALUES
+                  (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (full_name, first_name, last_name, email, phone, working_with_agent_bool, agent_name, agent_phone, agent_brokerage, "Open House", open_house_id))
+            r = cur.fetchone()
+            contact_id = r["id"] if isinstance(r, dict) else r[0]
+
+        cur.execute("""
+            INSERT INTO open_house_signins
+              (open_house_id, contact_id, first_name, last_name, email, phone,
+               working_with_agent, agent_name, agent_phone, agent_brokerage,
+               looking_to_buy, looking_to_sell, timeline, notes, consent_to_contact)
+            VALUES
+              (%s, %s, %s, %s, %s, %s,
+               %s, %s, %s, %s,
+               %s, %s, %s, %s, %s)
+        """, (open_house_id, contact_id, first_name, last_name, email, phone,
+              working_with_agent_bool, agent_name, agent_phone, agent_brokerage,
+              looking_to_buy, looking_to_sell, timeline, notes, consent_to_contact))
+
+        conn.commit()
+        flash("Thanks. You are signed in.", "success")
+        return redirect(url_for("openhouse_public_signin", token=token))
+
+    return render_template("public/openhouse_signin.html", openhouse=oh)
+
+
+@app.route("/openhouses/<int:open_house_id>/export.csv")
+@login_required
+def openhouse_export_csv(open_house_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id FROM open_houses WHERE id = %s", (open_house_id,))
+    if not cur.fetchone():
+        abort(404)
+
+    cur.execute("""
+        SELECT
+          submitted_at,
+          first_name, last_name, email, phone,
+          working_with_agent, agent_name, agent_phone, agent_brokerage,
+          looking_to_buy, looking_to_sell, timeline, notes, consent_to_contact
+        FROM open_house_signins
+        WHERE open_house_id = %s
+        ORDER BY submitted_at ASC
+    """, (open_house_id,))
+
+    rows = cur.fetchall()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow([
+        "submitted_at",
+        "first_name", "last_name", "email", "phone",
+        "working_with_agent", "agent_name", "agent_phone", "agent_brokerage",
+        "looking_to_buy", "looking_to_sell", "timeline", "notes", "consent_to_contact"
+    ])
+
+    for r in rows:
+        if isinstance(r, dict):
+            writer.writerow([
+                r["submitted_at"],
+                r["first_name"], r["last_name"], r["email"], r["phone"],
+                r["working_with_agent"], r["agent_name"], r["agent_phone"], r["agent_brokerage"],
+                r["looking_to_buy"], r["looking_to_sell"], r["timeline"], r["notes"], r["consent_to_contact"]
+            ])
+        else:
+            writer.writerow(list(r))
+
+    csv_data = output.getvalue()
+    output.close()
+
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=open_house_{open_house_id}_signins.csv"}
+    )
 
 @app.route("/api/reminders/due")
 @login_required
