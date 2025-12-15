@@ -4011,6 +4011,9 @@ def openhouse_public_signin(token):
 
     return render_template("public/openhouse_signin.html", openhouse=oh)
 
+@app.route("/openhouse-privacy")
+def openhouse_privacy():
+    return render_template("public/openhouse_privacy.html")
 
 @app.route("/openhouses/<int:open_house_id>/export.csv")
 @login_required
