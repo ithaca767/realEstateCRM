@@ -84,7 +84,12 @@
       <div class="row g-2">
         <div class="col-md-6">
           <label class="form-label">Agent Name</label>
-          <input name="agent_name" class="form-control">
+            <input
+              name="agent_name"
+              id="agent_name"
+              class="form-control"
+            >
+
         </div>
         <div class="col-md-6">
           <label class="form-label">Agent Phone</label>
@@ -145,12 +150,16 @@
 <script>
   const sel = document.getElementById("working_with_agent");
   const box = document.getElementById("agent_fields");
+  const agentName = document.getElementById("agent_name");
 
   function toggleAgentFields() {
     if (sel.value === "yes") {
       box.style.display = "block";
+      agentName.setAttribute("required", "required");
     } else {
       box.style.display = "none";
+      agentName.removeAttribute("required");
+      agentName.value = "";
     }
   }
 
