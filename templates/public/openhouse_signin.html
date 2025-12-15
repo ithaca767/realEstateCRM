@@ -11,7 +11,7 @@
     <img
       src="{{ url_for('static', filename='branding/openhouse-logo.webp') }}"
       alt="Heritage House Sotheby’s International Realty"
-      style="max-width: 500px; width: 100%; height: auto;"
+      style="max-width: 300px; width: 100%; height: auto;"
     >
   </div>
 
@@ -26,7 +26,12 @@
 
     {% if openhouse["house_photo_url"] %}
       <div class="mb-3">
-        <img src="{{ openhouse["house_photo_url"] }}" alt="House photo" class="img-fluid rounded">
+        <img
+          src="{{ openhouse["house_photo_url"] }}"
+          alt="House photo"
+          style="max-width: 200px; width: 100%; height: auto;"
+          class="rounded"
+        >
       </div>
     {% endif %}
 <div
