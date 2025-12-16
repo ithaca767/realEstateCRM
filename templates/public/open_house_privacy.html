@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Open House Privacy Notice{% endblock %}
+
+{% block content %}
+<div class="openhouse-page">
+  <div class="openhouse-container">
+
+    <!-- Same header block as sign-in sheet -->
+    <div class="openhouse-header">
+      <div class="openhouse-logo">
+        <img src="{{ url_for('static', filename='YOUR_LOGO_PATH_HERE') }}" alt="Sotheby's International Realty">
+      </div>
+    </div>
+
+    <!-- Same card/panel styling as sign-in -->
+    <div class="openhouse-card">
+      <h2 class="openhouse-title">Privacy Notice and Terms of Use</h2>
+      <div class="openhouse-policy">
+        <p><strong>Effective Date:</strong> 1/1/2025</p>
+
+        <p>
+          This Privacy Notice and Terms of Use (this “Notice”) applies to information collected through
+          open house sign-in sheets, digital forms, QR code forms, and related follow-up communications
+          used by Dennis Fotopoulos, a licensed New Jersey real estate professional and Broker Associate
+          affiliated with Heritage House Sotheby’s International Realty.
+        </p>
+
+        <p>
+          By signing in at an open house or submitting your information through a related form,
+          you acknowledge and agree to this Notice.
+        </p>
+
+        <h3>Information We Collect</h3>
+        <p>
+          When you sign in at an open house, we may collect information you provide such as your name,
+          email address, phone number, buying or selling timeframe, property interests, and any comments
+          you choose to share. For digital sign-ins, we may also collect basic technical information such
+          as date and time of entry and device type.
+        </p>
+
+        <h3>How We Use Your Information</h3>
+        <p>
+          We may use the information collected to verify attendance, provide information about the
+          property you viewed, follow up regarding your interest in buying, selling, or renting real
+          estate, share relevant listings or market updates, and comply with legal and professional
+          obligations. You may opt out of marketing communications at any time.
+        </p>
+
+        <h3>Sharing of Information</h3>
+        <p>
+          We do not sell your personal information. We may share information with Heritage House
+          Sotheby’s International Realty for brokerage and compliance purposes, with service providers
+          that support operations such as CRM and email delivery, and where required by law or to
+          protect rights and safety.
+        </p>
+
+        <h3>Data Retention and Security</h3>
+        <p>
+          We retain open house sign-in information only as long as reasonably necessary to fulfill the
+          purposes described in this Notice and to comply with legal and professional recordkeeping
+          requirements. We use reasonable administrative and technical safeguards designed to protect
+          your information.
+        </p>
+
+        <h3>No Obligation or Agency Relationship</h3>
+        <p>
+          Signing in at an open house does not create a client relationship, agency relationship, or
+          obligation on your part. Representation is established only through a separate written
+          agreement. If the property is currently listed with another real estate broker, any follow-up
+          communication is not intended to solicit that listing.
+        </p>
+
+        <h3>Children’s Privacy</h3>
+        <p>
+          Open houses and related sign-in forms are not intended for children under 13 years of age,
+          and we do not knowingly collect personal information from children.
+        </p>
+
+        <h3>Changes to This Notice</h3>
+        <p>
+          We may update this Notice from time to time. The Effective Date above reflects the most recent
+          revision.
+        </p>
+
+        <h3>Contact Information</h3>
+        <p>
+          <strong>Dennis Fotopoulos, Broker Associate</strong><br>
+          Heritage House Sotheby’s International Realty<br>
+          Email: dennis@liveinmonmouth.com<br>
+          Phone: O: +1 732.946.9200 | C: +1 732.673.9347<br>
+          Office Address: 38 Main Street, Holmdel, NJ 07733
+        </p>
+
+        <!-- 👆 END privacy policy text -->
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -28,3 +28,12 @@ body {
     text-align: center;
     color: #777;
 }
+/* Open House legal footer */
+.openhouse-footer-legal { margin-top: 14px; }
+.openhouse-legal-link { font-size: 14px; text-decoration: underline; }
+.openhouse-sothebys-disclosure {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0.85;
+}
