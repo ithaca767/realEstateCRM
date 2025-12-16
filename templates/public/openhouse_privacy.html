@@ -1,114 +1,123 @@
 {% extends "base.html" %}
+{% block body_class %}openhouse-public{% endblock %}
 {% block title %}Privacy Notice and Terms of Use{% endblock %}
 
 {% block content %}
-<div class="openhouse-page">
-  <div class="openhouse-container">
+<div class="container mt-4" style="max-width: 820px;">
 
-    <!-- Same header as sign-in sheet -->
-    <div class="openhouse-header">
-      <div class="openhouse-logo">
-        <img
-          src="{{ url_for('static', filename='branding/openhouse-logo.webp') }}"
-          alt="Sotheby's International Realty"
-        >
-      </div>
-    </div>
-
-    <!-- Same panel/card as sign-in sheet -->
-    <div class="openhouse-card">
-      <h2 class="openhouse-title">Open House Privacy Notice and Terms of Use</h2>
-
-      <div class="openhouse-policy">
-        <p class="mb-2"><strong>Effective Date:</strong> 1/1/2025</p>
-
-        <p class="mb-2">
-          This Privacy Notice and Terms of Use (this “Notice”) applies to information collected through open house sign-in sheets,
-          digital forms, and related follow-up communications used by Dennis Fotopoulos, a licensed New Jersey real estate professional
-          and Broker Associate affiliated with Heritage House Sotheby’s International Realty (collectively, “we,” “us,” or “our”).
-        </p>
-
-        <p class="mb-2">
-          This Notice applies only to information collected directly by Dennis Fotopoulos at open houses and related real estate events.
-          It does not apply to websites or systems operated by Heritage House Sotheby’s International Realty, Sotheby’s International Realty
-          Affiliates LLC, the local MLS, or other third parties.
-        </p>
-
-        <p class="mb-3">
-          By signing in at an open house or submitting your information through a related form, you acknowledge and agree to this Notice.
-        </p>
-
-        <h5 class="mt-3">Information We Collect</h5>
-        <p class="mb-2">
-          When you sign in at an open house, we may collect information you provide such as your name, email address, phone number,
-          current address, buying or selling timeframe, property interests, and any comments or questions you choose to share.
-          For digital sign-ins, we may also collect basic technical information such as date and time of entry and device type,
-          where applicable.
-        </p>
-
-        <h5 class="mt-3">How We Use Your Information</h5>
-        <p class="mb-2">
-          We may use the information collected to verify attendance at the open house, provide information about the property you viewed,
-          follow up regarding your interest in buying, selling, or renting real estate, share information about similar properties, market
-          updates, or real estate services that may be relevant to you, and comply with legal, regulatory, and professional obligations.
-        </p>
-        <p class="mb-2">
-          You may opt out of marketing communications at any time by contacting us directly or using any unsubscribe option provided.
-        </p>
-
-        <h5 class="mt-3">Sharing of Information</h5>
-        <p class="mb-2">
-          We do not sell your personal information.
-        </p>
-        <p class="mb-2">
-          We may share your information only in the following limited circumstances:
-        </p>
-        <ul class="mb-2">
-          <li>With Heritage House Sotheby’s International Realty for brokerage, compliance, and transaction-related purposes.</li>
-          <li>With cooperating brokers, attorneys, lenders, inspectors, title companies, or other service providers, but only if you request or initiate a real estate transaction.</li>
-          <li>With service providers who assist with systems such as data storage, CRM tools, and email delivery, solely to support business operations.</li>
-          <li>When required by law, court order, or governmental request, or to protect legal rights and safety.</li>
-        </ul>
-
-        <h5 class="mt-3">Data Retention and Security</h5>
-        <p class="mb-2">
-          We retain open house sign-in information only as long as reasonably necessary to fulfill the purposes described in this Notice
-          and to comply with legal and professional recordkeeping requirements.
-        </p>
-        <p class="mb-2">
-          We use reasonable administrative and technical safeguards designed to protect your information. However, no method of transmission
-          or storage is completely secure, so we cannot guarantee absolute security.
-        </p>
-
-        <h5 class="mt-3">Children’s Privacy</h5>
-        <p class="mb-2">
-          Open houses and related sign-in forms are not intended for children under 13 years of age, and we do not knowingly collect personal
-          information from children.
-        </p>
-
-        <h5 class="mt-3">No Obligation or Agency Relationship</h5>
-        <p class="mb-2">
-          Signing in at an open house does not create a client relationship, agency relationship, or obligation on your part. Representation
-          is established only through a separate written agreement. If the property is currently listed with another real estate broker, any
-          follow-up communication is not intended to solicit that listing.
-        </p>
-
-        <h5 class="mt-3">Changes to This Notice</h5>
-        <p class="mb-2">
-          We may update this Notice from time to time. The Effective Date above reflects the most recent revision.
-        </p>
-
-        <h5 class="mt-3">Contact Information</h5>
-        <p class="mb-0">
-          <strong>Dennis Fotopoulos, Broker Associate</strong><br>
-          Heritage House Sotheby’s International Realty<br>
-          Email: dennis@liveinmonmouth.com<br>
-          Phone: O: +1 732.946.9200 | C: +1 732.673.9347<br>
-          Office Address: 38 Main Street, Holmdel, NJ 07733
-        </p>
-      </div>
-    </div>
-
+  <!-- Branding -->
+  <div class="mb-3">
+    <img
+      src="{{ url_for('static', filename='branding/openhouse-logo.webp') }}"
+      alt="Heritage House Sotheby’s International Realty"
+      style="max-width: 300px; width: 100%; height: auto;"
+    >
   </div>
+
+  <hr style="border-top: 1px solid rgba(153,153,153,0.5);">
+
+  <div class="d-flex align-items-start gap-3 mb-3">
+    <div>
+      <h3 class="mb-1">Privacy Notice and Terms of Use</h3>
+      <div class="text-muted">Open House Sign In</div>
+    </div>
+  </div>
+
+  <div
+    style="
+      background: rgba(153,153,153,0.12);
+      border: 1px solid rgba(153,153,153,0.35);
+      border-radius: 12px;
+      padding: 24px;
+    "
+  >
+    <p class="mb-2"><strong>Effective Date:</strong> 1/1/2025</p>
+
+    <p class="mb-2">
+      This Privacy Notice and Terms of Use (this “Notice”) applies to information collected through open house sign-in sheets,
+      digital forms, and related follow-up communications used by Dennis Fotopoulos, a licensed New Jersey real estate professional
+      and Broker Associate affiliated with Heritage House Sotheby’s International Realty (collectively, “we,” “us,” or “our”).
+    </p>
+
+    <p class="mb-2">
+      This Notice applies only to information collected directly by Dennis Fotopoulos at open houses and related real estate events.
+      It does not apply to websites or systems operated by Heritage House Sotheby’s International Realty, Sotheby’s International Realty
+      Affiliates LLC, the local MLS, or other third parties.
+    </p>
+
+    <p class="mb-3">
+      By signing in at an open house or submitting your information through a related form, you acknowledge and agree to this Notice.
+    </p>
+
+    <h5 class="mt-3">Information We Collect</h5>
+    <p class="mb-2">
+      When you sign in at an open house, we may collect information you provide such as your name, email address, phone number,
+      current address, buying or selling timeframe, property interests, and any comments or questions you choose to share.
+      For digital sign-ins, we may also collect basic technical information such as date and time of entry and device type,
+      where applicable.
+    </p>
+
+    <h5 class="mt-3">How We Use Your Information</h5>
+    <p class="mb-2">
+      We may use the information collected to verify attendance at the open house, provide information about the property you viewed,
+      follow up regarding your interest in buying, selling, or renting real estate, share information about similar properties, market
+      updates, or real estate services that may be relevant to you, and comply with legal, regulatory, and professional obligations.
+    </p>
+    <p class="mb-2">
+      You may opt out of marketing communications at any time by contacting us directly or using any unsubscribe option provided.
+    </p>
+
+    <h5 class="mt-3">Sharing of Information</h5>
+    <p class="mb-2">
+      We do not sell your personal information.
+    </p>
+    <p class="mb-2">
+      We may share your information only in the following limited circumstances:
+    </p>
+    <ul class="mb-2">
+      <li>With Heritage House Sotheby’s International Realty for brokerage, compliance, and transaction-related purposes.</li>
+      <li>With cooperating brokers, attorneys, lenders, inspectors, title companies, or other service providers, but only if you request or initiate a real estate transaction.</li>
+      <li>With service providers who assist with systems such as data storage, CRM tools, and email delivery, solely to support business operations.</li>
+      <li>When required by law, court order, or governmental request, or to protect legal rights and safety.</li>
+    </ul>
+
+    <h5 class="mt-3">Data Retention and Security</h5>
+    <p class="mb-2">
+      We retain open house sign-in information only as long as reasonably necessary to fulfill the purposes described in this Notice
+      and to comply with legal and professional recordkeeping requirements.
+    </p>
+    <p class="mb-2">
+      We use reasonable administrative and technical safeguards designed to protect your information. However, no method of transmission
+      or storage is completely secure, so we cannot guarantee absolute security.
+    </p>
+
+    <h5 class="mt-3">Children’s Privacy</h5>
+    <p class="mb-2">
+      Open houses and related sign-in forms are not intended for children under 13 years of age, and we do not knowingly collect personal
+      information from children.
+    </p>
+
+    <h5 class="mt-3">No Obligation or Agency Relationship</h5>
+    <p class="mb-2">
+      Signing in at an open house does not create a client relationship, agency relationship, or obligation on your part. Representation
+      is established only through a separate written agreement. If the property is currently listed with another real estate broker, any
+      follow-up communication is not intended to solicit that listing.
+    </p>
+
+    <h5 class="mt-3">Changes to This Notice</h5>
+    <p class="mb-2">
+      We may update this Notice from time to time. The Effective Date above reflects the most recent revision.
+    </p>
+
+    <h5 class="mt-3">Contact Information</h5>
+    <p class="mb-0">
+      <strong>Dennis Fotopoulos, Broker Associate</strong><br>
+      Heritage House Sotheby’s International Realty<br>
+      Email: dennis@liveinmonmouth.com<br>
+      Phone: O: +1 732.946.9200 | C: +1 732.673.9347<br>
+      Office Address: 38 Main Street, Holmdel, NJ 07733
+    </p>
+  </div>
+
 </div>
 {% endblock %}
