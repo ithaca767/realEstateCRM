@@ -16,6 +16,14 @@
 
   <hr style="border-top: 1px solid rgba(153,153,153,0.5);">
 
+{% if return_url %}
+  <div class="mb-3">
+    <a href="{{ return_url }}" class="btn btn-outline-secondary">
+      ← Back to Open House Sign-In
+    </a>
+  </div>
+{% endif %}
+
   <div class="d-flex align-items-start gap-3 mb-3">
     <div>
       <h3 class="mb-1">Privacy Notice and Terms of Use</h3>

@@ -4020,7 +4020,12 @@ def openhouse_public_signin(token):
 
 @app.route("/openhouse-privacy")
 def openhouse_privacy():
-    return render_template("public/openhouse_privacy.html", hide_nav=True)
+    return_url = request.args.get("return")
+    return render_template(
+        "public/openhouse_privacy.html",
+        hide_nav=True,
+        return_url=return_url
+    )
 
 @app.route("/openhouses/<int:open_house_id>/export.csv")
 @login_required
