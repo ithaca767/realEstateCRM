@@ -80,7 +80,7 @@
 
     <!-- Collapsible nav links -->
     <div class="collapse navbar-collapse" id="mainNav">
-      <ul class="navbar-nav ms-0 ms-md-2">
+      <ul class="navbar-nav ms-0 ms-md-2 w-100 d-flex">
 
         <li class="nav-item">
           <a href="{{ url_for('dashboard') }}"
@@ -115,8 +115,14 @@
 
         <li class="nav-item">
           <a class="nav-link" href="{{ calendar_feed_url }}" target="_blank">Calendar Feed</a>
-
         </li>
+
+        {% if current_user.is_authenticated %}
+          <li class="nav-item ms-auto">
+            <a class="nav-link text-danger" href="{{ url_for('logout') }}">Logout</a>
+          </li>
+        {% endif %}
+
 
       </ul>
     </div>

@@ -5,7 +5,6 @@ import csv
 import io
 
 from functools import wraps
-
 from datetime import date, datetime, timedelta, time
 from math import ceil
 
@@ -25,7 +24,17 @@ from flask import (
     flash,
     abort,
 )
-from flask_login import login_required
+
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    login_user,
+    logout_user,
+    login_required,
+    current_user,
+)
+
+from werkzeug.security import check_password_hash
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -50,25 +59,13 @@ app.config.update(
 if os.environ.get("FLASK_ENV") == "production":
     app.config["SESSION_COOKIE_SECURE"] = True
 
-# Single-admin credentials
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
-if not ADMIN_PASSWORD:
-    raise RuntimeError("ADMIN_PASSWORD environment variable is required")
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
 
 # Optional token for calendar feed protection
 ICS_TOKEN = os.environ.get("ICS_TOKEN")
-
-def login_required(view_func):
-    @wraps(view_func)
-    def wrapped(*args, **kwargs):
-        if not session.get("logged_in"):
-            # Remember where the user was trying to go
-            next_url = request.path
-            return redirect(url_for("login", next=next_url))
-        return view_func(*args, **kwargs)
-    return wrapped
-
+                            
 @app.context_processor
 def inject_calendar_feed_url():
     calendar_url = url_for("followups_ics")
@@ -88,6 +85,40 @@ def get_db():
         raise RuntimeError("DATABASE_URL is not set")
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
+
+
+class User(UserMixin):
+    def __init__(self, row):
+        self.id = row["id"]
+        self.email = row["email"]
+        self.first_name = row.get("first_name")
+        self.last_name = row.get("last_name")
+        self.role = row.get("role", "owner")
+        self._is_active = row.get("is_active", True)
+
+    def get_id(self):
+        return str(self.id)
+
+    def is_active(self):
+        return bool(self._is_active)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, email, first_name, last_name, role, is_active
+        FROM users
+        WHERE id = %s
+        """,
+        (user_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return User(row) if row else None
 
 def generate_public_token() -> str:
     return secrets.token_urlsafe(24)
@@ -2467,31 +2498,52 @@ def get_listing_checklist(contact_id: int):
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if session.get("logged_in"):
-        # Already logged in
+    if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
 
     error = None
     if request.method == "POST":
-        username = (request.form.get("username") or "").strip()
+        email = (request.form.get("username") or "").strip().lower()
         password = request.form.get("password") or ""
 
-        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-            session.clear()
-            session["logged_in"] = True
-            session["username"] = username
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, email, password_hash, first_name, last_name, role, is_active
+            FROM users
+            WHERE email = %s
+            """,
+            (email,),
+        )
+        row = cur.fetchone()
+
+        if row and row["is_active"] and check_password_hash(row["password_hash"], password):
+            login_user(User(row))
+
+            cur.execute(
+                "UPDATE users SET last_login_at = NOW() WHERE id = %s",
+                (row["id"],),
+            )
+            conn.commit()
+
+            cur.close()
+            conn.close()
 
             next_url = request.args.get("next") or url_for("dashboard")
             return redirect(next_url)
-        else:
-            error = "Invalid username or password"
+
+        cur.close()
+        conn.close()
+        error = "Invalid username or password"
 
     return render_template_string(LOGIN_TEMPLATE, error=error)
 
 
 @app.route("/logout")
+@login_required
 def logout():
-    session.clear()
+    logout_user()
     return redirect(url_for("login"))
 
 @app.route("/")
