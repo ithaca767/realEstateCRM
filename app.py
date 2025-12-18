@@ -2552,23 +2552,17 @@ def logout():
     logout_user()
     return redirect(url_for("login"))
 
-from datetime import date, datetime, timedelta
-from flask_login import login_required, current_user
-from flask import render_template
-
 @app.route("/")
 @login_required
 def dashboard():
     today = date.today()
     today_str = today.isoformat()
 
-    # v2 knobs (safe defaults)
     ACTIVE_DAYS = 30
     UPCOMING_DAYS = 14
     ACTIVE_LIMIT = 60
 
     def _nf_to_date(nf):
-        # Handles nf being either a date object or an ISO string
         if not nf:
             return None
         if isinstance(nf, date):
@@ -2581,13 +2575,47 @@ def dashboard():
     conn = get_db()
     cur = conn.cursor()
 
-    # Total contacts count (scoped to user)
-    cur.execute("SELECT COUNT(*) AS cnt FROM contacts WHERE user_id = %s", (current_user.id,))
+    def has_column(table_name, column_name):
+        cur.execute(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = %s
+              AND column_name = %s
+            LIMIT 1
+            """,
+            (table_name, column_name),
+        )
+        return cur.fetchone() is not None
+
+    # Detect multi-user columns (Render is missing contacts.user_id right now)
+    contacts_has_user = has_column("contacts", "user_id")
+    engagements_has_user = has_column("engagements", "user_id")
+    buyer_has_user = has_column("buyer_profiles", "user_id")
+    seller_has_user = has_column("seller_profiles", "user_id")
+
+    # Total contacts count
+    if contacts_has_user:
+        cur.execute("SELECT COUNT(*) AS cnt FROM contacts WHERE user_id = %s", (current_user.id,))
+    else:
+        cur.execute("SELECT COUNT(*) AS cnt FROM contacts")
     total_contacts = cur.fetchone()["cnt"]
 
-    # Active contacts (one row per contact, last engagement, buyer/seller flags)
-    cur.execute(
-        """
+    # Build reusable WHERE fragments
+    contacts_scope_sql = "c.user_id = %s" if contacts_has_user else "TRUE"
+    engagements_scope_sql = "AND e.user_id = %s" if engagements_has_user else ""
+    buyer_scope_sql = "AND bp.user_id = %s" if buyer_has_user else ""
+    seller_scope_sql = "AND sp.user_id = %s" if seller_has_user else ""
+
+    # Params helpers
+    contacts_scope_params = (current_user.id,) if contacts_has_user else tuple()
+    engagements_scope_params = (current_user.id,) if engagements_has_user else tuple()
+    buyer_scope_params = (current_user.id,) if buyer_has_user else tuple()
+    seller_scope_params = (current_user.id,) if seller_has_user else tuple()
+
+    # Active contacts
+    active_sql = f"""
         SELECT
             c.id AS contact_id,
             c.name,
@@ -2608,14 +2636,14 @@ def dashboard():
                 SELECT 1
                 FROM buyer_profiles bp
                 WHERE bp.contact_id = c.id
-                  AND bp.user_id = %s
+                {buyer_scope_sql}
             ) AS has_buyer_profile,
 
             EXISTS (
                 SELECT 1
                 FROM seller_profiles sp
                 WHERE sp.contact_id = c.id
-                  AND sp.user_id = %s
+                {seller_scope_sql}
             ) AS has_seller_profile
 
         FROM contacts c
@@ -2624,22 +2652,24 @@ def dashboard():
             SELECT e.occurred_at, e.engagement_type, e.outcome, e.summary_clean
             FROM engagements e
             WHERE e.contact_id = c.id
-              AND e.user_id = %s
+            {engagements_scope_sql}
             ORDER BY e.occurred_at DESC
             LIMIT 1
         ) le ON TRUE
 
-        WHERE c.user_id = %s
+        WHERE {contacts_scope_sql}
           AND (
-              (le.occurred_at IS NOT NULL AND le.occurred_at >= (NOW() - INTERVAL '%s days'))
+              (le.occurred_at IS NOT NULL AND le.occurred_at >= (NOW() - INTERVAL %s))
               OR c.next_follow_up IS NOT NULL
               OR EXISTS (
                   SELECT 1 FROM buyer_profiles bp
-                  WHERE bp.contact_id = c.id AND bp.user_id = %s
+                  WHERE bp.contact_id = c.id
+                  {buyer_scope_sql}
               )
               OR EXISTS (
                   SELECT 1 FROM seller_profiles sp
-                  WHERE sp.contact_id = c.id AND sp.user_id = %s
+                  WHERE sp.contact_id = c.id
+                  {seller_scope_sql}
               )
           )
 
@@ -2650,21 +2680,34 @@ def dashboard():
           c.name ASC
 
         LIMIT %s
-        """,
-        (
-            current_user.id,
-            current_user.id,
-            current_user.id,
-            current_user.id,
-            ACTIVE_DAYS,
-            current_user.id,
-            current_user.id,
-            ACTIVE_LIMIT,
-        ),
-    )
+    """
+
+    # Interval param needs to be a string like '30 days'
+    interval_param = f"{ACTIVE_DAYS} days"
+
+    active_params = []
+    active_params += list(contacts_scope_params)
+
+    # buyer exists scopes (first)
+    active_params += list(buyer_scope_params)
+    # seller exists scopes (first)
+    active_params += list(seller_scope_params)
+
+    # lateral engagement scope
+    active_params += list(engagements_scope_params)
+
+    # interval and later EXISTS scopes
+    active_params += [interval_param]
+
+    active_params += list(buyer_scope_params)
+    active_params += list(seller_scope_params)
+
+    active_params += [ACTIVE_LIMIT]
+
+    cur.execute(active_sql, tuple(active_params))
     active_rows = cur.fetchall()
 
-    # Add "why active" badges in Python
+    # Active reasons badges
     now_dt = datetime.now()
     active_contacts = []
     for r in active_rows:
@@ -2697,9 +2740,8 @@ def dashboard():
         row["active_reasons"] = badges
         active_contacts.append(row)
 
-    # Recent engagements feed (last 10 for the user)
-    cur.execute(
-        """
+    # Recent engagements feed (last 10)
+    recent_sql = f"""
         SELECT
             e.id,
             e.contact_id,
@@ -2710,18 +2752,20 @@ def dashboard():
             e.summary_clean
         FROM engagements e
         JOIN contacts c ON c.id = e.contact_id
-        WHERE e.user_id = %s
-          AND c.user_id = %s
+        WHERE {contacts_scope_sql}
+        {"AND e.user_id = %s" if engagements_has_user else ""}
         ORDER BY e.occurred_at DESC
         LIMIT 10
-        """,
-        (current_user.id, current_user.id),
-    )
+    """
+    recent_params = []
+    recent_params += list(contacts_scope_params)
+    if engagements_has_user:
+        recent_params += [current_user.id]
+    cur.execute(recent_sql, tuple(recent_params))
     recent_engagements = cur.fetchall()
 
-    # Follow-ups with context (overdue)
-    cur.execute(
-        """
+    # Follow-ups with context (single query then split into overdue/upcoming in Python)
+    followups_sql = f"""
         SELECT
             c.id AS contact_id,
             c.name,
@@ -2741,17 +2785,20 @@ def dashboard():
             SELECT e.occurred_at, e.engagement_type, e.outcome, e.summary_clean
             FROM engagements e
             WHERE e.contact_id = c.id
-              AND e.user_id = %s
+            {engagements_scope_sql}
             ORDER BY e.occurred_at DESC
             LIMIT 1
         ) le ON TRUE
 
-        WHERE c.user_id = %s
+        WHERE {contacts_scope_sql}
           AND c.next_follow_up IS NOT NULL
         ORDER BY c.next_follow_up ASC, c.name ASC
-        """,
-        (current_user.id, current_user.id),
-    )
+    """
+    followups_params = []
+    followups_params += list(contacts_scope_params)
+    followups_params += list(engagements_scope_params)
+
+    cur.execute(followups_sql, tuple(followups_params))
     followup_rows = cur.fetchall()
 
     conn.close()
