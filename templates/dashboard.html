@@ -1,122 +1,291 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard – Ulysses CRM{% endblock %}
+{% block title %}Dashboard - Ulysses CRM{% endblock %}
 
 {% block content %}
-    <h2 class="mb-1">Dashboard</h2>
-    <p class="text-muted">Today: {{ today }}</p>
+  <h2 class="mb-1">Dashboard</h2>
+  <p class="text-muted">Today: {{ today }}</p>
 
-    <!-- Summary cards -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-3 col-6">
-            <div class="card text-center">
-                <div class="card-body">
-                    <div class="text-muted small">Overdue Follow Ups</div>
-                    <div class="fs-4 fw-bold">{{ overdue|length }}</div>
-                </div>
-            </div>
+  <!-- Summary cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small">Overdue Follow Ups</div>
+          <div class="fs-4 fw-bold">{{ followups_overdue|length }}</div>
         </div>
-        <div class="col-md-3 col-6">
-            <div class="card text-center">
-                <div class="card-body">
-                    <div class="text-muted small">Today</div>
-                    <div class="fs-4 fw-bold">{{ today_list|length }}</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-6">
-            <div class="card text-center">
-                <div class="card-body">
-                    <div class="text-muted small">Upcoming</div>
-                    <div class="fs-4 fw-bold">{{ upcoming|length }}</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-6">
-            <div class="card text-center">
-                <div class="card-body">
-                    <div class="text-muted small">Total Contacts</div>
-                    <div class="fs-4 fw-bold">{{ total_contacts }}</div>
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
 
-    {% macro followup_table(rows) %}
-        {% if rows and rows|length > 0 %}
-            <div class="table-responsive">
-                <table class="table table-sm table-striped mb-0">
+    <div class="col-md-3 col-6">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small">Upcoming (next {{ upcoming_days }} days)</div>
+          <div class="fs-4 fw-bold">{{ followups_upcoming|length }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 col-6">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small">Active Contacts</div>
+          <div class="fs-4 fw-bold">{{ active_contacts|length }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 col-6">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small">Total Contacts</div>
+          <div class="fs-4 fw-bold">{{ total_contacts }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="outreach-tab" data-bs-toggle="tab" data-bs-target="#outreach"
+              type="button" role="tab" aria-controls="outreach" aria-selected="true">
+        Outreach
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="followups-tab" data-bs-toggle="tab" data-bs-target="#followups"
+              type="button" role="tab" aria-controls="followups" aria-selected="false">
+        Follow-ups
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content pt-3" id="dashboardTabsContent">
+
+    <!-- Outreach tab -->
+    <div class="tab-pane fade show active" id="outreach" role="tabpanel" aria-labelledby="outreach-tab">
+      <div class="row g-3">
+
+        <!-- Active Contacts -->
+        <div class="col-lg-8">
+          <div class="card shadow-sm">
+            <div class="card-header">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">Active Contacts</div>
+                  <div class="text-muted small">
+                    Active if engaged in last {{ active_days }} days, has a follow-up, buyer profile, or seller profile
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-body bg-white">
+              {% if active_contacts and active_contacts|length > 0 %}
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped mb-0 align-middle">
                     <thead class="table-light">
-                        <tr>
-                            <th>Name</th>
-                            <th>Date</th>
-                            <th>Time</th>
-                            <th>Stage</th>
-                            <th>Priority</th>
-                            <th>Area</th>
-                            <th style="width: 140px;">Actions</th>
-                        </tr>
+                      <tr>
+                        <th>Name</th>
+                        <th>Why</th>
+                        <th>Next Follow-up</th>
+                        <th>Last Engagement</th>
+                        <th style="width: 140px;">Actions</th>
+                      </tr>
                     </thead>
                     <tbody>
-                    {% for c in rows %}
+                      {% for c in active_contacts %}
                         <tr>
-                            <td>
-                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}">
-                                    {% if c["first_name"] or c["last_name"] %}
-                                        {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                                    {% else %}
-                                        {{ c["name"] }}
-                                    {% endif %}
-                                </a>
-                            </td>
-                            <td>{{ c["next_follow_up"] or "" }}</td>
-                            <td>{{ c["next_follow_up_time"] or "" }}</td>
-                            <td>{{ c["pipeline_stage"] or "" }}</td>
-                            <td>{{ c["priority"] or "" }}</td>
-                            <td>{{ c["target_area"] or "" }}</td>
-                            <td>
-                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
-                                   class="btn btn-sm btn-outline-primary">
-                                   Open
-                                </a>
-                            </td>
+                          <td>
+                            <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}">
+                              {% if c["first_name"] or c["last_name"] %}
+                                {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                              {% else %}
+                                {{ c["name"] or "Unnamed Contact" }}
+                              {% endif %}
+                            </a>
+                          </td>
+
+                          <td style="min-width: 220px;">
+                            {% if c["active_reasons"] %}
+                              {% for b in c["active_reasons"] %}
+                                <span class="badge bg-secondary me-1 mb-1">{{ b }}</span>
+                              {% endfor %}
+                            {% else %}
+                              <span class="text-muted small">Active</span>
+                            {% endif %}
+                          </td>
+
+                          <td style="min-width: 160px;">
+                            {% if c["next_follow_up"] %}
+                              <div>{{ c["next_follow_up"] }}</div>
+                              {% if c["next_follow_up_time"] %}
+                                <div class="text-muted small">{{ c["next_follow_up_time"] }}</div>
+                              {% endif %}
+                            {% else %}
+                              <span class="text-muted small">None</span>
+                            {% endif %}
+                          </td>
+
+                          <td style="min-width: 260px;">
+                            {% if c["last_engagement_at"] %}
+                              <div class="small">
+                                <strong>{{ c["last_engagement_type"] or "engagement" }}</strong>
+                                <span class="text-muted">({{ c["last_engagement_at"] }})</span>
+                              </div>
+                              {% if c["last_engagement_outcome"] %}
+                                <div class="text-muted small">{{ c["last_engagement_outcome"] }}</div>
+                              {% elif c["last_engagement_summary"] %}
+                                <div class="text-muted small">{{ c["last_engagement_summary"] }}</div>
+                              {% endif %}
+                            {% else %}
+                              <span class="text-muted small">No engagements yet</span>
+                            {% endif %}
+                          </td>
+
+                          <td>
+                            <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}"
+                               class="btn btn-sm btn-outline-primary">
+                              Open
+                            </a>
+                          </td>
                         </tr>
-                    {% endfor %}
+                      {% endfor %}
                     </tbody>
-                </table>
+                  </table>
+                </div>
+              {% else %}
+                <p class="mb-0 text-muted">Nothing here.</p>
+              {% endif %}
             </div>
+          </div>
+        </div>
+
+        <!-- Recent Engagements -->
+        <div class="col-lg-4">
+          <div class="card shadow-sm">
+            <div class="card-header">
+              <div class="fw-semibold">Recent Engagements</div>
+              <div class="text-muted small">Last 10</div>
+            </div>
+            <div class="card-body bg-white">
+              {% if recent_engagements and recent_engagements|length > 0 %}
+                <div class="list-group list-group-flush">
+                  {% for e in recent_engagements %}
+                    <div class="list-group-item px-0">
+                      <div class="d-flex justify-content-between">
+                        <div>
+                          <a href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}" class="text-decoration-none">
+                            <strong>{{ e["contact_name"] or "Unnamed Contact" }}</strong>
+                          </a>
+                          <div class="text-muted small">{{ e["engagement_type"] or "engagement" }}</div>
+                        </div>
+                        <div class="text-muted small">{{ e["occurred_at"] }}</div>
+                      </div>
+
+                      {% if e["outcome"] %}
+                        <div class="small mt-1">{{ e["outcome"] }}</div>
+                      {% elif e["summary_clean"] %}
+                        <div class="small mt-1">{{ e["summary_clean"] }}</div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <p class="mb-0 text-muted">Nothing here.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Follow-ups tab -->
+    <div class="tab-pane fade" id="followups" role="tabpanel" aria-labelledby="followups-tab">
+
+      {% macro followup_table(rows) %}
+        {% if rows and rows|length > 0 %}
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0 align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Name</th>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Last Engagement</th>
+                  <th style="width: 140px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for c in rows %}
+                <tr>
+                  <td>
+                    <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}">
+                      {% if c["first_name"] or c["last_name"] %}
+                        {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                      {% else %}
+                        {{ c["name"] or "Unnamed Contact" }}
+                      {% endif %}
+                    </a>
+                  </td>
+                  <td>{{ c["next_follow_up"] or "" }}</td>
+                  <td>{{ c["next_follow_up_time"] or "" }}</td>
+
+                  <td style="min-width: 280px;">
+                    {% if c["last_engagement_at"] %}
+                      <div class="small">
+                        <strong>{{ c["last_engagement_type"] or "engagement" }}</strong>
+                        <span class="text-muted">({{ c["last_engagement_at"] }})</span>
+                      </div>
+                      {% if c["last_engagement_outcome"] %}
+                        <div class="text-muted small">{{ c["last_engagement_outcome"] }}</div>
+                      {% elif c["last_engagement_summary"] %}
+                        <div class="text-muted small">{{ c["last_engagement_summary"] }}</div>
+                      {% endif %}
+                    {% else %}
+                      <span class="text-muted small">No engagement context yet</span>
+                    {% endif %}
+                  </td>
+
+                  <td>
+                    <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}"
+                       class="btn btn-sm btn-outline-primary">
+                       Open
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
         {% else %}
-            <p class="mb-0 text-muted">Nothing here.</p>
+          <p class="mb-0 text-muted">Nothing here.</p>
         {% endif %}
-    {% endmacro %}
+      {% endmacro %}
 
-    <!-- Overdue -->
-    <div class="card card-followups mb-4">
+      <!-- Overdue -->
+      <div class="card card-followups mb-4">
         <div class="card-header bg-danger text-white">
-            Overdue Follow Ups
+          Overdue Follow Ups
         </div>
         <div class="card-body bg-white">
-            {{ followup_table(overdue) }}
+          {{ followup_table(followups_overdue) }}
         </div>
-    </div>
+      </div>
 
-    <!-- Today -->
-    <div class="card card-followups mb-4">
-        <div class="card-header bg-warning">
-            Today
-        </div>
-        <div class="card-body bg-white">
-            {{ followup_table(today_list) }}
-        </div>
-    </div>
-
-    <!-- Upcoming -->
-    <div class="card card-followups mb-4">
+      <!-- Upcoming -->
+      <div class="card card-followups mb-4">
         <div class="card-header bg-success text-white">
-            Upcoming
+          Upcoming (next {{ upcoming_days }} days)
         </div>
         <div class="card-body bg-white">
-            {{ followup_table(upcoming) }}
+          {{ followup_table(followups_upcoming) }}
         </div>
+      </div>
+
     </div>
+
+  </div>
 {% endblock %}

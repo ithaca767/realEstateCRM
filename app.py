@@ -2552,61 +2552,234 @@ def logout():
     logout_user()
     return redirect(url_for("login"))
 
+from datetime import date, datetime, timedelta
+from flask_login import login_required, current_user
+from flask import render_template
+
 @app.route("/")
 @login_required
 def dashboard():
-    today_str = date.today().isoformat()
+    today = date.today()
+    today_str = today.isoformat()
+
+    # v2 knobs (safe defaults)
+    ACTIVE_DAYS = 30
+    UPCOMING_DAYS = 14
+    ACTIVE_LIMIT = 60
+
+    def _nf_to_date(nf):
+        # Handles nf being either a date object or an ISO string
+        if not nf:
+            return None
+        if isinstance(nf, date):
+            return nf
+        try:
+            return date.fromisoformat(str(nf))
+        except Exception:
+            return None
 
     conn = get_db()
     cur = conn.cursor()
+
+    # Total contacts count (scoped to user)
+    cur.execute("SELECT COUNT(*) AS cnt FROM contacts WHERE user_id = %s", (current_user.id,))
+    total_contacts = cur.fetchone()["cnt"]
+
+    # Active contacts (one row per contact, last engagement, buyer/seller flags)
     cur.execute(
         """
         SELECT
-            id,
-            name,
-            first_name,
-            last_name,
-            next_follow_up,
-            next_follow_up_time,
-            pipeline_stage,
-            priority,
-            target_area
-        FROM contacts
-        WHERE next_follow_up IS NOT NULL
-          AND next_follow_up <> ''
-        ORDER BY next_follow_up, name
-        """
-    )
-    rows = cur.fetchall()
+            c.id AS contact_id,
+            c.name,
+            c.first_name,
+            c.last_name,
+            c.next_follow_up,
+            c.next_follow_up_time,
+            c.pipeline_stage,
+            c.priority,
+            c.target_area,
 
-    # Total contacts count
-    cur.execute("SELECT COUNT(*) AS cnt FROM contacts")
-    total_contacts = cur.fetchone()["cnt"]
+            le.occurred_at AS last_engagement_at,
+            le.engagement_type AS last_engagement_type,
+            le.outcome AS last_engagement_outcome,
+            le.summary_clean AS last_engagement_summary,
+
+            EXISTS (
+                SELECT 1
+                FROM buyer_profiles bp
+                WHERE bp.contact_id = c.id
+                  AND bp.user_id = %s
+            ) AS has_buyer_profile,
+
+            EXISTS (
+                SELECT 1
+                FROM seller_profiles sp
+                WHERE sp.contact_id = c.id
+                  AND sp.user_id = %s
+            ) AS has_seller_profile
+
+        FROM contacts c
+
+        LEFT JOIN LATERAL (
+            SELECT e.occurred_at, e.engagement_type, e.outcome, e.summary_clean
+            FROM engagements e
+            WHERE e.contact_id = c.id
+              AND e.user_id = %s
+            ORDER BY e.occurred_at DESC
+            LIMIT 1
+        ) le ON TRUE
+
+        WHERE c.user_id = %s
+          AND (
+              (le.occurred_at IS NOT NULL AND le.occurred_at >= (NOW() - INTERVAL '%s days'))
+              OR c.next_follow_up IS NOT NULL
+              OR EXISTS (
+                  SELECT 1 FROM buyer_profiles bp
+                  WHERE bp.contact_id = c.id AND bp.user_id = %s
+              )
+              OR EXISTS (
+                  SELECT 1 FROM seller_profiles sp
+                  WHERE sp.contact_id = c.id AND sp.user_id = %s
+              )
+          )
+
+        ORDER BY
+          (CASE WHEN c.next_follow_up IS NULL THEN 1 ELSE 0 END),
+          c.next_follow_up ASC NULLS LAST,
+          le.occurred_at DESC NULLS LAST,
+          c.name ASC
+
+        LIMIT %s
+        """,
+        (
+            current_user.id,
+            current_user.id,
+            current_user.id,
+            current_user.id,
+            ACTIVE_DAYS,
+            current_user.id,
+            current_user.id,
+            ACTIVE_LIMIT,
+        ),
+    )
+    active_rows = cur.fetchall()
+
+    # Add "why active" badges in Python
+    now_dt = datetime.now()
+    active_contacts = []
+    for r in active_rows:
+        row = dict(r)
+        badges = []
+
+        last_at = row.get("last_engagement_at")
+        if last_at:
+            try:
+                delta_days = (now_dt - last_at).days
+                if delta_days <= ACTIVE_DAYS:
+                    badges.append(f"Engaged {delta_days}d")
+            except Exception:
+                badges.append("Recent engagement")
+
+        nf_date = _nf_to_date(row.get("next_follow_up"))
+        if nf_date:
+            if nf_date < today:
+                badges.append("Follow-up overdue")
+            elif nf_date == today:
+                badges.append("Follow-up today")
+            else:
+                badges.append("Follow-up scheduled")
+
+        if row.get("has_buyer_profile"):
+            badges.append("Buyer")
+        if row.get("has_seller_profile"):
+            badges.append("Seller")
+
+        row["active_reasons"] = badges
+        active_contacts.append(row)
+
+    # Recent engagements feed (last 10 for the user)
+    cur.execute(
+        """
+        SELECT
+            e.id,
+            e.contact_id,
+            c.name AS contact_name,
+            e.engagement_type,
+            e.occurred_at,
+            e.outcome,
+            e.summary_clean
+        FROM engagements e
+        JOIN contacts c ON c.id = e.contact_id
+        WHERE e.user_id = %s
+          AND c.user_id = %s
+        ORDER BY e.occurred_at DESC
+        LIMIT 10
+        """,
+        (current_user.id, current_user.id),
+    )
+    recent_engagements = cur.fetchall()
+
+    # Follow-ups with context (overdue)
+    cur.execute(
+        """
+        SELECT
+            c.id AS contact_id,
+            c.name,
+            c.first_name,
+            c.last_name,
+            c.next_follow_up,
+            c.next_follow_up_time,
+
+            le.occurred_at AS last_engagement_at,
+            le.engagement_type AS last_engagement_type,
+            le.outcome AS last_engagement_outcome,
+            le.summary_clean AS last_engagement_summary
+
+        FROM contacts c
+
+        LEFT JOIN LATERAL (
+            SELECT e.occurred_at, e.engagement_type, e.outcome, e.summary_clean
+            FROM engagements e
+            WHERE e.contact_id = c.id
+              AND e.user_id = %s
+            ORDER BY e.occurred_at DESC
+            LIMIT 1
+        ) le ON TRUE
+
+        WHERE c.user_id = %s
+          AND c.next_follow_up IS NOT NULL
+        ORDER BY c.next_follow_up ASC, c.name ASC
+        """,
+        (current_user.id, current_user.id),
+    )
+    followup_rows = cur.fetchall()
 
     conn.close()
 
-    overdue = []
-    today_list = []
-    upcoming = []
+    followups_overdue = []
+    followups_upcoming = []
 
-    for row in rows:
-        nf = row["next_follow_up"]
-        if not nf:
+    for row in followup_rows:
+        nf_date = _nf_to_date(row.get("next_follow_up"))
+        if not nf_date:
             continue
-        if nf < today_str:
-            overdue.append(row)
-        elif nf == today_str:
-            today_list.append(row)
+
+        if nf_date < today:
+            followups_overdue.append(row)
         else:
-            upcoming.append(row)
+            if nf_date <= (today + timedelta(days=UPCOMING_DAYS)):
+                followups_upcoming.append(row)
 
     return render_template(
         "dashboard.html",
-        overdue=overdue,
-        today_list=today_list,
-        upcoming=upcoming,
+        active_contacts=active_contacts,
+        recent_engagements=recent_engagements,
+        followups_overdue=followups_overdue,
+        followups_upcoming=followups_upcoming,
         today=today_str,
         total_contacts=total_contacts,
+        upcoming_days=UPCOMING_DAYS,
+        active_days=ACTIVE_DAYS,
         active_page="dashboard",
     )
 
