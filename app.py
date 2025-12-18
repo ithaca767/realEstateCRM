@@ -8,6 +8,12 @@ from functools import wraps
 from datetime import date, datetime, timedelta, time
 from math import ceil
 
+from engagements import (
+    list_engagements_for_contact,
+    insert_engagement,
+    delete_engagement,
+)
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -2957,6 +2963,8 @@ def edit_contact(contact_id):
     )
     has_seller_profile = cur.fetchone() is not None
 
+    engagements = list_engagements_for_contact(conn, current_user.id, contact_id, limit=50)
+
     # Pre-fill follow-up time selects if we have a stored time
     next_time_hour = None
     next_time_minute = None
@@ -3035,6 +3043,7 @@ def edit_contact(contact_id):
     return render_template(
         "edit_contact.html",
         c=contact,
+        engagements=engagements,
         special_dates=special_dates,
         open_interactions=open_interactions,
         completed_interactions=completed_interactions,
@@ -3050,6 +3059,134 @@ def edit_contact(contact_id):
         active_page="contacts",
         has_buyer_profile=has_buyer_profile,
         has_seller_profile=has_seller_profile,
+    )
+
+
+@app.route("/contacts/<int:contact_id>/engagements/add", methods=["POST"])
+@login_required
+def add_engagement(contact_id):
+    conn = get_db()
+
+    engagement_type = (request.form.get("engagement_type") or "call").strip()
+    outcome = (request.form.get("outcome") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+    transcript_raw = (request.form.get("transcript_raw") or "").strip() or None
+    summary_clean = (request.form.get("summary_clean") or "").strip() or None
+    
+    occurred_date = (request.form.get("occurred_date") or "").strip()
+    time_hour = (request.form.get("time_hour") or "").strip()
+    time_minute = (request.form.get("time_minute") or "").strip()
+    time_ampm = (request.form.get("time_ampm") or "").strip()
+    
+    if occurred_date:
+        dt = datetime.strptime(occurred_date, "%Y-%m-%d")
+    
+        if time_hour and time_minute and time_ampm:
+            h = int(time_hour)
+            m = int(time_minute)
+    
+            if time_ampm.upper() == "PM" and h != 12:
+                h += 12
+            if time_ampm.upper() == "AM" and h == 12:
+                h = 0
+    
+            occurred_at = dt.replace(hour=h, minute=m)
+        else:
+            occurred_at = dt
+    else:
+        occurred_at = datetime.now()
+
+    insert_engagement(
+        conn=conn,
+        user_id=current_user.id,
+        contact_id=contact_id,
+        engagement_type=engagement_type,
+        occurred_at=occurred_at,
+        outcome=outcome,
+        notes=notes,
+        transcript_raw=transcript_raw,
+        summary_clean=summary_clean,
+    )
+
+    flash("Engagement added.", "success")
+    return redirect(url_for("edit_contact", contact_id=contact_id))
+
+
+@app.route("/engagements/<int:engagement_id>/delete", methods=["POST"])
+@login_required
+def remove_engagement(engagement_id):
+    conn = get_db()
+    deleted = delete_engagement(conn, current_user.id, engagement_id)
+
+    if deleted:
+        flash("Engagement deleted.", "success")
+    else:
+        flash("Engagement not found.", "warning")
+
+    next_url = request.form.get("next") or url_for("contacts")
+    return redirect(next_url)
+
+@app.route("/engagements/<int:engagement_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_engagement(engagement_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT id, contact_id, engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean
+        FROM engagements
+        WHERE id = %s AND user_id = %s
+        """,
+        (engagement_id, current_user.id),
+    )
+    e = cur.fetchone()
+
+    if not e:
+        conn.close()
+        return "Engagement not found", 404
+
+    next_url = request.args.get("next") or request.form.get("next") or url_for("edit_contact", contact_id=e["contact_id"])
+
+    if request.method == "POST":
+        engagement_type = (request.form.get("engagement_type") or "call").strip()
+        occurred_at_str = (request.form.get("occurred_at") or "").strip()
+        outcome = (request.form.get("outcome") or "").strip() or None
+        notes = (request.form.get("notes") or "").strip() or None
+        transcript_raw = (request.form.get("transcript_raw") or "").strip() or None
+        summary_clean = (request.form.get("summary_clean") or "").strip() or None
+
+        occurred_at = e["occurred_at"]
+        if occurred_at_str:
+            try:
+                occurred_at = datetime.strptime(occurred_at_str, "%Y-%m-%dT%H:%M")
+            except Exception:
+                pass
+
+        cur.execute(
+            """
+            UPDATE engagements
+            SET engagement_type = %s,
+                occurred_at = %s,
+                outcome = %s,
+                notes = %s,
+                transcript_raw = %s,
+                summary_clean = %s,
+                updated_at = now()
+            WHERE id = %s AND user_id = %s
+            """,
+            (engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean, engagement_id, current_user.id),
+        )
+        conn.commit()
+        conn.close()
+        return redirect(next_url)
+
+    conn.close()
+    return render_template(
+        "edit_engagement.html",
+        e=e,
+        next=next_url,
+        active_page="contacts",
     )
 
 @app.route("/add_interaction/<int:contact_id>", methods=["POST"])

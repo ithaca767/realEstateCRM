@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Edit Engagement - Ulysses CRM{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="mb-0">Edit Engagement</h2>
+      <div class="text-muted small">Update the engagement details, notes, and transcript fields.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ next }}">Back</a>
+  </div>
+
+  <div class="card">
+    <div class="card-body bg-white">
+      <form method="post">
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Type</label>
+            {% set t = e["engagement_type"] or "call" %}
+            <select name="engagement_type" class="form-select" required>
+              <option value="call" {{ "selected" if t=="call" else "" }}>Phone Call</option>
+              <option value="text" {{ "selected" if t=="text" else "" }}>Text Message</option>
+              <option value="email" {{ "selected" if t=="email" else "" }}>Email</option>
+              <option value="meeting" {{ "selected" if t=="meeting" else "" }}>Meeting</option>
+              <option value="open_house" {{ "selected" if t=="open_house" else "" }}>Open house</option>
+              <option value="other" {{ "selected" if t=="other" else "" }}>Other</option>
+            </select>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Occurred at</label>
+            <input type="datetime-local"
+                   name="occurred_at"
+                   class="form-control"
+                   value="{{ e['occurred_at'].strftime('%Y-%m-%dT%H:%M') if e['occurred_at'] else '' }}">
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Outcome</label>
+            <input name="outcome" class="form-control" value="{{ e['outcome'] or '' }}">
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-control" rows="4">{{ e['notes'] or '' }}</textarea>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Transcript (raw)</label>
+            <textarea name="transcript_raw" class="form-control" rows="6">{{ e['transcript_raw'] or '' }}</textarea>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Summary (clean)</label>
+            <textarea name="summary_clean" class="form-control" rows="5">{{ e['summary_clean'] or '' }}</textarea>
+          </div>
+
+          <div class="col-12 d-flex justify-content-end gap-2">
+            <a class="btn btn-outline-secondary" href="{{ next }}">Cancel</a>
+            <button class="btn btn-success" type="submit">Save changes</button>
+          </div>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
