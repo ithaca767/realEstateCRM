@@ -433,81 +433,209 @@
 
     <!-- Associated Contacts -->
     <div class="card mt-4">
-        <div class="card-header">
-            Associated Contacts
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          Associated Contacts
+          <div class="text-muted small">Spouse, co-owner, attorney, contractor, etc.</div>
         </div>
-        <div class="card-body bg-white">
-
-            <!-- Add associated contact form -->
-            <form method="post" action="{{ url_for('add_related', contact_id=c['id']) }}">
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-3">
-                        <label class="form-label">Name *</label>
-                        <input name="related_name" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Relationship</label>
-                        <input name="relationship" class="form-control" placeholder="Spouse, brother, partner">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Email</label>
-                        <input name="related_email" type="email" class="form-control">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Phone</label>
-                        <input name="related_phone" class="form-control">
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Notes</label>
-                        <input name="related_notes" class="form-control" placeholder="Any helpful context">
-                    </div>
-                    <div class="col-12">
-                        <button class="btn btn-outline-primary mt-2" type="submit">
-                            Add Associated Contact
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#assocContactModal">
+          + Add
+        </button>
+      </div>
+    
+      <div class="card-body bg-white">
+        {% if associations and associations|length > 0 %}
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Name</th>
+                  <th>Relationship</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th style="width: 90px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in associations %}
+                  <tr>
+                    <td class="fw-semibold">
+                      <a href="{{ url_for('edit_contact', contact_id=a.other_contact_id) }}">
+                        {{ a.other_name }}
+                      </a>
+                    </td>
+                    <td>{{ a.relationship_type or "" }}</td>
+                    <td>{{ a.other_email or "" }}</td>
+                    <td>{{ a.other_phone or "" }}</td>
+                    <td>
+                      <form method="POST" action="{{ url_for('delete_contact_association', contact_id=c['id'], assoc_id=a.id) }}">
+                        <input type="hidden" name="next" value="{{ request.full_path }}">
+                        <button
+                          type="submit"
+                          class="btn btn-sm btn-outline-danger"
+                          onclick="return confirm('Remove this association?');"
+                        >
+                          Remove
                         </button>
-                    </div>
-                </div>
-            </form>
-
-            <hr>
-
-            {% if related_contacts and related_contacts|length > 0 %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-striped mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Name</th>
-                                <th>Relationship</th>
-                                <th>Email</th>
-                                <th>Phone</th>
-                                <th>Notes</th>
-                                <th style="width: 80px;">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        {% for r in related_contacts %}
-                            <tr>
-                                <td>{{ r["related_name"] }}</td>
-                                <td>{{ r["relationship"] or "" }}</td>
-                                <td>{{ r["email"] or "" }}</td>
-                                <td>{{ r["phone"] or "" }}</td>
-                                <td>{{ r["notes"] or "" }}</td>
-                                <td>
-                                    <a href="{{ url_for('delete_related', related_id=r['id']) }}"
-                                       class="btn btn-sm btn-outline-danger"
-                                       onclick="return confirm('Delete this associated contact?');">
-                                        Delete
-                                    </a>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% else %}
-                <p class="mb-0 text-muted">No associated contacts yet.</p>
-            {% endif %}
-        </div>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="mb-0 text-muted">No associated contacts yet.</p>
+        {% endif %}
+      </div>
     </div>
+    
+    <!-- Add Associated Contact Modal -->
+    <div class="modal fade" id="assocContactModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Add Associated Contact</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+    
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Relationship type (optional)</label>
+              <input type="text" class="form-control" id="assocRelationshipType" placeholder="spouse, co-owner, attorney, contractor">
+            </div>
+    
+            <hr>
+    
+            <h6>Link existing contact</h6>
+            <div class="mb-2">
+              <input type="text" class="form-control" id="assocSearch" placeholder="Search by name, email, or phone">
+              <div class="form-text">Type at least 2 characters, then click a result to link it.</div>
+            </div>
+    
+            <div class="list-group" id="assocSearchResults"></div>
+    
+            <hr>
+    
+            <h6>Create new contact and link</h6>
+            <form method="POST" action="{{ url_for('create_and_associate_contact', contact_id=c['id']) }}">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <input type="hidden" name="relationship_type" id="assocRelationshipTypeCreate">
+    
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <label class="form-label">First name</label>
+                  <input class="form-control" name="first_name">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Last name</label>
+                  <input class="form-control" name="last_name">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Email</label>
+                  <input class="form-control" name="email" type="email">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Phone</label>
+                  <input class="form-control" name="phone">
+                </div>
+              </div>
+    
+              <div class="mt-3">
+                <button class="btn btn-success" type="submit">Create and Link</button>
+              </div>
+            </form>
+          </div>
+    
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+      (function () {
+        const searchInput = document.getElementById("assocSearch");
+        const resultsEl = document.getElementById("assocSearchResults");
+        const relTypeEl = document.getElementById("assocRelationshipType");
+        const relTypeCreateEl = document.getElementById("assocRelationshipTypeCreate");
+    
+        function syncRelationshipType() {
+          relTypeCreateEl.value = relTypeEl.value || "";
+        }
+        relTypeEl.addEventListener("input", syncRelationshipType);
+        syncRelationshipType();
+    
+        let timer = null;
+    
+        async function doSearch(q) {
+          if (!q || q.trim().length < 2) {
+            resultsEl.innerHTML = "";
+            return;
+          }
+    
+          const resp = await fetch(`/contacts/search?q=${encodeURIComponent(q.trim())}`);
+          const data = await resp.json();
+    
+          resultsEl.innerHTML = "";
+    
+          if (!data || data.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "list-group-item text-muted";
+            empty.textContent = "No matches.";
+            resultsEl.appendChild(empty);
+            return;
+          }
+    
+          data.forEach(item => {
+            // Prevent linking the contact to itself
+            if (String(item.id) === String({{ c['id'] }})) return;
+    
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "list-group-item list-group-item-action";
+    
+            const meta = [item.email, item.phone].filter(Boolean).join(" · ");
+            btn.innerHTML = `<div class="fw-semibold">${item.name}</div><div class="text-muted small">${meta}</div>`;
+    
+            btn.addEventListener("click", () => {
+              const form = document.createElement("form");
+              form.method = "POST";
+              form.action = `/contacts/{{ c['id'] }}/associations/add`;
+    
+              const next = document.createElement("input");
+              next.type = "hidden";
+              next.name = "next";
+              next.value = "{{ request.full_path }}";
+    
+              const related = document.createElement("input");
+              related.type = "hidden";
+              related.name = "related_contact_id";
+              related.value = item.id;
+    
+              const rel = document.createElement("input");
+              rel.type = "hidden";
+              rel.name = "relationship_type";
+              rel.value = relTypeEl.value || "";
+    
+              form.appendChild(next);
+              form.appendChild(related);
+              form.appendChild(rel);
+    
+              document.body.appendChild(form);
+              form.submit();
+            });
+    
+            resultsEl.appendChild(btn);
+          });
+        }
+    
+        searchInput.addEventListener("input", () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => doSearch(searchInput.value), 250);
+        });
+      })();
+    </script>
 </div>  <!-- closes .container py-4 -->
 {% endblock %}

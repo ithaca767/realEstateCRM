@@ -263,21 +263,21 @@ def init_db():
     except Exception as e:
         print("Interaction schema update skipped:", e)
 
-    # Related contacts table (associated contacts)
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS related_contacts (
-            id SERIAL PRIMARY KEY,
-            contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-            related_name TEXT NOT NULL,
-            relationship TEXT,
-            email TEXT,
-            phone TEXT,
-            notes TEXT
-        )
-        """
-    )
-    conn.commit()
+    # # Related contacts table (associated contacts)
+    # cur.execute(
+    #     """
+    #     CREATE TABLE IF NOT EXISTS related_contacts (
+    #         id SERIAL PRIMARY KEY,
+    #         contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    #         related_name TEXT NOT NULL,
+    #         relationship TEXT,
+    #         email TEXT,
+    #         phone TEXT,
+    #         notes TEXT
+    #     )
+    #     """
+    # )
+    # conn.commit()
 
     # Buyer profiles table
     cur.execute(
@@ -417,8 +417,67 @@ def init_db():
         )
         """
     )
-
+    conn.commit()
     conn.close()
+    
+def get_contact_associations(conn, user_id, contact_id):
+    """
+    Symmetric associations for a contact:
+    if current contact is primary, other is related, and vice versa.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+          ca.id,
+          ca.relationship_type,
+          CASE
+            WHEN ca.contact_id_primary = %s THEN ca.contact_id_related
+            ELSE ca.contact_id_primary
+          END AS other_contact_id,
+          c.name AS other_name,
+          c.email AS other_email,
+          c.phone AS other_phone
+        FROM contact_associations ca
+        JOIN contacts c
+          ON c.id = CASE
+            WHEN ca.contact_id_primary = %s THEN ca.contact_id_related
+            ELSE ca.contact_id_primary
+          END
+        WHERE ca.user_id = %s
+          AND (ca.contact_id_primary = %s OR ca.contact_id_related = %s)
+        ORDER BY c.name ASC
+        """,
+        (contact_id, contact_id, user_id, contact_id, contact_id),
+    )
+    return cur.fetchall()
+
+
+def create_contact_association(conn, user_id, contact_id_a, contact_id_b, relationship_type=None):
+    """
+    Store once in canonical ordering so A-B and B-A are the same row.
+    """
+    if contact_id_a == contact_id_b:
+        raise ValueError("Cannot associate a contact with itself.")
+
+    primary_id = min(contact_id_a, contact_id_b)
+    related_id = max(contact_id_a, contact_id_b)
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO contact_associations (user_id, contact_id_primary, contact_id_related, relationship_type)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (user_id, contact_id_primary, contact_id_related)
+        DO UPDATE SET relationship_type = EXCLUDED.relationship_type,
+                      updated_at = NOW()
+        RETURNING id
+        """,
+        (user_id, primary_id, related_id, relationship_type),
+    )
+    row = cur.fetchone()
+    return row["id"] if row and isinstance(row, dict) else (row[0] if row else None)
+
 
 LEAD_TYPES = [
     "Buyer",
@@ -3241,28 +3300,18 @@ def edit_contact(contact_id):
         """, (contact_id,))
     special_dates = cur.fetchall()
 
-
-    # Associated contacts for this contact
-    cur.execute(
-        """
-        SELECT * FROM related_contacts
-        WHERE contact_id = %s
-        ORDER BY id
-        """,
-        (contact_id,),
-    )
-    related_contacts = cur.fetchall()
+    associations = get_contact_associations(conn, current_user.id, contact_id)
 
     conn.close()
 
     return render_template(
         "edit_contact.html",
         c=contact,
+        associations=associations,
         engagements=engagements,
         special_dates=special_dates,
         open_interactions=open_interactions,
         completed_interactions=completed_interactions,
-        related_contacts=related_contacts,
         lead_types=LEAD_TYPES,
         pipeline_stages=PIPELINE_STAGES,
         priorities=PRIORITIES,
@@ -3276,6 +3325,131 @@ def edit_contact(contact_id):
         has_seller_profile=has_seller_profile,
     )
 
+@app.route("/contacts/search")
+@login_required
+def contacts_search():
+    q = (request.args.get("q") or "").strip()
+    conn = get_db()
+    cur = conn.cursor()
+
+    if not q:
+        conn.close()
+        return jsonify([])
+
+    like = f"%{q}%"
+    cur.execute(
+        """
+        SELECT id, name, email, phone
+        FROM contacts
+        WHERE user_id = %s
+          AND (name ILIKE %s OR email ILIKE %s OR phone ILIKE %s)
+        ORDER BY name ASC
+        LIMIT 10
+        """,
+        (current_user.id, like, like, like),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify(rows)
+
+
+@app.route("/contacts/<int:contact_id>/associations/add", methods=["POST"])
+@login_required
+def add_contact_association(contact_id):
+    related_contact_id = int(request.form.get("related_contact_id") or 0)
+    relationship_type = (request.form.get("relationship_type") or "").strip() or None
+    next_url = request.form.get("next") or url_for("edit_contact", contact_id=contact_id)
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Validate ownership for parent
+    cur.execute("SELECT id FROM contacts WHERE id = %s AND user_id = %s", (contact_id, current_user.id))
+    if not cur.fetchone():
+        conn.close()
+        return "Contact not found", 404
+
+    # Validate ownership for related
+    cur.execute("SELECT id FROM contacts WHERE id = %s AND user_id = %s", (related_contact_id, current_user.id))
+    if not cur.fetchone():
+        conn.close()
+        return "Related contact not found", 404
+
+    try:
+        create_contact_association(conn, current_user.id, contact_id, related_contact_id, relationship_type)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return str(e), 400
+
+    conn.close()
+    return redirect(next_url)
+
+
+@app.route("/contacts/<int:contact_id>/associations/create", methods=["POST"])
+@login_required
+def create_and_associate_contact(contact_id):
+    first_name = (request.form.get("first_name") or "").strip()
+    last_name = (request.form.get("last_name") or "").strip()
+    full_name = f"{first_name} {last_name}".strip()
+    email = (request.form.get("email") or "").strip()
+    phone = (request.form.get("phone") or "").strip()
+    relationship_type = (request.form.get("relationship_type") or "").strip() or None
+    next_url = request.form.get("next") or url_for("edit_contact", contact_id=contact_id)
+
+    if not full_name:
+        return redirect(next_url)
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Validate parent ownership
+    cur.execute("SELECT id FROM contacts WHERE id = %s AND user_id = %s", (contact_id, current_user.id))
+    if not cur.fetchone():
+        conn.close()
+        return "Contact not found", 404
+
+    # Create new contact
+    cur.execute(
+        """
+        INSERT INTO contacts (user_id, name, first_name, last_name, email, phone, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+        RETURNING id
+        """,
+        (current_user.id, full_name, first_name, last_name, email, phone),
+    )
+    new_row = cur.fetchone()
+    new_id = new_row["id"] if isinstance(new_row, dict) else new_row[0]
+
+    create_contact_association(conn, current_user.id, contact_id, new_id, relationship_type)
+
+    conn.commit()
+    conn.close()
+    return redirect(next_url)
+
+
+@app.route("/contacts/<int:contact_id>/associations/<int:assoc_id>/delete", methods=["POST"])
+@login_required
+def delete_contact_association(contact_id, assoc_id):
+    next_url = request.form.get("next") or url_for("edit_contact", contact_id=contact_id)
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        DELETE FROM contact_associations
+        WHERE id = %s
+          AND user_id = %s
+          AND (contact_id_primary = %s OR contact_id_related = %s)
+        """,
+        (assoc_id, current_user.id, contact_id, contact_id),
+    )
+
+    conn.commit()
+    conn.close()
+    return redirect(next_url)
 
 @app.route("/contacts/<int:contact_id>/engagements/add", methods=["POST"])
 @login_required
