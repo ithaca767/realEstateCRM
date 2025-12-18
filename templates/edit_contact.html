@@ -215,199 +215,146 @@
         </div>        <!-- closes .card-body -->
     </div>            <!-- closes .card -->
 
-    <!-- Engagement Log -->
-    <div class="card card-engagement">
-        <div class="card-header">
-            Engagement Log
+<!-- Engagement Log -->
+<div class="card mt-4">
+  <div class="card-header">Engagement Log</div>
+  <div class="card-body bg-white">
+
+    <form method="post" action="{{ url_for('add_engagement', contact_id=c['id']) }}">
+      <div class="row g-3 align-items-end">
+
+        <div class="col-md-3">
+          <label class="form-label">Type</label>
+          <select name="engagement_type" class="form-select" required>
+            <option value="call">Phone Call</option>
+            <option value="text">Text Message</option>
+            <option value="email">Email</option>
+            <option value="meeting">Meeting</option>
+            <option value="open_house">Open house</option>
+            <option value="other">Other</option>
+          </select>
         </div>
-        <div class="card-body bg-white">
-            <form method="post" action="{{ url_for('add_interaction', contact_id=c['id']) }}">
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-3">
-                        <label class="form-label">Type</label>
-                        <select name="kind" class="form-select" required>
-                            <option value="Call">Phone Call</option>
-                            <option value="Text">Text Message</option>
-                            <option value="Email">Email</option>
-                            <option value="Meeting">Meeting</option>
-                            <option value="Other">Other</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Date</label>
-                        <input name="happened_at" type="date" class="form-control" value="{{ today }}">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Time (Optional)</label>
-                        <select name="time_hour" class="form-select">
-                            <option value="">Hour</option>
-                            {% for h in range(1,13) %}
-                                <option value="{{ h }}">{{ h }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">&nbsp;</label>
-                        <select name="time_minute" class="form-select">
-                            <option value="">Minute</option>
-                            {% for m in ["00", "15", "30", "45"] %}
-                                <option value="{{ m }}">{{ m }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">&nbsp;</label>
-                        <select name="time_ampm" class="form-select">
-                            <option value="">AM / PM</option>
-                            <option value="AM">AM</option>
-                            <option value="PM">PM</option>
-                        </select>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Notes</label>
-                        <input name="notes" class="form-control" placeholder="Summary of the conversation or message">
-                    </div>
-                    <div class="col-12">
-                        <button class="btn btn-outline-primary mt-2" type="submit">Save Interaction</button>
-                    </div>
-                </div>
-            </form>
 
-            <hr>
-
-            {# If we have any interactions at all #}
-            {% if (open_interactions and open_interactions|length > 0) or
-                  (completed_interactions and completed_interactions|length > 0) %}
-
-                <!-- Open interactions -->
-                <h6 class="fw-bold">Open interactions</h6>
-
-                <div class="table-responsive mb-3">
-                    <table class="table table-sm table-striped mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Date</th>
-                                <th>Time</th>
-                                <th>Type</th>
-                                <th>Notes</th>
-                                <th style="width: 180px;" class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        {% if open_interactions and open_interactions|length > 0 %}
-                            {% for i in open_interactions %}
-                                <tr>
-                                    <td>{{ i["happened_at"] or "" }}</td>
-                                    <td>{{ i["time_of_day"] or "" }}</td>
-                                    <td>{{ i["kind"] }}</td>
-                                    <td>{{ i["notes"] or "" }}</td>
-                                    <td>
-                                      <div class="d-flex justify-content-end align-items-center gap-1">
-                                        <form
-                                          action="{{ url_for('complete_interaction', interaction_id=i['id']) }}"
-                                          method="post"
-                                          class="m-0"
-                                        >
-                                            <button type="submit" class="btn btn-sm btn-success">
-                                                Complete
-                                            </button>
-                                        </form>
-
-                                        <a href="{{ url_for('edit_interaction', interaction_id=i['id']) }}"
-                                           class="btn btn-sm btn-outline-secondary ms-1">
-                                            Edit
-                                        </a>
-
-                                        <a href="{{ url_for('delete_interaction', interaction_id=i['id']) }}"
-                                           class="btn btn-sm btn-outline-danger ms-1"
-                                           onclick="return confirm('Delete this interaction?');">
-                                            Delete
-                                        </a>
-                                      </div>  
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="5" class="text-muted fst-italic">
-                                    No open interactions.
-                                </td>
-                            </tr>
-                        {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Completed interactions -->
-                <h6 class="fw-bold d-flex align-items-center mt-3">
-                    Completed interactions
-                    <button
-                      class="btn btn-link btn-sm ms-2 p-0"
-                      type="button"
-                      data-bs-toggle="collapse"
-                      data-bs-target="#completedInteractions"
-                      aria-expanded="true"
-                      aria-controls="completedInteractions"
-                    >
-                        show or hide
-                    </button>
-                </h6>
-
-                <div class="collapse show" id="completedInteractions">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-striped mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Time</th>
-                                    <th>Type</th>
-                                    <th>Notes</th>
-                                    <th>Completed at</th>
-                                    <th style="width: 140px;" class="text-end">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            {% if completed_interactions and completed_interactions|length > 0 %}
-                                {% for i in completed_interactions %}
-                                    <tr class="text-muted">
-                                        <td>{{ i["happened_at"] or "" }}</td>
-                                        <td>{{ i["time_of_day"] or "" }}</td>
-                                        <td>{{ i["kind"] }}</td>
-                                        <td>{{ i["notes"] or "" }}</td>  <!-- no strikethrough -->
-                                        <td>{{ i["completed_at"] or "" }}</td>
-                                        <td>
-                                          <div class="d-flex justify-content-end align-items-center gap-1">
-                                            <a href="{{ url_for('edit_interaction', interaction_id=i['id']) }}"
-                                               class="btn btn-sm btn-outline-secondary">
-                                                Edit
-                                            </a>
-                            
-                                            <a href="{{ url_for('delete_interaction', interaction_id=i['id']) }}"
-                                               class="btn btn-sm btn-outline-danger ms-1"
-                                               onclick="return confirm('Delete this interaction?');">
-                                                Delete
-                                            </a>
-                                          </div>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="6" class="text-muted fst-italic">
-                                        No completed interactions yet.
-                                    </td>
-                                </tr>
-                            {% endif %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-            {% else %}
-                <p class="mb-0 text-muted">No interactions logged yet.</p>
-            {% endif %}
+        <div class="col-md-3">
+          <label class="form-label">Date</label>
+          <input name="occurred_date" type="date" class="form-control" value="{{ today }}" required>
         </div>
-    </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Hour</label>
+          <select name="time_hour" class="form-select">
+            <option value="">Hour</option>
+            {% for h in range(1, 13) %}
+              <option value="{{ h }}">{{ h }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Minute</label>
+          <select name="time_minute" class="form-select">
+            <option value="">Minute</option>
+            <option value="00">00</option>
+            <option value="15">15</option>
+            <option value="30">30</option>
+            <option value="45">45</option>
+          </select>
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">AM / PM</label>
+          <select name="time_ampm" class="form-select">
+            <option value="">AM / PM</option>
+            <option value="AM">AM</option>
+            <option value="PM">PM</option>
+          </select>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Outcome</label>
+          <input name="outcome" class="form-control" placeholder="Spoke, left VM, no answer, set showing, etc.">
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Notes</label>
+          <input name="notes" class="form-control" placeholder="CRM-ready summary">
+        </div>
+
+        <div class="col-12">
+          <button class="btn btn-outline-primary mt-2" type="button" data-bs-toggle="collapse" data-bs-target="#transcriptCollapse">
+            Paste transcript and summary (optional)
+          </button>
+
+          <div class="collapse mt-3" id="transcriptCollapse">
+            <div class="mb-2">
+              <label class="form-label">Transcript (raw)</label>
+              <textarea name="transcript_raw" class="form-control" rows="5" placeholder="Paste full transcript here"></textarea>
+            </div>
+            <div>
+              <label class="form-label">Summary (clean)</label>
+              <textarea name="summary_clean" class="form-control" rows="4" placeholder="Paste cleaned summary here"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <button class="btn btn-outline-primary mt-2" type="submit">Save Engagement</button>
+        </div>
+
+      </div>
+    </form>
+
+    <hr>
+
+    {% if engagements and engagements|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 170px;">When</th>
+              <th style="width: 140px;">Type</th>
+              <th>Details</th>
+              <th style="width: 90px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in engagements %}
+              <tr>
+                <td class="text-muted">{{ e["occurred_at"] }}</td>
+                <td>{{ (e["engagement_type"] or "")|replace("_"," ")|title }}</td>
+                <td>
+                  {% if e["outcome"] %}<div><span class="text-muted">Outcome:</span> {{ e["outcome"] }}</div>{% endif %}
+                  {% if e["notes"] %}<div>{{ e["notes"] }}</div>{% endif %}
+                  {% if e["summary_clean"] %}
+                    <div class="mt-2"><span class="text-muted">Summary:</span> {{ e["summary_clean"] }}</div>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <div class="d-inline-flex gap-2">
+                    <a class="btn btn-sm btn-outline-secondary"
+                       href="{{ url_for('edit_engagement', engagement_id=e['id'], next=request.path) }}">
+                      Edit
+                    </a>
+                
+                    <form method="post" action="{{ url_for('remove_engagement', engagement_id=e['id']) }}">
+                      <input type="hidden" name="next" value="{{ request.path }}">
+                      <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="mb-0 text-muted">No engagements logged yet.</p>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- Special Dates -->
 
 <div class="card mt-4">
   <div class="card-header">Special Dates</div>
@@ -562,6 +509,5 @@
             {% endif %}
         </div>
     </div>
-
 </div>  <!-- closes .container py-4 -->
 {% endblock %}
