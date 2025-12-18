@@ -27,7 +27,9 @@ def insert_engagement(conn, user_id: int, contact_id: int, engagement_type: str,
         """,
         (user_id, contact_id, engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean),
     )
-    new_id = cur.fetchone()[0]
+    row = cur.fetchone()
+    new_id = row["id"] if row else None
+
     conn.commit()
     return new_id
 
