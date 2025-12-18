@@ -134,15 +134,25 @@
                                 <strong>{{ c["last_engagement_type"] or "engagement" }}</strong>
                                 <span class="text-muted">({{ c["last_engagement_at"] }})</span>
                               </div>
-                              {% if c["last_engagement_outcome"] %}
-                                <div class="text-muted small">{{ c["last_engagement_outcome"] }}</div>
-                              {% elif c["last_engagement_summary"] %}
-                                <div class="text-muted small">{{ c["last_engagement_summary"] }}</div>
+                          
+                              {% set detail = c["last_engagement_outcome"] or c["last_engagement_summary"] %}
+                              {% if detail %}
+                                {% set collapse_id = "acEngDetail" ~ c["contact_id"] %}
+                                <div class="text-muted small">
+                                  <a class="text-decoration-none" data-bs-toggle="collapse" href="#{{ collapse_id }}" role="button"
+                                     aria-expanded="false" aria-controls="{{ collapse_id }}">
+                                    Details
+                                  </a>
+                                </div>
+                                <div class="collapse mt-1" id="{{ collapse_id }}">
+                                  <div class="small">{{ detail }}</div>
+                                </div>
                               {% endif %}
                             {% else %}
                               <span class="text-muted small">No engagements yet</span>
                             {% endif %}
                           </td>
+
 
                           <td>
                             <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}"
@@ -170,31 +180,74 @@
               <div class="text-muted small">Last 10</div>
             </div>
             <div class="card-body bg-white">
-              {% if recent_engagements and recent_engagements|length > 0 %}
-                <div class="list-group list-group-flush">
-                  {% for e in recent_engagements %}
-                    <div class="list-group-item px-0">
-                      <div class="d-flex justify-content-between">
-                        <div>
-                          <a href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}" class="text-decoration-none">
-                            <strong>{{ e["contact_name"] or "Unnamed Contact" }}</strong>
-                          </a>
-                          <div class="text-muted small">{{ e["engagement_type"] or "engagement" }}</div>
+                {% set show_n = 5 %}
+                {% set total_n = recent_engagements|length %}
+                
+                {% if recent_engagements and total_n > 0 %}
+                  <div class="list-group list-group-flush">
+                
+                    {# First 5 items #}
+                    {% for e in recent_engagements[:show_n] %}
+                      <div class="list-group-item px-0">
+                        <div class="d-flex justify-content-between">
+                          <div>
+                            <a href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}" class="text-decoration-none">
+                              <strong>{{ e["contact_name"] or "Unnamed Contact" }}</strong>
+                            </a>
+                            <div class="text-muted small">{{ e["engagement_type"] or "engagement" }}</div>
+                          </div>
+                          <div class="text-muted small">{{ e["occurred_at"] }}</div>
                         </div>
-                        <div class="text-muted small">{{ e["occurred_at"] }}</div>
+                
+                        {% if e["outcome"] %}
+                          <div class="small mt-1">{{ e["outcome"] }}</div>
+                        {% elif e["summary_clean"] %}
+                          <div class="small mt-1">{{ e["summary_clean"] }}</div>
+                        {% endif %}
                       </div>
-
-                      {% if e["outcome"] %}
-                        <div class="small mt-1">{{ e["outcome"] }}</div>
-                      {% elif e["summary_clean"] %}
-                        <div class="small mt-1">{{ e["summary_clean"] }}</div>
-                      {% endif %}
-                    </div>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <p class="mb-0 text-muted">Nothing here.</p>
-              {% endif %}
+                    {% endfor %}
+                
+                    {# Collapsed remainder #}
+                    {% if total_n > show_n %}
+                      <div class="collapse" id="recentEngagementsMore">
+                        {% for e in recent_engagements[show_n:] %}
+                          <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between">
+                              <div>
+                                <a href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}" class="text-decoration-none">
+                                  <strong>{{ e["contact_name"] or "Unnamed Contact" }}</strong>
+                                </a>
+                                <div class="text-muted small">{{ e["engagement_type"] or "engagement" }}</div>
+                              </div>
+                              <div class="text-muted small">{{ e["occurred_at"] }}</div>
+                            </div>
+                
+                            {% if e["outcome"] %}
+                              <div class="small mt-1">{{ e["outcome"] }}</div>
+                            {% elif e["summary_clean"] %}
+                              <div class="small mt-1">{{ e["summary_clean"] }}</div>
+                            {% endif %}
+                          </div>
+                        {% endfor %}
+                      </div>
+                
+                      <div class="pt-2">
+                        <button class="btn btn-sm btn-outline-secondary"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#recentEngagementsMore"
+                                aria-expanded="false"
+                                aria-controls="recentEngagementsMore"
+                                id="recentEngagementsToggle">
+                          See more ({{ total_n - show_n }})
+                        </button>
+                      </div>
+                    {% endif %}
+                
+                  </div>
+                {% else %}
+                  <p class="mb-0 text-muted">Nothing here.</p>
+                {% endif %}
             </div>
           </div>
         </div>
@@ -288,4 +341,28 @@
     </div>
 
   </div>
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var more = document.getElementById("recentEngagementsMore");
+    var btn = document.getElementById("recentEngagementsToggle");
+    if (!more || !btn) return;
+
+    more.addEventListener("shown.bs.collapse", function () {
+      btn.textContent = "See less";
+    });
+    more.addEventListener("hidden.bs.collapse", function () {
+      var remaining = btn.getAttribute("data-remaining");
+      if (remaining) {
+        btn.textContent = "See more (" + remaining + ")";
+      }
+    });
+
+    // Store remaining count in a data attribute, if present in the button text initially
+    var match = btn.textContent.match(/\((\d+)\)/);
+    if (match && match[1]) {
+      btn.setAttribute("data-remaining", match[1]);
+    }
+  });
+</script>
+
 {% endblock %}
