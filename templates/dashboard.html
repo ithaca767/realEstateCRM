@@ -105,6 +105,17 @@
                                 {{ c["name"] or "Unnamed Contact" }}
                               {% endif %}
                             </a>
+                            <div class="text-muted small mt-1">
+                              {% if c["has_buyer_profile"] and c["has_seller_profile"] %}
+                                <span class="badge bg-info text-dark me-1">Buyer</span>
+                                <span class="badge bg-warning text-dark">Seller</span>
+                              {% elif c["has_buyer_profile"] %}
+                                <span class="badge bg-info text-dark">Buyer</span>
+                              {% elif c["has_seller_profile"] %}
+                                <span class="badge bg-warning text-dark">Seller</span>
+                              {% endif %}
+                            </div>
+
                           </td>
 
                           <td style="min-width: 220px;">
@@ -199,10 +210,41 @@
                           <div class="text-muted small">{{ e["occurred_at"] }}</div>
                         </div>
                 
-                        {% if e["outcome"] %}
-                          <div class="small mt-1">{{ e["outcome"] }}</div>
-                        {% elif e["summary_clean"] %}
-                          <div class="small mt-1">{{ e["summary_clean"] }}</div>
+                        {% set detail = e["outcome"] or e["summary_clean"] %}
+                        {% if detail %}
+                          {% set collapse_id = "reDetail" ~ e["id"] %}
+                          {% set preview_len = 120 %}
+                          {% if detail|length > preview_len %}
+                            <div class="small mt-1">
+                              {{ detail[:preview_len] }}...
+                              <a href="#{{ collapse_id }}"
+                                 class="ms-1 text-decoration-none js-toggle-text"
+                                 data-bs-toggle="collapse"
+                                 role="button"
+                                 aria-expanded="false"
+                                 aria-controls="{{ collapse_id }}"
+                                 data-more="See more"
+                                 data-less="See less">
+                                See more
+                              </a>
+                            </div>
+                        
+                            <div class="collapse mt-1" id="{{ collapse_id }}">
+                              <div class="small">{{ detail }}</div>
+                              <a href="#{{ collapse_id }}"
+                                 class="text-decoration-none js-toggle-text"
+                                 data-bs-toggle="collapse"
+                                 role="button"
+                                 aria-expanded="true"
+                                 aria-controls="{{ collapse_id }}"
+                                 data-more="See more"
+                                 data-less="See less">
+                                See less
+                              </a>
+                            </div>
+                          {% else %}
+                            <div class="small mt-1">{{ detail }}</div>
+                          {% endif %}
                         {% endif %}
                       </div>
                     {% endfor %}
@@ -362,6 +404,30 @@
     if (match && match[1]) {
       btn.setAttribute("data-remaining", match[1]);
     }
+  });
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".js-toggle-text").forEach(function (a) {
+      var targetSel = a.getAttribute("href");
+      if (!targetSel) return;
+      var target = document.querySelector(targetSel);
+      if (!target) return;
+
+      target.addEventListener("shown.bs.collapse", function () {
+        document.querySelectorAll('a.js-toggle-text[href="' + targetSel + '"]').forEach(function (link) {
+          link.textContent = link.getAttribute("data-less") || "See less";
+          link.setAttribute("aria-expanded", "true");
+        });
+      });
+
+      target.addEventListener("hidden.bs.collapse", function () {
+        document.querySelectorAll('a.js-toggle-text[href="' + targetSel + '"]').forEach(function (link) {
+          link.textContent = link.getAttribute("data-more") || "See more";
+          link.setAttribute("aria-expanded", "false");
+        });
+      });
+    });
   });
 </script>
 

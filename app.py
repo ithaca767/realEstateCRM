@@ -2732,11 +2732,6 @@ def dashboard():
             else:
                 badges.append("Follow-up scheduled")
 
-        if row.get("has_buyer_profile"):
-            badges.append("Buyer")
-        if row.get("has_seller_profile"):
-            badges.append("Seller")
-
         row["active_reasons"] = badges
         active_contacts.append(row)
 
