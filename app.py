@@ -3214,7 +3214,7 @@ def edit_contact(contact_id):
         )
         conn.commit()
         conn.close()
-        return redirect(url_for("contacts"))
+        return redirect(url_for("edit_contact", contact_id=contact_id, saved=1))
 
     # GET: load contact and its interactions
     cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))

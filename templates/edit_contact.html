@@ -19,6 +19,12 @@
     </div>
   </div>
 
+      {% if request.args.get("saved") %}
+        <div class="alert alert-success py-2">
+          Contact saved
+        </div>
+      {% endif %}
+
     <!-- Edit Contact card -->
     <div class="card card-edit mb-4">
      <div class="card-body">
