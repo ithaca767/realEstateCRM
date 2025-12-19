@@ -4,6 +4,7 @@ import secrets
 import csv
 import io
 
+from version import APP_VERSION
 from functools import wraps
 from datetime import date, datetime, timedelta, time
 from math import ceil
@@ -46,6 +47,10 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
+
+@app.context_processor
+def inject_app_version():
+    return {"APP_VERSION": APP_VERSION}
 
 # --- Security & session config ---
 SECRET_KEY = os.environ.get("SECRET_KEY")
