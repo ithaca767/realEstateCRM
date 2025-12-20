@@ -3418,21 +3418,28 @@ def create_and_associate_contact(contact_id):
     # Create new contact
     cur.execute(
         """
-        INSERT INTO contacts (user_id, name, first_name, last_name, email, phone, created_at, updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+        INSERT INTO contacts (user_id, name, first_name, last_name, email, phone)
+        VALUES (%s, %s, %s, %s, %s, %s)
         RETURNING id
         """,
         (current_user.id, full_name, first_name, last_name, email, phone),
     )
-    new_row = cur.fetchone()
-    new_id = new_row["id"] if isinstance(new_row, dict) else new_row[0]
-
-    create_contact_association(conn, current_user.id, contact_id, new_id, relationship_type)
-
+    
+    row = cur.fetchone()
+    new_id = row["id"]
+    
+    create_contact_association(
+        conn,
+        current_user.id,
+        contact_id,
+        new_id,
+        relationship_type,
+    )
+    
     conn.commit()
     conn.close()
     return redirect(next_url)
-
+    
 
 @app.route("/contacts/<int:contact_id>/associations/<int:assoc_id>/delete", methods=["POST"])
 @login_required
