@@ -360,6 +360,76 @@
   </div>
 </div>
 
+<!-- Transactions -->
+{% set status_labels = dict(transaction_statuses) %}
+<div class="card mt-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="fw-semibold">Transactions</div>
+    <a
+      class="btn btn-sm btn-primary"
+      href="{{ url_for('new_transaction', contact_id=c['id'], next=url_for('edit_contact', contact_id=c['id'])) }}"
+    >
+      + New Transaction
+    </a>
+  </div>
+
+  <div class="card-body p-0">
+    {% if transactions and transactions|length > 0 %}
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Address</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Expected Close</th>
+              <th class="text-end">Open</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in transactions %}
+              <tr>
+                <td>
+                  {% if tx['address'] %}
+                    <a
+                      href="{{ url_for('edit_transaction', transaction_id=tx['id'], next=url_for('edit_contact', contact_id=c['id'])) }}"
+                      class="text-decoration-none"
+                    >
+                      {{ tx['address'] }}
+                    </a>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>{{ tx['transaction_type'] }}</td>
+                <td>{{ status_labels.get(tx['status'], tx['status']) }}</td>
+                <td>{% if tx['expected_close_date'] %}{{ tx['expected_close_date'] }}{% endif %}</td>
+                <td class="text-end">
+                  <a
+                    class="btn btn-sm btn-outline-secondary"
+                    href="{{ url_for('edit_transaction', transaction_id=tx['id'], next=url_for('edit_contact', contact_id=c['id'])) }}"
+                  >
+                    View / Edit
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-3 text-muted">No transactions yet.</div>
+    {% endif %}
+    {% if transactions|length == 5 %}
+      <div class="px-3 py-2 text-muted small">
+        Showing most recent 5 transactions
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+
 <!-- Special Dates -->
 
 <div class="card mt-4">

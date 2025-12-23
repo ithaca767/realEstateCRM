@@ -523,6 +523,18 @@ SOURCES = [
     "Other",
 ]
 
+TRANSACTION_STATUSES = [
+    ("draft", "Draft"),
+    ("coming_soon", "Coming Soon"),
+    ("active", "Active"),
+    ("attorney_review", "Attorney Review"),
+    ("pending_uc", "Pending / Under Contract"),
+    ("closed", "Closed"),
+    ("temp_off_market", "Temporarily Off Market"),
+    ("withdrawn", "Withdrawn"),
+    ("canceled", "Canceled"),
+    ("expired", "Expired"),
+]
 
 BASE_TEMPLATE = """
 <!doctype html>
@@ -3270,7 +3282,19 @@ def edit_contact(contact_id):
             next_time_hour = None
             next_time_minute = None
             next_time_ampm = None
-
+    
+    cur.execute(
+        """
+        SELECT id, status, transaction_type, expected_close_date, address, updated_at
+        FROM transactions
+        WHERE contact_id = %s AND user_id = %s
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 5
+        """,
+        (contact_id, current_user.id),
+    )
+    transactions = cur.fetchall()
+    
     # NEW: split interactions into open and completed
     cur.execute(
         """
@@ -3328,6 +3352,8 @@ def edit_contact(contact_id):
         active_page="contacts",
         has_buyer_profile=has_buyer_profile,
         has_seller_profile=has_seller_profile,
+        transactions=transactions,
+        transaction_statuses=TRANSACTION_STATUSES,
     )
 
 @app.route("/contacts/search")
@@ -4410,6 +4436,154 @@ def edit_interaction(interaction_id):
 
     conn.close()
     return render_template("edit_interaction.html", interaction=interaction)
+
+@app.route("/contacts/<int:contact_id>/transactions/new", methods=["GET", "POST"])
+@login_required
+def new_transaction(contact_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    next_url = request.args.get("next") or url_for("edit_contact", contact_id=contact_id)
+
+    cur.execute(
+        "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+        (contact_id, current_user.id),
+    )
+    if not cur.fetchone():
+        conn.close()
+        return "Contact not found", 404
+
+    if request.method == "POST":
+        status = (request.form.get("status") or "draft").strip()
+        transaction_type = (request.form.get("transaction_type") or "unknown").strip().lower()
+        address = (request.form.get("address") or "").strip() or None
+        list_price = (request.form.get("list_price") or "").strip() or None
+        offer_price = (request.form.get("offer_price") or "").strip() or None
+        expected_close_date = (request.form.get("expected_close_date") or "").strip() or None
+        actual_close_date = (request.form.get("actual_close_date") or "").strip() or None
+
+        cur.execute(
+            """
+            INSERT INTO transactions (
+                user_id,
+                contact_id,
+                status,
+                transaction_type,
+                address,
+                listing_status,
+                offer_status,
+                list_price,
+                offer_price,
+                expected_close_date,
+                actual_close_date
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                current_user.id,
+                contact_id,
+                status,
+                transaction_type,
+                address,
+                "lead",
+                "none",
+                list_price,
+                offer_price,
+                expected_close_date,
+                actual_close_date,
+            ),
+        )
+
+        row = cur.fetchone()
+        if not row or "id" not in row:
+            conn.rollback()
+            conn.close()
+            return "Insert failed", 500
+
+        tx_id = row["id"]
+        conn.commit()
+        conn.close()
+
+        return redirect(next_url)
+
+    conn.close()
+    return render_template(
+        "transactions/transaction_form.html",
+        mode="new",
+        tx=None,
+        transaction_statuses=TRANSACTION_STATUSES,
+        next_url=next_url,
+    )
+
+@app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_transaction(transaction_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT *
+        FROM transactions
+        WHERE id = %s AND user_id = %s
+        """,
+        (transaction_id, current_user.id),
+    )
+    tx = cur.fetchone()
+    if not tx:
+        conn.close()
+        return "Transaction not found", 404
+
+    if request.method == "POST":
+        status = request.form.get("status", tx["status"])
+        transaction_type = request.form.get("transaction_type", tx["transaction_type"])
+        address = (request.form.get("address") or "").strip() or None
+        list_price = (request.form.get("list_price") or "").strip() or None
+        offer_price = (request.form.get("offer_price") or "").strip() or None
+        expected_close_date = (request.form.get("expected_close_date") or "").strip() or None
+        actual_close_date = (request.form.get("actual_close_date") or "").strip() or None
+        
+        cur.execute(
+            """
+            UPDATE transactions
+            SET status = %s,
+                transaction_type = %s,
+                address = %s,
+                list_price = %s,
+                offer_price = %s,
+                expected_close_date = %s,
+                actual_close_date = %s,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            """,
+            (
+                status,
+                transaction_type,
+                address,
+                list_price,
+                offer_price,
+                expected_close_date,
+                actual_close_date,
+                transaction_id,
+                current_user.id,
+            ),
+        )
+
+        conn.commit()
+        next_url = request.form.get("next") or url_for("edit_contact", contact_id=tx["contact_id"])
+        conn.close()
+        return redirect(next_url)
+
+    next_url = request.args.get("next") or url_for("edit_contact", contact_id=tx["contact_id"])
+    conn.close()
+    return render_template(
+        "transactions/transaction_form.html",
+        mode="edit",
+        tx=tx,
+        transaction_statuses=TRANSACTION_STATUSES,
+        next_url=next_url,
+    )
 
 @app.route("/openhouses")
 @login_required
