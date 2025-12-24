@@ -152,11 +152,13 @@
           value="{% if tx and tx['mortgage_commitment_date'] %}{{ tx['mortgage_commitment_date'] }}{% endif %}"
         >
       </div>
+    </div>
           <!-- Deadlines (Phase 3.1: read-only) -->
       <div class="card mt-4">
         <div class="card-header fw-semibold">
           Deadlines
         </div>
+        
   
         <div class="card-body p-0">
           {% if deadlines and deadlines|length > 0 %}
@@ -206,8 +208,6 @@
         </div>
       </div>
 
-    </div>
-
     <div class="d-flex gap-2">
       <button type="submit" class="btn btn-primary">
         {% if mode == "edit" %}Save Changes{% else %}Create Transaction{% endif %}
@@ -218,6 +218,6 @@
       {% endif %}
     </div>
   </form>
-
+  
 </div>
 {% endblock %}
