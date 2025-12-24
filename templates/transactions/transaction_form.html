@@ -100,6 +100,60 @@
       </div>
     </div>
 
+    <div class="row mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Attorney Review End</label>
+        <input
+          type="date"
+          class="form-control"
+          name="attorney_review_end_date"
+          value="{% if tx and tx['attorney_review_end_date'] %}{{ tx['attorney_review_end_date'] }}{% endif %}"
+        >
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Inspection Deadline</label>
+        <input
+          type="date"
+          class="form-control"
+          name="inspection_deadline"
+          value="{% if tx and tx['inspection_deadline'] %}{{ tx['inspection_deadline'] }}{% endif %}"
+        >
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Financing Contingency</label>
+        <input
+          type="date"
+          class="form-control"
+          name="financing_contingency_date"
+          value="{% if tx and tx['financing_contingency_date'] %}{{ tx['financing_contingency_date'] }}{% endif %}"
+        >
+      </div>
+    </div>
+
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Appraisal Deadline</label>
+        <input
+          type="date"
+          class="form-control"
+          name="appraisal_deadline"
+          value="{% if tx and tx['appraisal_deadline'] %}{{ tx['appraisal_deadline'] }}{% endif %}"
+        >
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Mortgage Commitment</label>
+        <input
+          type="date"
+          class="form-control"
+          name="mortgage_commitment_date"
+          value="{% if tx and tx['mortgage_commitment_date'] %}{{ tx['mortgage_commitment_date'] }}{% endif %}"
+        >
+      </div>
+    </div>
+
     <div class="d-flex gap-2">
       <button type="submit" class="btn btn-primary">
         {% if mode == "edit" %}Save Changes{% else %}Create Transaction{% endif %}

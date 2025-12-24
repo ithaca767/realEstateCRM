@@ -382,6 +382,8 @@
               <th>Address</th>
               <th>Type</th>
               <th>Status</th>
+              <th class="text-end">List</th>
+              <th class="text-end">Offer</th>
               <th>Expected Close</th>
               <th class="text-end">Open</th>
             </tr>
@@ -401,9 +403,23 @@
                     <span class="text-muted">—</span>
                   {% endif %}
                 </td>
+                
                 <td>{{ tx['transaction_type'] }}</td>
+                
                 <td>{{ status_labels.get(tx['status'], tx['status']) }}</td>
-                <td>{% if tx['expected_close_date'] %}{{ tx['expected_close_date'] }}{% endif %}</td>
+                
+                <td class="text-end">
+                  {% if tx['list_price'] %}${{ "{:,.0f}".format(tx['list_price']) }}{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                
+                <td class="text-end">
+                  {% if tx['offer_price'] %}${{ "{:,.0f}".format(tx['offer_price']) }}{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                
+                <td>
+                  {% if tx['expected_close_date'] %}{{ tx['expected_close_date'] }}{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                
                 <td class="text-end">
                   <a
                     class="btn btn-sm btn-outline-secondary"

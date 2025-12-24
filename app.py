@@ -3285,10 +3285,18 @@ def edit_contact(contact_id):
     
     cur.execute(
         """
-        SELECT id, status, transaction_type, expected_close_date, address, updated_at
+        SELECT
+            id,
+            status,
+            transaction_type,
+            address,
+            list_price,
+            offer_price,
+            expected_close_date,
+            updated_at
         FROM transactions
         WHERE contact_id = %s AND user_id = %s
-        ORDER BY updated_at DESC, id DESC
+        ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
         LIMIT 5
         """,
         (contact_id, current_user.id),
@@ -4456,14 +4464,20 @@ def new_transaction(contact_id):
     if request.method == "POST":
         status = (request.form.get("status") or "draft").strip()
         transaction_type = (request.form.get("transaction_type") or "unknown").strip().lower()
+
         address = (request.form.get("address") or "").strip() or None
         list_price = (request.form.get("list_price") or "").strip() or None
         offer_price = (request.form.get("offer_price") or "").strip() or None
         expected_close_date = (request.form.get("expected_close_date") or "").strip() or None
         actual_close_date = (request.form.get("actual_close_date") or "").strip() or None
 
-        cur.execute(
-            """
+        attorney_review_end_date = (request.form.get("attorney_review_end_date") or "").strip() or None
+        inspection_deadline = (request.form.get("inspection_deadline") or "").strip() or None
+        financing_contingency_date = (request.form.get("financing_contingency_date") or "").strip() or None
+        appraisal_deadline = (request.form.get("appraisal_deadline") or "").strip() or None
+        mortgage_commitment_date = (request.form.get("mortgage_commitment_date") or "").strip() or None
+
+        sql = """
             INSERT INTO transactions (
                 user_id,
                 contact_id,
@@ -4475,25 +4489,42 @@ def new_transaction(contact_id):
                 list_price,
                 offer_price,
                 expected_close_date,
-                actual_close_date
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-            """,
-            (
-                current_user.id,
-                contact_id,
-                status,
-                transaction_type,
-                address,
-                "lead",
-                "none",
-                list_price,
-                offer_price,
-                expected_close_date,
                 actual_close_date,
-            ),
+                attorney_review_end_date,
+                inspection_deadline,
+                financing_contingency_date,
+                appraisal_deadline,
+                mortgage_commitment_date
+            )
+            VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s
+            )
+            RETURNING id
+        """
+
+        params = (
+            current_user.id,
+            contact_id,
+            status,
+            transaction_type,
+            address,
+            "lead",  # safe default
+            "none",  # safe default
+            list_price,
+            offer_price,
+            expected_close_date,
+            actual_close_date,
+            attorney_review_end_date,
+            inspection_deadline,
+            financing_contingency_date,
+            appraisal_deadline,
+            mortgage_commitment_date,
         )
+
+        cur.execute(sql, params)
 
         row = cur.fetchone()
         if not row or "id" not in row:
@@ -4515,6 +4546,7 @@ def new_transaction(contact_id):
         transaction_statuses=TRANSACTION_STATUSES,
         next_url=next_url,
     )
+
 
 @app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
 @login_required
@@ -4538,12 +4570,19 @@ def edit_transaction(transaction_id):
     if request.method == "POST":
         status = request.form.get("status", tx["status"])
         transaction_type = request.form.get("transaction_type", tx["transaction_type"])
+
         address = (request.form.get("address") or "").strip() or None
         list_price = (request.form.get("list_price") or "").strip() or None
         offer_price = (request.form.get("offer_price") or "").strip() or None
         expected_close_date = (request.form.get("expected_close_date") or "").strip() or None
         actual_close_date = (request.form.get("actual_close_date") or "").strip() or None
-        
+
+        attorney_review_end_date = (request.form.get("attorney_review_end_date") or "").strip() or None
+        inspection_deadline = (request.form.get("inspection_deadline") or "").strip() or None
+        financing_contingency_date = (request.form.get("financing_contingency_date") or "").strip() or None
+        appraisal_deadline = (request.form.get("appraisal_deadline") or "").strip() or None
+        mortgage_commitment_date = (request.form.get("mortgage_commitment_date") or "").strip() or None
+
         cur.execute(
             """
             UPDATE transactions
@@ -4554,6 +4593,11 @@ def edit_transaction(transaction_id):
                 offer_price = %s,
                 expected_close_date = %s,
                 actual_close_date = %s,
+                attorney_review_end_date = %s,
+                inspection_deadline = %s,
+                financing_contingency_date = %s,
+                appraisal_deadline = %s,
+                mortgage_commitment_date = %s,
                 updated_at = NOW()
             WHERE id = %s AND user_id = %s
             """,
@@ -4565,6 +4609,11 @@ def edit_transaction(transaction_id):
                 offer_price,
                 expected_close_date,
                 actual_close_date,
+                attorney_review_end_date,
+                inspection_deadline,
+                financing_contingency_date,
+                appraisal_deadline,
+                mortgage_commitment_date,
                 transaction_id,
                 current_user.id,
             ),
