@@ -4569,6 +4569,20 @@ def edit_transaction(transaction_id):
         conn.close()
         return "Transaction not found", 404
 
+    cur.execute(
+        """
+        SELECT first_name, last_name, email, phone
+        FROM contacts
+        WHERE id = %s AND user_id = %s
+        """,
+        (tx["contact_id"], current_user.id),
+    )
+    contact = cur.fetchone()
+    
+    if not contact:
+        conn.close()
+        return "Contact not found", 404
+
     # Phase 3.1: Read-only deadlines for this transaction
     cur.execute(
         """
@@ -4650,10 +4664,162 @@ def edit_transaction(transaction_id):
         "transactions/transaction_form.html",
         mode="edit",
         tx=tx,
+        contact=contact,
         transaction_statuses=TRANSACTION_STATUSES,
         next_url=next_url,
         deadlines=deadlines,
     )
+    
+@app.route("/transactions/<int:transaction_id>/deadlines/add", methods=["POST"])
+@login_required
+def add_transaction_deadline(transaction_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Confirm transaction belongs to user
+    cur.execute(
+        "SELECT id FROM transactions WHERE id = %s AND user_id = %s",
+        (transaction_id, current_user.id),
+    )
+    tx = cur.fetchone()
+    if not tx:
+        conn.close()
+        return "Transaction not found", 404
+
+    name = (request.form.get("name") or "").strip()
+    due_date = (request.form.get("due_date") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+
+    if not name:
+        conn.close()
+        return "Deadline name is required", 400
+
+    cur.execute(
+        """
+        INSERT INTO transaction_deadlines (user_id, transaction_id, name, due_date, is_done, notes)
+        VALUES (%s, %s, %s, %s, false, %s)
+        """,
+        (current_user.id, transaction_id, name, due_date, notes),
+    )
+
+    conn.commit()
+    next_url = request.form.get("next") or url_for("edit_transaction", transaction_id=transaction_id)
+    conn.close()
+    return redirect(next_url)
+
+
+@app.route("/deadlines/<int:deadline_id>/toggle", methods=["POST"])
+@login_required
+def toggle_transaction_deadline(deadline_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Fetch deadline and confirm ownership
+    cur.execute(
+        """
+        SELECT id, transaction_id, is_done
+        FROM transaction_deadlines
+        WHERE id = %s AND user_id = %s
+        """,
+        (deadline_id, current_user.id),
+    )
+    d = cur.fetchone()
+    if not d:
+        conn.close()
+        return "Deadline not found", 404
+
+    cur.execute(
+        """
+        UPDATE transaction_deadlines
+        SET is_done = %s,
+            updated_at = NOW()
+        WHERE id = %s AND user_id = %s
+        """,
+        (not d["is_done"], deadline_id, current_user.id),
+    )
+
+    conn.commit()
+    next_url = request.form.get("next") or url_for("edit_transaction", transaction_id=d["transaction_id"])
+    conn.close()
+    return redirect(next_url)
+
+
+@app.route("/deadlines/<int:deadline_id>/edit", methods=["POST"])
+@login_required
+def edit_transaction_deadline(deadline_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Fetch deadline and confirm ownership
+    cur.execute(
+        """
+        SELECT id, transaction_id
+        FROM transaction_deadlines
+        WHERE id = %s AND user_id = %s
+        """,
+        (deadline_id, current_user.id),
+    )
+    d = cur.fetchone()
+    if not d:
+        conn.close()
+        return "Deadline not found", 404
+
+    name = (request.form.get("name") or "").strip()
+    due_date = (request.form.get("due_date") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+
+    if not name:
+        conn.close()
+        return "Deadline name is required", 400
+
+    cur.execute(
+        """
+        UPDATE transaction_deadlines
+        SET name = %s,
+            due_date = %s,
+            notes = %s,
+            updated_at = NOW()
+        WHERE id = %s AND user_id = %s
+        """,
+        (name, due_date, notes, deadline_id, current_user.id),
+    )
+
+    conn.commit()
+    next_url = request.form.get("next") or url_for("edit_transaction", transaction_id=d["transaction_id"])
+    conn.close()
+    return redirect(next_url)
+
+
+@app.route("/deadlines/<int:deadline_id>/delete", methods=["POST"])
+@login_required
+def delete_transaction_deadline(deadline_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Get transaction_id for redirect and confirm ownership
+    cur.execute(
+        """
+        SELECT id, transaction_id
+        FROM transaction_deadlines
+        WHERE id = %s AND user_id = %s
+        """,
+        (deadline_id, current_user.id),
+    )
+    d = cur.fetchone()
+    if not d:
+        conn.close()
+        return "Deadline not found", 404
+
+    cur.execute(
+        "DELETE FROM transaction_deadlines WHERE id = %s AND user_id = %s",
+        (deadline_id, current_user.id),
+    )
+
+    conn.commit()
+    next_url = request.form.get("next") or url_for("edit_transaction", transaction_id=d["transaction_id"])
+    conn.close()
+    return redirect(next_url)
+
 
 @app.route("/openhouses")
 @login_required
