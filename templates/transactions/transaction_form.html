@@ -152,6 +152,60 @@
           value="{% if tx and tx['mortgage_commitment_date'] %}{{ tx['mortgage_commitment_date'] }}{% endif %}"
         >
       </div>
+          <!-- Deadlines (Phase 3.1: read-only) -->
+      <div class="card mt-4">
+        <div class="card-header fw-semibold">
+          Deadlines
+        </div>
+  
+        <div class="card-body p-0">
+          {% if deadlines and deadlines|length > 0 %}
+            <div class="table-responsive">
+              <table class="table mb-0">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for d in deadlines %}
+                    <tr>
+                      <td>{{ d['name'] }}</td>
+                      <td>
+                        {% if d['due_date'] %}
+                          {{ d['due_date'] }}
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        {% if d['is_done'] %}
+                          <span class="badge bg-success">Done</span>
+                        {% else %}
+                          <span class="badge bg-secondary">Pending</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        {% if d['notes'] %}
+                          <span class="text-muted">{{ d['notes'] }}</span>
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="p-3 text-muted">No deadlines yet.</div>
+          {% endif %}
+        </div>
+      </div>
+
     </div>
 
     <div class="d-flex gap-2">

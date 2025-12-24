@@ -4545,6 +4545,7 @@ def new_transaction(contact_id):
         tx=None,
         transaction_statuses=TRANSACTION_STATUSES,
         next_url=next_url,
+        deadlines=[],
     )
 
 
@@ -4563,9 +4564,28 @@ def edit_transaction(transaction_id):
         (transaction_id, current_user.id),
     )
     tx = cur.fetchone()
+
     if not tx:
         conn.close()
         return "Transaction not found", 404
+
+    # Phase 3.1: Read-only deadlines for this transaction
+    cur.execute(
+        """
+        SELECT
+            id,
+            name,
+            due_date,
+            is_done,
+            notes
+        FROM transaction_deadlines
+        WHERE transaction_id = %s
+          AND user_id = %s
+        ORDER BY due_date ASC NULLS LAST, id ASC
+        """,
+        (transaction_id, current_user.id),
+    )
+    deadlines = cur.fetchall()
 
     if request.method == "POST":
         status = request.form.get("status", tx["status"])
@@ -4632,6 +4652,7 @@ def edit_transaction(transaction_id):
         tx=tx,
         transaction_statuses=TRANSACTION_STATUSES,
         next_url=next_url,
+        deadlines=deadlines,
     )
 
 @app.route("/openhouses")
