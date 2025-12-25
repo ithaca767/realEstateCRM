@@ -13,7 +13,6 @@
       {% if contact_phone %} · {{ contact_phone }}{% endif %}
     </div>
   </div>
-
 </div>
 
 <div class="card mt-3">
@@ -21,382 +20,550 @@
 
     <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
       <ul class="nav nav-tabs border-0" id="sellerProfileTabs" role="tablist">
-<ul class="nav nav-tabs" id="sellerProfileTabs" role="tablist">
-  <li class="nav-item" role="presentation">
-    <button class="nav-link active" id="tab-overview" data-bs-toggle="tab" data-bs-target="#pane-overview" type="button" role="tab">
-      Overview
-    </button>
-  </li>
 
-  <li class="nav-item" role="presentation">
-    <button class="nav-link" id="tab-professionals" data-bs-toggle="tab" data-bs-target="#pane-professionals" type="button" role="tab">
-      Professionals
-      {% if (sp and (sp['seller_attorney_name'] or sp['seller_lender_name'] or sp['seller_inspector_name'])) %}
-        <span class="badge text-bg-secondary ms-2">Set</span>
-      {% endif %}
-    </button>
-  </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active"
+                  id="tab-overview"
+                  data-bs-toggle="tab"
+                  data-bs-target="#pane-overview"
+                  type="button"
+                  role="tab"
+                  aria-controls="pane-overview"
+                  aria-selected="true">
+            Overview
+          </button>
+        </li>
 
-  <li class="nav-item" role="presentation">
-    <button class="nav-link" id="tab-notes" data-bs-toggle="tab" data-bs-target="#pane-notes" type="button" role="tab">
-      Notes
-      {% if sp and sp['notes'] %}
-        <span class="badge text-bg-secondary ms-2">1</span>
-      {% endif %}
-    </button>
-  </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link"
+                  id="tab-transactions"
+                  data-bs-toggle="tab"
+                  data-bs-target="#pane-transactions"
+                  type="button"
+                  role="tab"
+                  aria-controls="pane-transactions"
+                  aria-selected="false">
+            Transactions
+            {% if transactions and transactions|length > 0 %}
+              <span class="badge text-bg-secondary ms-2">{{ transactions|length }}</span>
+            {% endif %}
+          </button>
+        </li>
 
-  <li class="nav-item" role="presentation">
-    <button class="nav-link" id="tab-checklist" data-bs-toggle="tab" data-bs-target="#pane-checklist" type="button" role="tab">
-      Checklist
-      <span class="badge text-bg-primary ms-2">{{ checklist_complete }}/{{ checklist_total }}</span>
-    </button>
-  </li>
-</ul>
-</div>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link"
+                  id="tab-professionals"
+                  data-bs-toggle="tab"
+                  data-bs-target="#pane-professionals"
+                  type="button"
+                  role="tab"
+                  aria-controls="pane-professionals"
+                  aria-selected="false">
+            Professionals
+            {% if sp and (sp['seller_attorney_name'] or sp['seller_lender_name'] or sp['seller_inspector_name']) %}
+              <span class="badge text-bg-secondary ms-2">Set</span>
+            {% endif %}
+          </button>
+        </li>
 
+        <li class="nav-item" role="presentation">
+          <button class="nav-link"
+                  id="tab-notes"
+                  data-bs-toggle="tab"
+                  data-bs-target="#pane-notes"
+                  type="button"
+                  role="tab"
+                  aria-controls="pane-notes"
+                  aria-selected="false">
+            Notes
+            {% if sp and sp['notes'] %}
+              <span class="badge text-bg-secondary ms-2">1</span>
+            {% endif %}
+          </button>
+        </li>
 
-<!-- Seller Profile form wraps only seller editable fields -->
-<form id="sellerProfileForm" method="POST" action="{{ url_for('seller_profile', contact_id=contact_id) }}">
-  <div class="tab-content" id="sellerProfileTabsContentForm">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link"
+                  id="tab-checklist"
+                  data-bs-toggle="tab"
+                  data-bs-target="#pane-checklist"
+                  type="button"
+                  role="tab"
+                  aria-controls="pane-checklist"
+                  aria-selected="false">
+            Checklist
+            <span class="badge text-bg-primary ms-2">{{ checklist_complete }}/{{ checklist_total }}</span>
+          </button>
+        </li>
 
-    <!-- OVERVIEW -->
-    <div class="tab-pane fade show active" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview">
-     <div class="pt-2">
-      <div class="card card-edit mb-3">
-        <div class="card-header">
-          Seller Details
-        </div>
-        <div class="card-body bg-white">
-          <div class="row g-3">
-
-            <div class="col-md-4">
-              <label class="form-label">Property Type</label>
-              <select name="property_type" class="form-select">
-                <option value="">Select...</option>
-                <option value="Residential" {% if sp and sp['property_type'] == 'Residential' %}selected{% endif %}>Residential</option>
-                <option value="Commercial" {% if sp and sp['property_type'] == 'Commercial' %}selected{% endif %}>Commercial</option>
-              </select>
-            </div>
-
-            <div class="col-md-4">
-              <label class="form-label">Timeframe</label>
-              <input name="timeframe" class="form-control"
-                     placeholder="Next 3-6 months"
-                     value="{{ sp['timeframe'] if sp else '' }}">
-            </div>
-
-            <div class="col-md-4">
-              <label class="form-label">Motivation</label>
-              <input name="motivation" class="form-control"
-                     placeholder="Downsizing, relocating, estate, etc."
-                     value="{{ sp['motivation'] if sp else '' }}">
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label">Estimated Price</label>
-              <input name="estimated_price" type="number" class="form-control"
-                     value="{{ sp['estimated_price'] if sp and sp['estimated_price'] is not none else '' }}">
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label">Property Address</label>
-              <input name="property_address" class="form-control"
-                     placeholder="123 Main St, Keyport NJ"
-                     value="{{ sp['property_address'] if sp else '' }}">
-            </div>
-
-            <div class="col-12">
-              <label class="form-label">Condition / Notes</label>
-              <textarea name="condition_notes" class="form-control" rows="3"
-                        placeholder="Repairs, updates, known issues, etc.">{{ sp['condition_notes'] if sp else '' }}</textarea>
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label">Referral Source</label>
-              <input name="referral_source" class="form-control"
-                     placeholder="Who sent them to you?"
-                     value="{{ sp['referral_source'] if sp else '' }}">
-            </div>
-
-          </div>
-        </div>
-      </div>
-     </div>
+      </ul>
     </div>
 
-    <!-- PROFESSIONALS -->
-    <div class="tab-pane fade" id="pane-professionals" role="tabpanel" aria-labelledby="tab-professionals">
-     <div class="pt-2">
-      <div class="card card-edit mb-3">
-        <div class="card-header">
-          Professionals
+    <!-- FORM START: only seller editable fields -->
+    <form id="sellerProfileForm" method="POST" action="{{ url_for('seller_profile', contact_id=contact_id) }}">
+
+      <div class="tab-content" id="sellerProfileTabsContent">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane fade show active" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview">
+          <div class="pt-2">
+            <div class="card card-edit mb-3">
+              <div class="card-header">
+                Seller Details
+              </div>
+
+              <div class="card-body bg-white">
+                <div class="row g-3">
+
+                  <div class="col-md-4">
+                    <label class="form-label">Property Type</label>
+                    <select name="property_type" class="form-select">
+                      <option value="">Select...</option>
+                      <option value="Residential" {% if sp and sp['property_type'] == 'Residential' %}selected{% endif %}>Residential</option>
+                      <option value="Commercial" {% if sp and sp['property_type'] == 'Commercial' %}selected{% endif %}>Commercial</option>
+                    </select>
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label">Timeframe</label>
+                    <input name="timeframe"
+                           class="form-control"
+                           placeholder="Next 3-6 months"
+                           value="{{ sp['timeframe'] if sp else '' }}">
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label">Motivation</label>
+                    <input name="motivation"
+                           class="form-control"
+                           placeholder="Downsizing, relocating, estate, etc."
+                           value="{{ sp['motivation'] if sp else '' }}">
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label">Estimated Price</label>
+                    <input name="estimated_price"
+                           type="number"
+                           class="form-control"
+                           value="{{ sp['estimated_price'] if sp and sp['estimated_price'] is not none else '' }}">
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label">Property Address</label>
+                    <input name="property_address"
+                           class="form-control"
+                           placeholder="123 Main St, Keyport NJ"
+                           value="{{ sp['property_address'] if sp else '' }}">
+                  </div>
+
+                  <div class="col-12">
+                    <label class="form-label">Condition / Notes</label>
+                    <textarea name="condition_notes"
+                              class="form-control"
+                              rows="3"
+                              placeholder="Repairs, updates, known issues, etc.">{{ sp['condition_notes'] if sp else '' }}</textarea>
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label">Referral Source</label>
+                    <input name="referral_source"
+                           class="form-control"
+                           placeholder="Who sent them to you?"
+                           value="{{ sp['referral_source'] if sp else '' }}">
+                  </div>
+
+                  <!-- Save buttons (inside grid) -->
+                  <div class="col-12">
+                    <div class="d-flex gap-2 mt-2">
+                      <button class="btn btn-primary" type="submit">Save Seller Profile</button>
+                      <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-outline-secondary">
+                        Back to Contact
+                      </a>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+          </div>
         </div>
-        <div class="card-body bg-white">
-          <div class="row g-3">
 
-            <!-- Attorney -->
-            <div class="col-md-6">
-              <label class="form-label">Select Seller Attorney (optional)</label>
-              <select id="seller_attorney_select" class="form-select">
-                <option value="">Choose from my list</option>
-                {% for p in pros_attorneys %}
-                  <option
-                    value="{{ p.id }}"
-                    data-name="{{ p.name }}"
-                    data-phone="{{ p.phone }}"
-                    data-email="{{ p.email }}"
-                  >
-                    {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
+        <!-- TRANSACTIONS (read-only; outside seller form scope but OK to keep inside form since it has no inputs) -->
+        <div class="tab-pane fade" id="pane-transactions" role="tabpanel" aria-labelledby="tab-transactions">
+          <div class="pt-2">
 
-            <div class="col-md-4">
-              <label class="form-label">Attorney Name</label>
-              <input name="seller_attorney_name" id="seller_attorney_name" class="form-control"
-                     value="{{ sp['seller_attorney_name'] if sp else '' }}">
-            </div>
+            {% set status_labels = dict(transaction_statuses) %}
+            <div class="card card-soft">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="fw-semibold">Transactions</div>
 
-            <div class="col-md-4">
-              <label class="form-label">Attorney Email</label>
-              <input name="seller_attorney_email" id="seller_attorney_email" class="form-control"
-                     value="{{ sp['seller_attorney_email'] if sp else '' }}">
-            </div>
+                <a class="btn btn-sm btn-primary"
+                   href="{{ url_for('new_transaction', contact_id=contact_id, next=request.path) }}">
+                  + New Transaction
+                </a>
+              </div>
 
-            <div class="col-md-4">
-              <label class="form-label">Attorney Phone</label>
-              <input name="seller_attorney_phone" id="seller_attorney_phone" class="form-control"
-                     value="{{ sp['seller_attorney_phone'] if sp else '' }}">
-            </div>
+              <div class="card-body p-0">
+                {% if transactions and transactions|length > 0 %}
+                  <div class="table-responsive">
+                    <table class="table mb-0">
+                      <thead>
+                        <tr>
+                          <th>Address</th>
+                          <th>Status</th>
+                          <th class="text-end">List</th>
+                          <th class="text-end">Offer</th>
+                          <th>Expected Close</th>
+                          <th class="text-end">Open</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for tx in transactions %}
+                          <tr>
+                            <td>
+                              {% if tx['address'] %}
+                                <a href="{{ url_for('edit_transaction', transaction_id=tx['id'], next=request.path) }}"
+                                   class="text-decoration-none">
+                                  {{ tx['address'] }}
+                                </a>
+                              {% else %}
+                                <span class="text-muted">-</span>
+                              {% endif %}
+                            </td>
 
-            <div class="col-12">
-              <div class="form-check">
-                <input class="form-check-input"
-                       type="checkbox"
-                       name="seller_attorney_referred"
-                       id="seller_attorney_referred"
-                       {% if sp and sp['seller_attorney_referred'] %}checked{% endif %}>
-                <label class="form-check-label" for="seller_attorney_referred">
-                  Attorney referred by me
-                </label>
+                            <td>{{ status_labels.get(tx['status'], tx['status']) }}</td>
+
+                            <td class="text-end">
+                              {% if tx['list_price'] %}${{ "{:,.0f}".format(tx['list_price']) }}{% else %}<span class="text-muted">-</span>{% endif %}
+                            </td>
+
+                            <td class="text-end">
+                              {% if tx['offer_price'] %}${{ "{:,.0f}".format(tx['offer_price']) }}{% else %}<span class="text-muted">-</span>{% endif %}
+                            </td>
+
+                            <td>
+                              {% if tx['expected_close_date'] %}{{ tx['expected_close_date'] }}{% else %}<span class="text-muted">-</span>{% endif %}
+                            </td>
+
+                            <td class="text-end">
+                              <a class="btn btn-sm btn-outline-secondary"
+                                 href="{{ url_for('edit_transaction', transaction_id=tx['id'], next=request.path) }}">
+                                View / Edit
+                              </a>
+                            </td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                {% else %}
+                  <div class="p-3 text-muted">No transactions yet.</div>
+                {% endif %}
               </div>
             </div>
 
-            <hr class="my-2">
+          </div>
+        </div>
 
-            <!-- Lender -->
-            <div class="col-md-6">
-              <label class="form-label">Select Seller Lender (optional)</label>
-              <select id="seller_lender_select" class="form-select">
-                <option value="">Choose from my list</option>
-                {% for p in pros_lenders %}
-                  <option
-                    value="{{ p.id }}"
-                    data-name="{{ p.name }}"
-                    data-phone="{{ p.phone }}"
-                    data-email="{{ p.email }}"
-                  >
-                    {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="col-md-4">
-              <label class="form-label">Lender Name</label>
-              <input name="seller_lender_name" id="seller_lender_name" class="form-control"
-                     value="{{ sp['seller_lender_name'] if sp else '' }}">
-            </div>
-
-            <div class="col-md-4">
-              <label class="form-label">Lender Email</label>
-              <input name="seller_lender_email" id="seller_lender_email" class="form-control"
-                     value="{{ sp['seller_lender_email'] if sp else '' }}">
-            </div>
-
-            <div class="col-md-4">
-              <label class="form-label">Lender Phone</label>
-              <input name="seller_lender_phone" id="seller_lender_phone" class="form-control"
-                     value="{{ sp['seller_lender_phone'] if sp else '' }}">
-            </div>
-
-            <div class="col-12">
-              <div class="form-check">
-                <input class="form-check-input"
-                       type="checkbox"
-                       name="seller_lender_referred"
-                       id="seller_lender_referred"
-                       {% if sp and sp['seller_lender_referred'] %}checked{% endif %}>
-                <label class="form-check-label" for="seller_lender_referred">
-                  Lender referred by me
-                </label>
+        <!-- PROFESSIONALS -->
+        <div class="tab-pane fade" id="pane-professionals" role="tabpanel" aria-labelledby="tab-professionals">
+          <div class="pt-2">
+            <div class="card card-edit mb-3">
+              <div class="card-header">
+                Professionals
               </div>
-            </div>
 
-            <hr class="my-2">
+              <div class="card-body bg-white">
+                <div class="row g-3">
 
-            <!-- Inspector -->
-            <div class="col-md-6">
-              <label class="form-label">Select Seller Home Inspector (optional)</label>
-              <select id="seller_inspector_select" class="form-select">
-                <option value="">Choose from my list</option>
-                {% for p in pros_inspectors %}
-                  <option
-                    value="{{ p.id }}"
-                    data-name="{{ p.name }}"
-                    data-phone="{{ p.phone }}"
-                    data-email="{{ p.email }}"
-                  >
-                    {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
+                  <!-- Attorney -->
+                  <div class="col-md-6">
+                    <label class="form-label">Select Seller Attorney (optional)</label>
+                    <select id="seller_attorney_select" class="form-select">
+                      <option value="">Choose from my list</option>
+                      {% for p in pros_attorneys %}
+                        <option
+                          value="{{ p.id }}"
+                          data-name="{{ p.name }}"
+                          data-phone="{{ p.phone }}"
+                          data-email="{{ p.email }}"
+                        >
+                          {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
 
-            <div class="col-md-4">
-              <label class="form-label">Home Inspector Name</label>
-              <input name="seller_inspector_name" id="seller_inspector_name" class="form-control"
-                     value="{{ sp['seller_inspector_name'] if sp else '' }}">
-            </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Attorney Name</label>
+                    <input name="seller_attorney_name" id="seller_attorney_name" class="form-control"
+                           value="{{ sp['seller_attorney_name'] if sp else '' }}">
+                  </div>
 
-            <div class="col-md-4">
-              <label class="form-label">Home Inspector Email</label>
-              <input name="seller_inspector_email" id="seller_inspector_email" class="form-control"
-                     value="{{ sp['seller_inspector_email'] if sp else '' }}">
-            </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Attorney Email</label>
+                    <input name="seller_attorney_email" id="seller_attorney_email" class="form-control"
+                           value="{{ sp['seller_attorney_email'] if sp else '' }}">
+                  </div>
 
-            <div class="col-md-4">
-              <label class="form-label">Home Inspector Phone</label>
-              <input name="seller_inspector_phone" id="seller_inspector_phone" class="form-control"
-                     value="{{ sp['seller_inspector_phone'] if sp else '' }}">
-            </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Attorney Phone</label>
+                    <input name="seller_attorney_phone" id="seller_attorney_phone" class="form-control"
+                           value="{{ sp['seller_attorney_phone'] if sp else '' }}">
+                  </div>
 
-            <div class="col-12">
-              <div class="form-check">
-                <input class="form-check-input"
-                       type="checkbox"
-                       name="seller_inspector_referred"
-                       id="seller_inspector_referred"
-                       {% if sp and sp['seller_inspector_referred'] %}checked{% endif %}>
-                <label class="form-check-label" for="seller_inspector_referred">
-                  Home inspector referred by me
-                </label>
+                  <div class="col-12">
+                    <div class="form-check">
+                      <input class="form-check-input"
+                             type="checkbox"
+                             name="seller_attorney_referred"
+                             id="seller_attorney_referred"
+                             {% if sp and sp['seller_attorney_referred'] %}checked{% endif %}>
+                      <label class="form-check-label" for="seller_attorney_referred">
+                        Attorney referred by me
+                      </label>
+                    </div>
+                  </div>
+
+                  <hr class="my-2">
+
+                  <!-- Lender -->
+                  <div class="col-md-6">
+                    <label class="form-label">Select Seller Lender (optional)</label>
+                    <select id="seller_lender_select" class="form-select">
+                      <option value="">Choose from my list</option>
+                      {% for p in pros_lenders %}
+                        <option
+                          value="{{ p.id }}"
+                          data-name="{{ p.name }}"
+                          data-phone="{{ p.phone }}"
+                          data-email="{{ p.email }}"
+                        >
+                          {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label">Lender Name</label>
+                    <input name="seller_lender_name" id="seller_lender_name" class="form-control"
+                           value="{{ sp['seller_lender_name'] if sp else '' }}">
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label">Lender Email</label>
+                    <input name="seller_lender_email" id="seller_lender_email" class="form-control"
+                           value="{{ sp['seller_lender_email'] if sp else '' }}">
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label">Lender Phone</label>
+                    <input name="seller_lender_phone" id="seller_lender_phone" class="form-control"
+                           value="{{ sp['seller_lender_phone'] if sp else '' }}">
+                  </div>
+
+                  <div class="col-12">
+                    <div class="form-check">
+                      <input class="form-check-input"
+                             type="checkbox"
+                             name="seller_lender_referred"
+                             id="seller_lender_referred"
+                             {% if sp and sp['seller_lender_referred'] %}checked{% endif %}>
+                      <label class="form-check-label" for="seller_lender_referred">
+                        Lender referred by me
+                      </label>
+                    </div>
+                  </div>
+
+                  <hr class="my-2">
+
+                  <!-- Inspector -->
+                  <div class="col-md-6">
+                    <label class="form-label">Select Seller Home Inspector (optional)</label>
+                    <select id="seller_inspector_select" class="form-select">
+                      <option value="">Choose from my list</option>
+                      {% for p in pros_inspectors %}
+                        <option
+                          value="{{ p.id }}"
+                          data-name="{{ p.name }}"
+                          data-phone="{{ p.phone }}"
+                          data-email="{{ p.email }}"
+                        >
+                          {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label">Home Inspector Name</label>
+                    <input name="seller_inspector_name" id="seller_inspector_name" class="form-control"
+                           value="{{ sp['seller_inspector_name'] if sp else '' }}">
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label">Home Inspector Email</label>
+                    <input name="seller_inspector_email" id="seller_inspector_email" class="form-control"
+                           value="{{ sp['seller_inspector_email'] if sp else '' }}">
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label">Home Inspector Phone</label>
+                    <input name="seller_inspector_phone" id="seller_inspector_phone" class="form-control"
+                           value="{{ sp['seller_inspector_phone'] if sp else '' }}">
+                  </div>
+
+                  <div class="col-12">
+                    <div class="form-check">
+                      <input class="form-check-input"
+                             type="checkbox"
+                             name="seller_inspector_referred"
+                             id="seller_inspector_referred"
+                             {% if sp and sp['seller_inspector_referred'] %}checked{% endif %}>
+                      <label class="form-check-label" for="seller_inspector_referred">
+                        Home inspector referred by me
+                      </label>
+                    </div>
+                  </div>
+
+                  <hr class="my-2">
+
+                  <div class="col-12">
+                    <label class="form-label">Other Professionals</label>
+                    <textarea name="other_professionals"
+                              class="form-control"
+                              rows="2"
+                              placeholder="Title company, contractor, etc.">{{ sp['other_professionals'] if sp else '' }}</textarea>
+                  </div>
+
+                  <!-- Save buttons (inside grid) -->
+                  <div class="col-12">
+                    <div class="d-flex gap-2 mt-2">
+                      <button class="btn btn-primary" type="submit">Save Seller Profile</button>
+                      <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-outline-secondary">
+                        Back to Contact
+                      </a>
+                    </div>
+                  </div>
+
+                </div>
               </div>
-            </div>
 
-            <hr class="my-2">
-
-            <div class="col-12">
-              <label class="form-label">Other Professionals</label>
-              <textarea name="other_professionals"
-                        class="form-control"
-                        rows="2"
-                        placeholder="Title company, contractor, etc.">{{ sp['other_professionals'] if sp else '' }}</textarea>
-            </div>
-
-          </div>
-        </div>
-      </div>
-     </div>
-    </div>
-
-    <!-- NOTES -->
-    <div class="tab-pane fade" id="pane-notes" role="tabpanel" aria-labelledby="tab-notes">
-     <div class="pt-2">
-      <div class="card card-edit mb-3">
-        <div class="card-header">
-          Notes
-        </div>
-        <div class="card-body bg-white">
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label">Additional Notes</label>
-              <textarea name="notes" class="form-control" rows="4">{{ sp['notes'] if sp else '' }}</textarea>
             </div>
           </div>
         </div>
-      </div>
-     </div>
-    </div>
 
-  </div>
+        <!-- NOTES -->
+        <div class="tab-pane fade" id="pane-notes" role="tabpanel" aria-labelledby="tab-notes">
+          <div class="pt-2">
+            <div class="card card-edit mb-3">
+              <div class="card-header">
+                Notes
+              </div>
 
-  <!-- Save buttons apply to all seller fields -->
-<div class="d-flex gap-2 mt-3">
-  <button class="btn btn-primary" type="submit">Save Seller Profile</button>
-  <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-outline-secondary">
-    Back to Contact
-  </a>
- </div>
-</form>
+              <div class="card-body bg-white">
+                <div class="row g-3">
 
-<!-- Checklist tab pane OUTSIDE the seller form -->
-<div class="tab-content" id="sellerProfileTabsContentOutside">
-  <div class="tab-pane fade" id="pane-checklist" role="tabpanel" aria-labelledby="tab-checklist">
-   <div class="pt-2">
-    <div class="card mb-3">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <div>
-          <div class="fw-semibold">New Listing Checklist</div>
-          <div class="text-muted small">
-            {{ checklist_complete }} / {{ checklist_total }} complete
+                  <div class="col-12">
+                    <label class="form-label">Additional Notes</label>
+                    <textarea name="notes" class="form-control" rows="4">{{ sp['notes'] if sp else '' }}</textarea>
+                  </div>
+
+                  <!-- Save buttons (inside grid) -->
+                  <div class="col-12">
+                    <div class="d-flex gap-2 mt-2">
+                      <button class="btn btn-primary" type="submit">Save Seller Profile</button>
+                      <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-outline-secondary">
+                        Back to Contact
+                      </a>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
 
-        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#listingChecklistModal">
-          Edit Checklist
-        </button>
-      </div>
+        <!-- CHECKLIST (no inputs; modal edits via AJAX) -->
+        <div class="tab-pane fade" id="pane-checklist" role="tabpanel" aria-labelledby="tab-checklist">
+          <div class="pt-2">
+            <div class="card mb-3">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">New Listing Checklist</div>
+                  <div class="text-muted small">
+                    {{ checklist_complete }} / {{ checklist_total }} complete
+                  </div>
+                </div>
 
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table contacts-table mb-0 align-middle">
-            <thead class="table-light">
-              <tr>
-                <th style="width: 56px;">Done</th>
-                <th>Item</th>
-                <th style="width: 140px;">Due</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in checklist_items %}
-              <tr>
-                <td>
-                  {% if item.is_complete %}
-                    <span class="badge text-bg-success">Yes</span>
-                  {% else %}
-                    <span class="badge text-bg-secondary">No</span>
-                  {% endif %}
-                </td>
-                <td>{{ item.label }}</td>
-                <td>
-                  {% if item.due_date %}
-                    {% if (not item.is_complete) and item.due_date < today %}
-                      <span class="text-danger fw-semibold">{{ item.due_date }}</span>
-                    {% else %}
-                      {{ item.due_date }}
-                    {% endif %}
-                  {% else %}
-                    <span class="text-muted">None</span>
-                  {% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+                <button type="button"
+                        class="btn btn-sm btn-primary"
+                        data-bs-toggle="modal"
+                        data-bs-target="#listingChecklistModal">
+                  Edit Checklist
+                </button>
+              </div>
+
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table contacts-table mb-0 align-middle">
+                    <thead class="table-light">
+                      <tr>
+                        <th style="width: 56px;">Done</th>
+                        <th>Item</th>
+                        <th style="width: 140px;">Due</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for item in checklist_items %}
+                      <tr>
+                        <td>
+                          {% if item.is_complete %}
+                            <span class="badge text-bg-success">Yes</span>
+                          {% else %}
+                            <span class="badge text-bg-secondary">No</span>
+                          {% endif %}
+                        </td>
+                        <td>{{ item.label }}</td>
+                        <td>
+                          {% if item.due_date %}
+                            {% if (not item.is_complete) and item.due_date < today %}
+                              <span class="text-danger fw-semibold">{{ item.due_date }}</span>
+                            {% else %}
+                              {{ item.due_date }}
+                            {% endif %}
+                          {% else %}
+                            <span class="text-muted">None</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-   </div>
-  </div>
-</div>
+
+      </div> <!-- /.tab-content -->
+
+    </form>
+    <!-- FORM END -->
+
+  </div> <!-- /.card-body -->
+</div> <!-- /.card -->
 
 <!-- Checklist modal (outside form) -->
 <div class="modal fade" id="listingChecklistModal" tabindex="-1" aria-labelledby="listingChecklistModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
+
       <div class="modal-header">
         <h5 class="modal-title" id="listingChecklistModalLabel">New Listing Checklist</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -449,12 +616,14 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
+
     </div>
   </div>
 </div>
 
-<!-- Scripts -->
 <script>
+let checklistDirty = false;
+
 document.addEventListener("DOMContentLoaded", function () {
   // Persist active tab
   const tabs = document.querySelectorAll('#sellerProfileTabs button[data-bs-toggle="tab"]');
@@ -462,22 +631,6 @@ document.addEventListener("DOMContentLoaded", function () {
     btn.addEventListener("shown.bs.tab", function (event) {
       const id = event.target.getAttribute("data-bs-target");
       if (id) localStorage.setItem("sellerProfileActiveTab", id);
-    });
-  });
-
-  // Make sure only one pane is active even though we have two tab-content containers
-  const targets = ["#pane-overview", "#pane-professionals", "#pane-notes", "#pane-checklist"];
-  function hideAllPanes() {
-    targets.forEach(id => {
-      const pane = document.querySelector(id);
-      if (!pane) return;
-      pane.classList.remove("show", "active");
-    });
-  }
-
-  tabs.forEach(btn => {
-    btn.addEventListener("show.bs.tab", function () {
-      hideAllPanes();
     });
   });
 
@@ -525,6 +678,8 @@ document.addEventListener("DOMContentLoaded", function () {
     })
     .then(r => r.json())
     .then(() => {
+      checklistDirty = true;
+
       const status = document.getElementById(`status-${itemId}`);
       if (status) {
         status.textContent = "Saved";
@@ -552,6 +707,18 @@ document.addEventListener("DOMContentLoaded", function () {
       updateChecklistItem(itemId, checkbox ? checkbox.checked : false, this.value);
     });
   });
+
+  // Refresh only if something changed in the checklist
+  const checklistModal = document.getElementById("listingChecklistModal");
+  if (checklistModal) {
+    checklistModal.addEventListener("hidden.bs.modal", function () {
+      if (checklistDirty) {
+        checklistDirty = false; // defensive reset
+        localStorage.setItem("sellerProfileActiveTab", "#pane-checklist");
+        window.location.reload();
+      }
+    });
+  }
 });
 </script>
 

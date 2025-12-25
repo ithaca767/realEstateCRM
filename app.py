@@ -3756,6 +3756,29 @@ def buyer_profile(contact_id):
     )
     buyer_profile = cur.fetchone()
 
+    # Phase 3.3: Transactions (buyer sheet)
+    cur.execute(
+        """
+        SELECT
+            id,
+            status,
+            transaction_type,
+            address,
+            list_price,
+            offer_price,
+            expected_close_date,
+            updated_at
+        FROM transactions
+        WHERE contact_id = %s
+          AND user_id = %s
+          AND transaction_type = 'buy'
+        ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+        LIMIT 10
+        """,
+        (contact_id, current_user.id),
+    )
+    buyer_transactions = cur.fetchall()
+
     # Handle form submissions
     if request.method == "POST":
         form_action = (request.form.get("form_action") or "").strip()
@@ -3935,6 +3958,10 @@ def buyer_profile(contact_id):
         pros_attorneys=pros_attorneys,
         pros_lenders=pros_lenders,
         pros_inspectors=pros_inspectors,
+        
+        #transactions
+        transactions=buyer_transactions,
+        transaction_statuses=TRANSACTION_STATUSES,
     )
 
 @app.route("/buyer/property/<int:property_id>/edit", methods=["GET", "POST"])
@@ -4105,9 +4132,37 @@ def delete_professional(prof_id):
 def seller_profile(contact_id):
     conn = get_db()
     cur = conn.cursor()
+    
+    seller_transactions = []
+    
+    # Phase 3.3: Transactions (seller sheet)
+    cur.execute(
+        """
+        SELECT
+            id,
+            status,
+            transaction_type,
+            address,
+            list_price,
+            offer_price,
+            expected_close_date,
+            updated_at
+        FROM transactions
+        WHERE contact_id = %s
+          AND user_id = %s
+          AND transaction_type = 'sell'
+        ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+        LIMIT 10
+        """,
+        (contact_id, current_user.id),
+    )
+    seller_transactions = cur.fetchall()
 
-    # Load contact
-    cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
+    # Load contact (scoped to current user)
+    cur.execute(
+        "SELECT * FROM contacts WHERE id = %s AND user_id = %s",
+        (contact_id, current_user.id),
+    )
     contact = cur.fetchone()
     if not contact:
         conn.close()
@@ -4154,10 +4209,16 @@ def seller_profile(contact_id):
         # Other professionals
         other_professionals = (request.form.get("other_professionals") or "").strip()
 
-        # Does a row already exist?
+        # Does a row already exist? (scoped to current user via contacts)
         cur.execute(
-            "SELECT id FROM seller_profiles WHERE contact_id = %s",
-            (contact_id,),
+            """
+            SELECT sp.id
+            FROM seller_profiles sp
+            JOIN contacts c ON c.id = sp.contact_id
+            WHERE sp.contact_id = %s
+              AND c.user_id = %s
+            """,
+            (contact_id, current_user.id),
         )
         existing = cur.fetchone()
 
@@ -4315,6 +4376,10 @@ def seller_profile(contact_id):
         checklist_items=checklist_items,
         checklist_complete=checklist_complete,
         checklist_total=checklist_total,
+        
+        #Transactions
+        transactions=seller_transactions,
+        transaction_statuses=TRANSACTION_STATUSES,
     )
 
 @app.route("/followups")
