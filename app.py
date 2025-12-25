@@ -523,6 +523,18 @@ SOURCES = [
     "Other",
 ]
 
+TRANSACTION_STATUSES = [
+    ("draft", "Draft"),
+    ("coming_soon", "Coming Soon"),
+    ("active", "Active"),
+    ("attorney_review", "Attorney Review"),
+    ("pending_uc", "Pending / Under Contract"),
+    ("closed", "Closed"),
+    ("temp_off_market", "Temporarily Off Market"),
+    ("withdrawn", "Withdrawn"),
+    ("canceled", "Canceled"),
+    ("expired", "Expired"),
+]
 
 BASE_TEMPLATE = """
 <!doctype html>
@@ -3270,7 +3282,27 @@ def edit_contact(contact_id):
             next_time_hour = None
             next_time_minute = None
             next_time_ampm = None
-
+    
+    cur.execute(
+        """
+        SELECT
+            id,
+            status,
+            transaction_type,
+            address,
+            list_price,
+            offer_price,
+            expected_close_date,
+            updated_at
+        FROM transactions
+        WHERE contact_id = %s AND user_id = %s
+        ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+        LIMIT 5
+        """,
+        (contact_id, current_user.id),
+    )
+    transactions = cur.fetchall()
+    
     # NEW: split interactions into open and completed
     cur.execute(
         """
@@ -3328,6 +3360,8 @@ def edit_contact(contact_id):
         active_page="contacts",
         has_buyer_profile=has_buyer_profile,
         has_seller_profile=has_seller_profile,
+        transactions=transactions,
+        transaction_statuses=TRANSACTION_STATUSES,
     )
 
 @app.route("/contacts/search")
@@ -3722,6 +3756,29 @@ def buyer_profile(contact_id):
     )
     buyer_profile = cur.fetchone()
 
+    # Phase 3.3: Transactions (buyer sheet)
+    cur.execute(
+        """
+        SELECT
+            id,
+            status,
+            transaction_type,
+            address,
+            list_price,
+            offer_price,
+            expected_close_date,
+            updated_at
+        FROM transactions
+        WHERE contact_id = %s
+          AND user_id = %s
+          AND transaction_type = 'buy'
+        ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+        LIMIT 10
+        """,
+        (contact_id, current_user.id),
+    )
+    buyer_transactions = cur.fetchall()
+
     # Handle form submissions
     if request.method == "POST":
         form_action = (request.form.get("form_action") or "").strip()
@@ -3901,6 +3958,10 @@ def buyer_profile(contact_id):
         pros_attorneys=pros_attorneys,
         pros_lenders=pros_lenders,
         pros_inspectors=pros_inspectors,
+        
+        #transactions
+        transactions=buyer_transactions,
+        transaction_statuses=TRANSACTION_STATUSES,
     )
 
 @app.route("/buyer/property/<int:property_id>/edit", methods=["GET", "POST"])
@@ -4071,9 +4132,37 @@ def delete_professional(prof_id):
 def seller_profile(contact_id):
     conn = get_db()
     cur = conn.cursor()
+    
+    seller_transactions = []
+    
+    # Phase 3.3: Transactions (seller sheet)
+    cur.execute(
+        """
+        SELECT
+            id,
+            status,
+            transaction_type,
+            address,
+            list_price,
+            offer_price,
+            expected_close_date,
+            updated_at
+        FROM transactions
+        WHERE contact_id = %s
+          AND user_id = %s
+          AND transaction_type = 'sell'
+        ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+        LIMIT 10
+        """,
+        (contact_id, current_user.id),
+    )
+    seller_transactions = cur.fetchall()
 
-    # Load contact
-    cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
+    # Load contact (scoped to current user)
+    cur.execute(
+        "SELECT * FROM contacts WHERE id = %s AND user_id = %s",
+        (contact_id, current_user.id),
+    )
     contact = cur.fetchone()
     if not contact:
         conn.close()
@@ -4120,10 +4209,16 @@ def seller_profile(contact_id):
         # Other professionals
         other_professionals = (request.form.get("other_professionals") or "").strip()
 
-        # Does a row already exist?
+        # Does a row already exist? (scoped to current user via contacts)
         cur.execute(
-            "SELECT id FROM seller_profiles WHERE contact_id = %s",
-            (contact_id,),
+            """
+            SELECT sp.id
+            FROM seller_profiles sp
+            JOIN contacts c ON c.id = sp.contact_id
+            WHERE sp.contact_id = %s
+              AND c.user_id = %s
+            """,
+            (contact_id, current_user.id),
         )
         existing = cur.fetchone()
 
@@ -4281,6 +4376,10 @@ def seller_profile(contact_id):
         checklist_items=checklist_items,
         checklist_complete=checklist_complete,
         checklist_total=checklist_total,
+        
+        #Transactions
+        transactions=seller_transactions,
+        transaction_statuses=TRANSACTION_STATUSES,
     )
 
 @app.route("/followups")
@@ -4410,6 +4509,382 @@ def edit_interaction(interaction_id):
 
     conn.close()
     return render_template("edit_interaction.html", interaction=interaction)
+
+@app.route("/contacts/<int:contact_id>/transactions/new", methods=["GET", "POST"])
+@login_required
+def new_transaction(contact_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    next_url = request.args.get("next") or url_for("edit_contact", contact_id=contact_id)
+
+    cur.execute(
+        "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+        (contact_id, current_user.id),
+    )
+    if not cur.fetchone():
+        conn.close()
+        return "Contact not found", 404
+
+    if request.method == "POST":
+        status = (request.form.get("status") or "draft").strip()
+        transaction_type = (request.form.get("transaction_type") or "unknown").strip().lower()
+
+        address = (request.form.get("address") or "").strip() or None
+        list_price = (request.form.get("list_price") or "").strip() or None
+        offer_price = (request.form.get("offer_price") or "").strip() or None
+        expected_close_date = (request.form.get("expected_close_date") or "").strip() or None
+        actual_close_date = (request.form.get("actual_close_date") or "").strip() or None
+
+        attorney_review_end_date = (request.form.get("attorney_review_end_date") or "").strip() or None
+        inspection_deadline = (request.form.get("inspection_deadline") or "").strip() or None
+        financing_contingency_date = (request.form.get("financing_contingency_date") or "").strip() or None
+        appraisal_deadline = (request.form.get("appraisal_deadline") or "").strip() or None
+        mortgage_commitment_date = (request.form.get("mortgage_commitment_date") or "").strip() or None
+
+        sql = """
+            INSERT INTO transactions (
+                user_id,
+                contact_id,
+                status,
+                transaction_type,
+                address,
+                listing_status,
+                offer_status,
+                list_price,
+                offer_price,
+                expected_close_date,
+                actual_close_date,
+                attorney_review_end_date,
+                inspection_deadline,
+                financing_contingency_date,
+                appraisal_deadline,
+                mortgage_commitment_date
+            )
+            VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s
+            )
+            RETURNING id
+        """
+
+        params = (
+            current_user.id,
+            contact_id,
+            status,
+            transaction_type,
+            address,
+            "lead",  # safe default
+            "none",  # safe default
+            list_price,
+            offer_price,
+            expected_close_date,
+            actual_close_date,
+            attorney_review_end_date,
+            inspection_deadline,
+            financing_contingency_date,
+            appraisal_deadline,
+            mortgage_commitment_date,
+        )
+
+        cur.execute(sql, params)
+
+        row = cur.fetchone()
+        if not row or "id" not in row:
+            conn.rollback()
+            conn.close()
+            return "Insert failed", 500
+
+        tx_id = row["id"]
+        conn.commit()
+        conn.close()
+
+        return redirect(next_url)
+
+    conn.close()
+    return render_template(
+        "transactions/transaction_form.html",
+        mode="new",
+        tx=None,
+        transaction_statuses=TRANSACTION_STATUSES,
+        next_url=next_url,
+        deadlines=[],
+    )
+
+
+@app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_transaction(transaction_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT *
+        FROM transactions
+        WHERE id = %s AND user_id = %s
+        """,
+        (transaction_id, current_user.id),
+    )
+    tx = cur.fetchone()
+
+    if not tx:
+        conn.close()
+        return "Transaction not found", 404
+
+    cur.execute(
+        """
+        SELECT first_name, last_name, email, phone
+        FROM contacts
+        WHERE id = %s AND user_id = %s
+        """,
+        (tx["contact_id"], current_user.id),
+    )
+    contact = cur.fetchone()
+    
+    if not contact:
+        conn.close()
+        return "Contact not found", 404
+
+    # Phase 3.1: Read-only deadlines for this transaction
+    cur.execute(
+        """
+        SELECT
+            id,
+            name,
+            due_date,
+            is_done,
+            notes
+        FROM transaction_deadlines
+        WHERE transaction_id = %s
+          AND user_id = %s
+        ORDER BY due_date ASC NULLS LAST, id ASC
+        """,
+        (transaction_id, current_user.id),
+    )
+    deadlines = cur.fetchall()
+
+    if request.method == "POST":
+        status = request.form.get("status", tx["status"])
+        transaction_type = request.form.get("transaction_type", tx["transaction_type"])
+
+        address = (request.form.get("address") or "").strip() or None
+        list_price = (request.form.get("list_price") or "").strip() or None
+        offer_price = (request.form.get("offer_price") or "").strip() or None
+        expected_close_date = (request.form.get("expected_close_date") or "").strip() or None
+        actual_close_date = (request.form.get("actual_close_date") or "").strip() or None
+
+        attorney_review_end_date = (request.form.get("attorney_review_end_date") or "").strip() or None
+        inspection_deadline = (request.form.get("inspection_deadline") or "").strip() or None
+        financing_contingency_date = (request.form.get("financing_contingency_date") or "").strip() or None
+        appraisal_deadline = (request.form.get("appraisal_deadline") or "").strip() or None
+        mortgage_commitment_date = (request.form.get("mortgage_commitment_date") or "").strip() or None
+
+        cur.execute(
+            """
+            UPDATE transactions
+            SET status = %s,
+                transaction_type = %s,
+                address = %s,
+                list_price = %s,
+                offer_price = %s,
+                expected_close_date = %s,
+                actual_close_date = %s,
+                attorney_review_end_date = %s,
+                inspection_deadline = %s,
+                financing_contingency_date = %s,
+                appraisal_deadline = %s,
+                mortgage_commitment_date = %s,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            """,
+            (
+                status,
+                transaction_type,
+                address,
+                list_price,
+                offer_price,
+                expected_close_date,
+                actual_close_date,
+                attorney_review_end_date,
+                inspection_deadline,
+                financing_contingency_date,
+                appraisal_deadline,
+                mortgage_commitment_date,
+                transaction_id,
+                current_user.id,
+            ),
+        )
+
+        conn.commit()
+        next_url = request.form.get("next") or url_for("edit_contact", contact_id=tx["contact_id"])
+        conn.close()
+        return redirect(next_url)
+
+    next_url = request.args.get("next") or url_for("edit_contact", contact_id=tx["contact_id"])
+    conn.close()
+    return render_template(
+        "transactions/transaction_form.html",
+        mode="edit",
+        tx=tx,
+        contact=contact,
+        transaction_statuses=TRANSACTION_STATUSES,
+        next_url=next_url,
+        deadlines=deadlines,
+    )
+    
+@app.route("/transactions/<int:transaction_id>/deadlines/add", methods=["POST"])
+@login_required
+def add_transaction_deadline(transaction_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Confirm transaction belongs to user
+    cur.execute(
+        "SELECT id FROM transactions WHERE id = %s AND user_id = %s",
+        (transaction_id, current_user.id),
+    )
+    tx = cur.fetchone()
+    if not tx:
+        conn.close()
+        return "Transaction not found", 404
+
+    name = (request.form.get("name") or "").strip()
+    due_date = (request.form.get("due_date") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+
+    if not name:
+        conn.close()
+        return "Deadline name is required", 400
+
+    cur.execute(
+        """
+        INSERT INTO transaction_deadlines (user_id, transaction_id, name, due_date, is_done, notes)
+        VALUES (%s, %s, %s, %s, false, %s)
+        """,
+        (current_user.id, transaction_id, name, due_date, notes),
+    )
+
+    conn.commit()
+    next_url = request.form.get("next") or url_for("edit_transaction", transaction_id=transaction_id)
+    conn.close()
+    return redirect(next_url)
+
+
+@app.route("/deadlines/<int:deadline_id>/toggle", methods=["POST"])
+@login_required
+def toggle_transaction_deadline(deadline_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Fetch deadline and confirm ownership
+    cur.execute(
+        """
+        SELECT id, transaction_id, is_done
+        FROM transaction_deadlines
+        WHERE id = %s AND user_id = %s
+        """,
+        (deadline_id, current_user.id),
+    )
+    d = cur.fetchone()
+    if not d:
+        conn.close()
+        return "Deadline not found", 404
+
+    cur.execute(
+        """
+        UPDATE transaction_deadlines
+        SET is_done = %s,
+            updated_at = NOW()
+        WHERE id = %s AND user_id = %s
+        """,
+        (not d["is_done"], deadline_id, current_user.id),
+    )
+
+    conn.commit()
+    next_url = request.form.get("next") or url_for("edit_transaction", transaction_id=d["transaction_id"])
+    conn.close()
+    return redirect(next_url)
+
+
+@app.route("/deadlines/<int:deadline_id>/edit", methods=["POST"])
+@login_required
+def edit_transaction_deadline(deadline_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Fetch deadline and confirm ownership
+    cur.execute(
+        """
+        SELECT id, transaction_id
+        FROM transaction_deadlines
+        WHERE id = %s AND user_id = %s
+        """,
+        (deadline_id, current_user.id),
+    )
+    d = cur.fetchone()
+    if not d:
+        conn.close()
+        return "Deadline not found", 404
+
+    name = (request.form.get("name") or "").strip()
+    due_date = (request.form.get("due_date") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+
+    if not name:
+        conn.close()
+        return "Deadline name is required", 400
+
+    cur.execute(
+        """
+        UPDATE transaction_deadlines
+        SET name = %s,
+            due_date = %s,
+            notes = %s,
+            updated_at = NOW()
+        WHERE id = %s AND user_id = %s
+        """,
+        (name, due_date, notes, deadline_id, current_user.id),
+    )
+
+    conn.commit()
+    next_url = request.form.get("next") or url_for("edit_transaction", transaction_id=d["transaction_id"])
+    conn.close()
+    return redirect(next_url)
+
+
+@app.route("/deadlines/<int:deadline_id>/delete", methods=["POST"])
+@login_required
+def delete_transaction_deadline(deadline_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Get transaction_id for redirect and confirm ownership
+    cur.execute(
+        """
+        SELECT id, transaction_id
+        FROM transaction_deadlines
+        WHERE id = %s AND user_id = %s
+        """,
+        (deadline_id, current_user.id),
+    )
+    d = cur.fetchone()
+    if not d:
+        conn.close()
+        return "Deadline not found", 404
+
+    cur.execute(
+        "DELETE FROM transaction_deadlines WHERE id = %s AND user_id = %s",
+        (deadline_id, current_user.id),
+    )
+
+    conn.commit()
+    next_url = request.form.get("next") or url_for("edit_transaction", transaction_id=d["transaction_id"])
+    conn.close()
+    return redirect(next_url)
+
 
 @app.route("/openhouses")
 @login_required
