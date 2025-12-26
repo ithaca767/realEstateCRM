@@ -52,15 +52,17 @@
           {% endfor %}
         </select>
       </div>
-
       <div class="col-md-4">
         <label class="form-label">Transaction Type</label>
+      
+        {% set selected_tx_type = (tx.transaction_type if tx else (default_tx_type or 'sell')) %}
+      
         <select class="form-select" name="transaction_type">
-          <option value="buy" {% if tx and tx.transaction_type == "buy" %}selected{% endif %}>Buy</option>
-          <option value="sell" {% if tx and tx.transaction_type == "sell" %}selected{% endif %}>Sell</option>
-          <option value="rent" {% if tx and tx.transaction_type == "rent" %}selected{% endif %}>Rent</option>
-          <option value="lease" {% if tx and tx.transaction_type == "lease" %}selected{% endif %}>Lease</option>
-          <option value="unknown" {% if tx and tx.transaction_type == "unknown" %}selected{% endif %}>Unknown</option>
+          <option value="buy" {% if selected_tx_type == "buy" %}selected{% endif %}>Buy</option>
+          <option value="sell" {% if selected_tx_type == "sell" %}selected{% endif %}>Sell</option>
+          <option value="rent" {% if selected_tx_type == "rent" %}selected{% endif %}>Rent</option>
+          <option value="lease" {% if selected_tx_type == "lease" %}selected{% endif %}>Lease</option>
+          <option value="unknown" {% if selected_tx_type == "unknown" %}selected{% endif %}>Unknown</option>
         </select>
       </div>
     </div>
