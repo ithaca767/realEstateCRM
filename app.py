@@ -4555,7 +4555,15 @@ def new_transaction(contact_id):
     conn = get_db()
     cur = conn.cursor()
 
-    next_url = request.args.get("next") or url_for("edit_contact", contact_id=contact_id)
+    # 1) Resolve next_url safely for BOTH GET and POST
+    next_url = request.args.get("next")
+    if not is_safe_url(next_url):
+        next_url = None
+    next_url = next_url or url_for("edit_contact", contact_id=contact_id)
+
+    default_tx_type = (request.args.get("transaction_type") or "").strip().lower()
+    if default_tx_type not in ("buy", "sell"):
+        default_tx_type = ""
 
     cur.execute(
         "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
@@ -4567,7 +4575,7 @@ def new_transaction(contact_id):
 
     if request.method == "POST":
         status = (request.form.get("status") or "draft").strip()
-        transaction_type = (request.form.get("transaction_type") or "unknown").strip().lower()
+        transaction_type = (request.form.get("transaction_type") or default_tx_type or "sell").strip().lower()
 
         address = (request.form.get("address") or "").strip() or None
         list_price = (request.form.get("list_price") or "").strip() or None
@@ -4615,8 +4623,8 @@ def new_transaction(contact_id):
             status,
             transaction_type,
             address,
-            "lead",  # safe default
-            "none",  # safe default
+            "lead",
+            "none",
             list_price,
             offer_price,
             expected_close_date,
@@ -4629,17 +4637,14 @@ def new_transaction(contact_id):
         )
 
         cur.execute(sql, params)
-
         row = cur.fetchone()
         if not row or "id" not in row:
             conn.rollback()
             conn.close()
             return "Insert failed", 500
 
-        tx_id = row["id"]
         conn.commit()
         conn.close()
-
         return redirect(next_url)
 
     conn.close()
@@ -4650,8 +4655,8 @@ def new_transaction(contact_id):
         transaction_statuses=TRANSACTION_STATUSES,
         next_url=next_url,
         deadlines=[],
+        default_tx_type=default_tx_type,
     )
-
 
 @app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
 @login_required

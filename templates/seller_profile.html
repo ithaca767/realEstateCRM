@@ -199,7 +199,7 @@
                 <div class="fw-semibold">Transactions</div>
 
                 <a class="btn btn-sm btn-primary"
-                   href="{{ url_for('new_transaction', contact_id=contact_id, next=request.path) }}">
+                  href="{{ url_for('new_transaction', contact_id=contact_id) }}?transaction_type=sell&next={{ request.path }}"
                   + New Transaction
                 </a>
               </div>
