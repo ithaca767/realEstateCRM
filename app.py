@@ -41,6 +41,8 @@ from flask_login import (
     current_user,
 )
 
+from urllib.parse import urlparse, urljoin
+
 from werkzeug.security import check_password_hash
 
 import psycopg2
@@ -134,6 +136,18 @@ def load_user(user_id):
 def generate_public_token() -> str:
     return secrets.token_urlsafe(24)
 
+def is_safe_url(target: str) -> bool:
+    if not target:
+        return False
+
+    host_url = urlparse(request.host_url)
+    redirect_url = urlparse(urljoin(request.host_url, target))
+
+    return (
+        redirect_url.scheme in ("http", "https")
+        and host_url.netloc == redirect_url.netloc
+    )
+
 def truthy_checkbox(value):
     return value in ("on", "true", "1", "yes")
 
@@ -166,264 +180,275 @@ def get_professionals_for_dropdown(category=None):
     """
     Return a list of professionals for dropdowns.
     Excludes blacklist. Orders by grade priority and then by name.
-    If category is given (for example 'Attorney') filters to that category.
+    If category is given (for example 'Attorney'), filters to that category.
     """
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    base_sql = """
-        SELECT id, name, company, phone, email, category, grade
-        FROM professionals
-        WHERE grade != %s
-    """
-    params = ['blacklist']
+    try:
+        base_sql = """
+            SELECT id, name, company, phone, email, category, grade
+            FROM professionals
+            WHERE grade != %s
+        """
+        params = ['blacklist']
 
-    if category:
-        base_sql += " AND category = %s"
-        params.append(category)
+        if category:
+            base_sql += " AND category = %s"
+            params.append(category)
 
-    base_sql += """
-        ORDER BY
-            CASE grade
-                WHEN 'core' THEN 1
-                WHEN 'preferred' THEN 2
-                WHEN 'vetting' THEN 3
-                ELSE 4
-            END,
-            name
-    """
+        base_sql += """
+            ORDER BY
+                CASE grade
+                    WHEN 'core' THEN 1
+                    WHEN 'preferred' THEN 2
+                    WHEN 'vetting' THEN 3
+                    ELSE 4
+                END,
+                name
+        """
 
-    cur.execute(base_sql, params)
-    return cur.fetchall()
+        cur.execute(base_sql, params)
+        return cur.fetchall()
+
+    finally:
+        cur.close()
+        conn.close()
 
 def init_db():
     conn = get_db()
     cur = conn.cursor()
-
-    # Ensure base contacts table exists
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS contacts (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            email TEXT,
-            phone TEXT,
-            lead_type TEXT,
-            pipeline_stage TEXT,
-            price_min INTEGER,
-            price_max INTEGER,
-            target_area TEXT,
-            source TEXT,
-            priority TEXT,
-            last_contacted TEXT,
-            next_follow_up TEXT,
-            notes TEXT
-        )
-        """
-    )
-    conn.commit()
-
-    # Schema upgrades for contacts (safe to re-run)
-    schema_updates = [
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_name TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_name TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_address TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_city TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_state TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_zip TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_address TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_city TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_state TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_zip TEXT",
-        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS next_follow_up_time TEXT",
-    ]
-
-    for stmt in schema_updates:
-        try:
-            cur.execute(stmt)
-            conn.commit()
-        except Exception as e:
-            print("Schema update skipped:", e)
-
-    # Interactions table for engagement log
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS interactions (
-            id SERIAL PRIMARY KEY,
-            contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-            kind TEXT NOT NULL,
-            happened_at DATE,
-            notes TEXT
-        )
-        """
-    )
-    conn.commit()
-
-    # Schema upgrades for interactions
     try:
+        
+        # Ensure base contacts table exists
         cur.execute(
-            "ALTER TABLE interactions ADD COLUMN IF NOT EXISTS time_of_day TEXT"
+            """
+            CREATE TABLE IF NOT EXISTS contacts (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT,
+                phone TEXT,
+                lead_type TEXT,
+                pipeline_stage TEXT,
+                price_min INTEGER,
+                price_max INTEGER,
+                target_area TEXT,
+                source TEXT,
+                priority TEXT,
+                last_contacted TEXT,
+                next_follow_up TEXT,
+                notes TEXT
+            )
+            """
         )
         conn.commit()
-    except Exception as e:
-        print("Interaction schema update skipped:", e)
-
-    # # Related contacts table (associated contacts)
-    # cur.execute(
-    #     """
-    #     CREATE TABLE IF NOT EXISTS related_contacts (
-    #         id SERIAL PRIMARY KEY,
-    #         contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-    #         related_name TEXT NOT NULL,
-    #         relationship TEXT,
-    #         email TEXT,
-    #         phone TEXT,
-    #         notes TEXT
-    #     )
-    #     """
-    # )
-    # conn.commit()
-
-    # Buyer profiles table
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS buyer_profiles (
-            id SERIAL PRIMARY KEY,
-            contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-            timeframe TEXT,
-            min_price INTEGER,
-            max_price INTEGER,
-            areas TEXT,
-            property_types TEXT,
-            preapproval_status TEXT,
-            lender_name TEXT,
-            referral_source TEXT,
-            notes TEXT
-        )
-        """
-    )
     
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS buyer_properties (
-            id SERIAL PRIMARY KEY,
-            buyer_profile_id INTEGER NOT NULL REFERENCES buyer_profiles(id) ON DELETE CASCADE,
-            address_line TEXT NOT NULL,
-            city TEXT,
-            state TEXT,
-            postal_code TEXT,
-            offer_status TEXT CHECK (
-                offer_status IN (
-                    'considering',
-                    'accepted',
-                    'lost',
-                    'attorney review',
-                    'under contract'
-                )
-            ),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        # Schema upgrades for contacts (safe to re-run)
+        schema_updates = [
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_name TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_name TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_address TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_city TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_state TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS current_zip TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_address TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_city TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_state TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS subject_zip TEXT",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS next_follow_up_time TEXT",
+        ]
+    
+        for stmt in schema_updates:
+            try:
+                cur.execute(stmt)
+                conn.commit()
+            except Exception as e:
+                print("Schema update skipped:", e)
+    
+        # Interactions table for engagement log
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS interactions (
+                id SERIAL PRIMARY KEY,
+                contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                happened_at DATE,
+                notes TEXT
+            )
+            """
         )
-        """
-    )
-    conn.commit()
-
-
-    # Upgrades for buyer_profiles (property type, documents checklist, professionals)
-    buyer_profile_upgrades = [
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS property_type TEXT",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS cis_signed BOOLEAN",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_agreement_signed BOOLEAN",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS wire_fraud_notice_signed BOOLEAN",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS dual_agency_consent_signed BOOLEAN",
-
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_name TEXT",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_email TEXT",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_phone TEXT",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_referred BOOLEAN",
-
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_email TEXT",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_phone TEXT",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_referred BOOLEAN",
-
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_name TEXT",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_email TEXT",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_phone TEXT",
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_referred BOOLEAN",
-
-        "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS other_professionals TEXT"
-    ]
-
-    for stmt in buyer_profile_upgrades:
+        conn.commit()
+    
+        # Schema upgrades for interactions
         try:
-            cur.execute(stmt)
+            cur.execute(
+                "ALTER TABLE interactions ADD COLUMN IF NOT EXISTS time_of_day TEXT"
+            )
             conn.commit()
         except Exception as e:
-            print("buyer_profiles schema update skipped:", e)
-
-    # Seller profiles table
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS seller_profiles (
-            id SERIAL PRIMARY KEY,
-            contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-            timeframe TEXT,
-            motivation TEXT,
-            estimated_price INTEGER,
-            property_address TEXT,
-            condition_notes TEXT,
-            referral_source TEXT,
-            notes TEXT
+            print("Interaction schema update skipped:", e)
+    
+        # # Related contacts table (associated contacts)
+        # cur.execute(
+        #     """
+        #     CREATE TABLE IF NOT EXISTS related_contacts (
+        #         id SERIAL PRIMARY KEY,
+        #         contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        #         related_name TEXT NOT NULL,
+        #         relationship TEXT,
+        #         email TEXT,
+        #         phone TEXT,
+        #         notes TEXT
+        #     )
+        #     """
+        # )
+        # conn.commit()
+    
+        # Buyer profiles table
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS buyer_profiles (
+                id SERIAL PRIMARY KEY,
+                contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                timeframe TEXT,
+                min_price INTEGER,
+                max_price INTEGER,
+                areas TEXT,
+                property_types TEXT,
+                preapproval_status TEXT,
+                lender_name TEXT,
+                referral_source TEXT,
+                notes TEXT
+            )
+            """
         )
-        """
-    )
-    conn.commit()
-
-    # Upgrades for seller_profiles (property type + professionals)
-    seller_profile_upgrades = [
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS property_type TEXT",
-
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_name TEXT",
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_email TEXT",
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_phone TEXT",
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_referred BOOLEAN",
-
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_name TEXT",
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_email TEXT",
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_phone TEXT",
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_referred BOOLEAN",
-
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_name TEXT",
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_email TEXT",
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_phone TEXT",
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_referred BOOLEAN",
-
-        "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS other_professionals TEXT"
-    ]
-
-    for stmt in seller_profile_upgrades:
+        
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS buyer_properties (
+                id SERIAL PRIMARY KEY,
+                buyer_profile_id INTEGER NOT NULL REFERENCES buyer_profiles(id) ON DELETE CASCADE,
+                address_line TEXT NOT NULL,
+                city TEXT,
+                state TEXT,
+                postal_code TEXT,
+                offer_status TEXT CHECK (
+                    offer_status IN (
+                        'considering',
+                        'accepted',
+                        'lost',
+                        'attorney review',
+                        'under contract'
+                    )
+                ),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.commit()
+    
+    
+        # Upgrades for buyer_profiles (property type, documents checklist, professionals)
+        buyer_profile_upgrades = [
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS property_type TEXT",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS cis_signed BOOLEAN",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_agreement_signed BOOLEAN",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS wire_fraud_notice_signed BOOLEAN",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS dual_agency_consent_signed BOOLEAN",
+    
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_name TEXT",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_email TEXT",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_phone TEXT",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_attorney_referred BOOLEAN",
+    
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_email TEXT",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_phone TEXT",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_lender_referred BOOLEAN",
+    
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_name TEXT",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_email TEXT",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_phone TEXT",
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS buyer_inspector_referred BOOLEAN",
+    
+            "ALTER TABLE buyer_profiles ADD COLUMN IF NOT EXISTS other_professionals TEXT"
+        ]
+    
+        for stmt in buyer_profile_upgrades:
+            try:
+                cur.execute(stmt)
+                conn.commit()
+            except Exception as e:
+                print("buyer_profiles schema update skipped:", e)
+    
+        # Seller profiles table
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS seller_profiles (
+                id SERIAL PRIMARY KEY,
+                contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                timeframe TEXT,
+                motivation TEXT,
+                estimated_price INTEGER,
+                property_address TEXT,
+                condition_notes TEXT,
+                referral_source TEXT,
+                notes TEXT
+            )
+            """
+        )
+        conn.commit()
+    
+        # Upgrades for seller_profiles (property type + professionals)
+        seller_profile_upgrades = [
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS property_type TEXT",
+    
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_name TEXT",
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_email TEXT",
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_phone TEXT",
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_attorney_referred BOOLEAN",
+    
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_name TEXT",
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_email TEXT",
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_phone TEXT",
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_lender_referred BOOLEAN",
+    
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_name TEXT",
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_email TEXT",
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_phone TEXT",
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS seller_inspector_referred BOOLEAN",
+    
+            "ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS other_professionals TEXT"
+        ]
+    
+        for stmt in seller_profile_upgrades:
+            try:
+                cur.execute(stmt)
+                conn.commit()
+            except Exception as e:
+                print("seller_profiles schema update skipped:", e)
+    
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS professionals (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                company TEXT,
+                phone TEXT,
+                email TEXT,
+                category TEXT,          -- Attorney, Lender, Inspector, Contractor, etc
+                grade TEXT NOT NULL,    -- core, preferred, vetting, blacklist
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.commit()
+    finally:
         try:
-            cur.execute(stmt)
-            conn.commit()
-        except Exception as e:
-            print("seller_profiles schema update skipped:", e)
-
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS professionals (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            company TEXT,
-            phone TEXT,
-            email TEXT,
-            category TEXT,          -- Attorney, Lender, Inspector, Contractor, etc
-            grade TEXT NOT NULL,    -- core, preferred, vetting, blacklist
-            notes TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    conn.commit()
-    conn.close()
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
     
 def get_contact_associations(conn, user_id, contact_id):
     """
@@ -3308,10 +3333,12 @@ def edit_contact(contact_id):
         """
         SELECT *
         FROM interactions
-        WHERE contact_id = %s AND is_completed = FALSE
+        WHERE user_id = %s
+          AND contact_id = %s
+          AND is_completed = FALSE
         ORDER BY happened_at DESC NULLS LAST, id DESC
         """,
-        (contact_id,),
+        (current_user.id, contact_id),
     )
     open_interactions = cur.fetchall()
 
@@ -3319,15 +3346,16 @@ def edit_contact(contact_id):
         """
         SELECT *
         FROM interactions
-        WHERE contact_id = %s AND is_completed = TRUE
+        WHERE user_id = %s
+          AND contact_id = %s
+          AND is_completed = TRUE
         ORDER BY completed_at DESC NULLS LAST,
                  happened_at DESC NULLS LAST,
                  id DESC
         """,
-        (contact_id,),
+        (current_user.id, contact_id),
     )
     completed_interactions = cur.fetchall()
-
     #Load Special Dates
     cur.execute("""
         SELECT id, label, special_date, is_recurring, notes
@@ -3646,10 +3674,10 @@ def add_interaction(contact_id):
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO interactions (contact_id, kind, happened_at, time_of_day, notes)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO interactions (user_id, contact_id, kind, happened_at, time_of_day, notes)
+        VALUES (%s, %s, %s, %s, %s, %s)
         """,
-        (contact_id, kind, happened_at, time_of_day, notes),
+        (current_user.id, contact_id, kind, happened_at, time_of_day, notes),
     )
     conn.commit()
     conn.close()
@@ -3663,8 +3691,8 @@ def delete_interaction(interaction_id):
     cur = conn.cursor()
     # Find which contact this interaction belongs to
     cur.execute(
-        "SELECT contact_id FROM interactions WHERE id = %s",
-        (interaction_id,),
+        "SELECT contact_id FROM interactions WHERE id = %s AND user_id = %s",
+        (interaction_id, current_user.id),
     )
     row = cur.fetchone()
     if not row:
@@ -4442,8 +4470,8 @@ def complete_interaction(interaction_id):
 
     # Get the contact_id so we know where to send you back
     cur.execute(
-        "SELECT contact_id FROM interactions WHERE id = %s",
-        (interaction_id,),
+        "SELECT contact_id FROM interactions WHERE id = %s AND user_id = %s",
+        (interaction_id, current_user.id),
     )
     row = cur.fetchone()
     if not row:
@@ -4452,16 +4480,19 @@ def complete_interaction(interaction_id):
 
     contact_id = row["contact_id"]
 
-    # Mark as completed
     cur.execute(
         """
         UPDATE interactions
         SET is_completed = TRUE,
             completed_at = NOW()
-        WHERE id = %s
+        WHERE user_id = %s
+          AND id = %s
         """,
-        (interaction_id,),
+        (current_user.id, interaction_id),
     )
+    if cur.rowcount == 0:
+        conn.close()
+        return "Interaction not found", 404
 
     conn.commit()
     conn.close()
@@ -4475,8 +4506,12 @@ def edit_interaction(interaction_id):
     conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM interactions WHERE id = %s", (interaction_id,))
+    cur.execute(
+        "SELECT * FROM interactions WHERE id = %s AND user_id = %s",
+        (interaction_id, current_user.id),
+    )
     interaction = cur.fetchone()
+
     if not interaction:
         conn.close()
         return "Interaction not found", 404
@@ -4498,10 +4533,14 @@ def edit_interaction(interaction_id):
                 notes = %s,
                 time_of_day = %s,
                 is_completed = %s
-            WHERE id = %s
+            WHERE user_id = %s
+              AND id = %s
             """,
-            (happened_at, kind, notes, time_of_day, is_completed, interaction_id),
+            (happened_at, kind, notes, time_of_day, is_completed, current_user.id, interaction_id),
         )
+        if cur.rowcount == 0:
+            conn.close()
+            return "Interaction not found", 404
 
         conn.commit()
         conn.close()
@@ -5159,13 +5198,17 @@ def api_reminders_due():
                c.first_name,
                c.last_name
         FROM interactions i
-        JOIN contacts c ON i.contact_id = c.id
-        WHERE i.due_at IS NOT NULL
+        JOIN contacts c
+          ON i.contact_id = c.id
+         AND c.user_id = %s
+        WHERE i.user_id = %s
+          AND i.due_at IS NOT NULL
           AND i.due_at <= NOW()
           AND i.due_at >= NOW() - INTERVAL '10 minutes'
           AND i.is_completed = FALSE
           AND (i.notified IS FALSE OR i.notified IS NULL)
-        """
+        """,
+        (current_user.id, current_user.id),
     )
     rows = cur.fetchall()
 
@@ -5173,8 +5216,13 @@ def api_reminders_due():
     interaction_ids = [row["id"] for row in rows]
     if interaction_ids:
         cur.execute(
-            "UPDATE interactions SET notified = TRUE WHERE id = ANY(%s)",
-            (interaction_ids,),
+            """
+            UPDATE interactions
+            SET notified = TRUE
+            WHERE user_id = %s
+              AND id = ANY(%s::int[])
+            """,
+            (current_user.id, interaction_ids),
         )
         conn.commit()
 
@@ -5486,10 +5534,10 @@ def api_add_interaction():
     try:
         cur.execute(
             """
-            INSERT INTO interactions (contact_id, kind, happened_at, time_of_day, notes)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO interactions (user_id, contact_id, kind, happened_at, time_of_day, notes)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (cid, kind, happened_at, time_of_day, notes),
+            (current_user.id, cid, kind, happened_at, time_of_day, notes),
         )
         conn.commit()
     except Exception as e:
@@ -5498,16 +5546,6 @@ def api_add_interaction():
 
     conn.close()
     return jsonify({"status": "ok", "contact_id": cid})
-
-
-try:
-    init_db()
-except Exception as e:
-    print("init_db() on import failed:", e)
-
-
-import os  # near the top with other imports
-
 
 if __name__ == "__main__":
     init_db()
