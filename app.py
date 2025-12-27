@@ -2860,57 +2860,96 @@ def dashboard():
     cur.execute(recent_sql, tuple(recent_params))
     recent_engagements = cur.fetchall()
 
-    # Follow-ups with context (single query then split into overdue/upcoming in Python)
-    followups_sql = f"""
+    # Follow-ups with context (single query then split into overdue/upcoming in Python) COMMENTED OUT 12-26-25
+    # followups_sql = f"""
+    #     SELECT
+    #         c.id AS contact_id,
+    #         c.name,
+    #         c.first_name,
+    #         c.last_name,
+    #         c.next_follow_up,
+    #         c.next_follow_up_time,
+# 
+    #         le.occurred_at AS last_engagement_at,
+    #         le.engagement_type AS last_engagement_type,
+    #         le.outcome AS last_engagement_outcome,
+    #         le.summary_clean AS last_engagement_summary
+# 
+    #     FROM contacts c
+# 
+    #     LEFT JOIN LATERAL (
+    #         SELECT e.occurred_at, e.engagement_type, e.outcome, e.summary_clean
+    #         FROM engagements e
+    #         WHERE e.contact_id = c.id
+    #         {engagements_scope_sql}
+    #         ORDER BY e.occurred_at DESC
+    #         LIMIT 1
+    #     ) le ON TRUE
+# 
+    #     WHERE {contacts_scope_sql}
+    #       AND c.next_follow_up IS NOT NULL
+    #     ORDER BY c.next_follow_up ASC, c.name ASC
+    # """
+    # followups_params = []
+    # followups_params += list(contacts_scope_params)
+    # followups_params += list(engagements_scope_params)
+# 
+    # cur.execute(followups_sql, tuple(followups_params))
+    # followup_rows = cur.fetchall()
+
+    # Follow-ups from engagements (source of truth)
+    followups_sql = """
         SELECT
-            c.id AS contact_id,
+            e.id AS engagement_id,
+            e.contact_id,
             c.name,
             c.first_name,
             c.last_name,
-            c.next_follow_up,
-            c.next_follow_up_time,
-
+            e.follow_up_due_at,
+    
             le.occurred_at AS last_engagement_at,
             le.engagement_type AS last_engagement_type,
             le.outcome AS last_engagement_outcome,
             le.summary_clean AS last_engagement_summary
-
-        FROM contacts c
-
+    
+        FROM engagements e
+        JOIN contacts c ON c.id = e.contact_id
+    
         LEFT JOIN LATERAL (
-            SELECT e.occurred_at, e.engagement_type, e.outcome, e.summary_clean
-            FROM engagements e
-            WHERE e.contact_id = c.id
-            {engagements_scope_sql}
-            ORDER BY e.occurred_at DESC
+            SELECT e2.occurred_at, e2.engagement_type, e2.outcome, e2.summary_clean
+            FROM engagements e2
+            WHERE e2.contact_id = c.id
+              AND e2.user_id = %s
+            ORDER BY e2.occurred_at DESC
             LIMIT 1
         ) le ON TRUE
-
-        WHERE {contacts_scope_sql}
-          AND c.next_follow_up IS NOT NULL
-        ORDER BY c.next_follow_up ASC, c.name ASC
+    
+        WHERE c.user_id = %s
+          AND e.user_id = %s
+          AND e.requires_follow_up = TRUE
+          AND e.follow_up_completed = FALSE
+          AND e.follow_up_due_at IS NOT NULL
+    
+        ORDER BY e.follow_up_due_at ASC
     """
-    followups_params = []
-    followups_params += list(contacts_scope_params)
-    followups_params += list(engagements_scope_params)
-
-    cur.execute(followups_sql, tuple(followups_params))
+    cur.execute(followups_sql, (current_user.id, current_user.id, current_user.id))
     followup_rows = cur.fetchall()
 
     conn.close()
 
     followups_overdue = []
     followups_upcoming = []
-
+    
     for row in followup_rows:
-        nf_date = _nf_to_date(row.get("next_follow_up"))
-        if not nf_date:
+        due = row.get("follow_up_due_at")
+        if not due:
             continue
-
-        if nf_date < today:
+    
+        due_date = due.date()
+        if due_date < today:
             followups_overdue.append(row)
         else:
-            if nf_date <= (today + timedelta(days=UPCOMING_DAYS)):
+            if due_date <= (today + timedelta(days=UPCOMING_DAYS)):
                 followups_upcoming.append(row)
 
     return render_template(
@@ -3597,7 +3636,8 @@ def edit_engagement(engagement_id):
 
     cur.execute(
         """
-        SELECT id, contact_id, engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean
+        SELECT id, contact_id, engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean,
+               requires_follow_up, follow_up_due_at, follow_up_completed, follow_up_completed_at
         FROM engagements
         WHERE id = %s AND user_id = %s
         """,
@@ -3609,7 +3649,11 @@ def edit_engagement(engagement_id):
         conn.close()
         return "Engagement not found", 404
 
-    next_url = request.args.get("next") or request.form.get("next") or url_for("edit_contact", contact_id=e["contact_id"])
+    next_url = (
+        request.args.get("next")
+        or request.form.get("next")
+        or url_for("edit_contact", contact_id=e["contact_id"])
+    )
 
     if request.method == "POST":
         engagement_type = (request.form.get("engagement_type") or "call").strip()
@@ -3626,6 +3670,27 @@ def edit_engagement(engagement_id):
             except Exception:
                 pass
 
+        # Follow-up fields
+        follow_up_due_at = None
+        follow_up_due_at_str = (request.form.get("follow_up_due_at") or "").strip()
+        if follow_up_due_at_str:
+            try:
+                follow_up_due_at = datetime.strptime(follow_up_due_at_str, "%Y-%m-%dT%H:%M")
+            except Exception:
+                follow_up_due_at = None
+
+        follow_up_completed = (request.form.get("follow_up_completed") == "on")
+        requires_follow_up = (request.form.get("requires_follow_up") == "on")
+
+        # Completed implies requires
+        if follow_up_completed:
+            requires_follow_up = True
+
+        # If not requiring a follow-up, clear follow-up fields
+        if not requires_follow_up:
+            follow_up_due_at = None
+            follow_up_completed = False
+
         cur.execute(
             """
             UPDATE engagements
@@ -3635,10 +3700,32 @@ def edit_engagement(engagement_id):
                 notes = %s,
                 transcript_raw = %s,
                 summary_clean = %s,
+
+                requires_follow_up = %s,
+                follow_up_due_at = %s,
+                follow_up_completed = %s,
+                follow_up_completed_at = CASE
+                    WHEN %s = TRUE THEN COALESCE(follow_up_completed_at, now())
+                    ELSE NULL
+                END,
+
                 updated_at = now()
             WHERE id = %s AND user_id = %s
             """,
-            (engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean, engagement_id, current_user.id),
+            (
+                engagement_type,
+                occurred_at,
+                outcome,
+                notes,
+                transcript_raw,
+                summary_clean,
+                requires_follow_up,
+                follow_up_due_at,
+                follow_up_completed,
+                follow_up_completed,  # used by CASE
+                engagement_id,
+                current_user.id,
+            ),
         )
         conn.commit()
         conn.close()

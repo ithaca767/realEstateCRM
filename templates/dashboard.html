@@ -325,8 +325,8 @@
                       {% endif %}
                     </a>
                   </td>
-                  <td>{{ c["next_follow_up"] or "" }}</td>
-                  <td>{{ c["next_follow_up_time"] or "" }}</td>
+                  <td>{{ c["follow_up_due_at"] or "" }}</td>
+                  <td></td>
 
                   <td style="min-width: 280px;">
                     {% if c["last_engagement_at"] %}
