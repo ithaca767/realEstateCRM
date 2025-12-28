@@ -1,12 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Open House{% endblock %}
+{% block title %}Open Houses{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <div class="content-panel">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="mb-0">Open House Details</h2>
+      <div class="text-muted ms-3">
+        for {{ openhouse["address_line1"] }}
+      </div>
+    </div>
+  </div>
+
+<div class="card mt-3">
+  <div class="card-body">
+
   <div class="d-flex justify-content-between align-items-start mb-3">
     <div>
-      <h2 class="mb-0">{{ openhouse["address_line1"] }}</h2>
+      <div class="fw-bold">{{ openhouse["address_line1"] }}</div>
       <div class="text-muted">{{ openhouse["city"] }}, {{ openhouse["state"] }} {{ openhouse["zip"] }}</div>
       <div class="text-muted small">Start: {{ openhouse["start_datetime"] }} | End: {{ openhouse["end_datetime"] }}</div>
     </div>
@@ -31,6 +41,8 @@
   </div>
 
   <h5 class="mb-2">Sign-Ins</h5>
+  <div class="table-responsive">
+
   <table class="table table-striped">
     <thead>
       <tr>
@@ -57,6 +69,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 </div>
 

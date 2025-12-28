@@ -37,3 +37,49 @@ body {
   line-height: 1.35;
   opacity: 0.85;
 }
+
+/* Row Highlighting */
+
+tr.tx-selected td {
+  background-color: #f4f8fb !important;
+}
+
+tr.tx-selected {
+  border-left: 5px solid #000dfc;
+}
+
+a.tx-address {
+  display: inline-block;
+  max-width: 260px;   /* tweak as needed */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+/* Make the table respect fixed column widths */
+.tx-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Address takes remaining space and truncates */
+.tx-col-address {
+  width: auto;
+}
+
+a.tx-address {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Keep action buttons visible */
+.tx-col-actions {
+  width: 92px; /* tweak: 80–110 depending on your button text */
+  white-space: nowrap;
+}
+
+

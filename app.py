@@ -3367,6 +3367,21 @@ def edit_contact(contact_id):
     )
     transactions = cur.fetchall()
     
+    tx_id = request.args.get("tx_id", type=int)
+    
+    selected_tx = None
+    if transactions:
+        if tx_id:
+            for t in transactions:
+                if t["id"] == tx_id:
+                    selected_tx = t
+                    break
+        if not selected_tx:
+            selected_tx = transactions[0]  # default to first row
+        if not tx_id and selected_tx:
+            return redirect(url_for("edit_contact", contact_id=contact_id, tx_id=selected_tx["id"]))
+
+    
     # NEW: split interactions into open and completed
     cur.execute(
         """
@@ -3427,6 +3442,7 @@ def edit_contact(contact_id):
         active_page="contacts",
         has_buyer_profile=has_buyer_profile,
         has_seller_profile=has_seller_profile,
+        selected_tx=selected_tx,
         transactions=transactions,
         transaction_statuses=TRANSACTION_STATUSES,
     )
