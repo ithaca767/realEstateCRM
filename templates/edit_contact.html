@@ -515,7 +515,60 @@
               <label class="form-label">Notes</label>
               <input name="notes" class="form-control" placeholder="CRM-ready summary">
             </div>
-    
+           <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="requiresFollowUp" name="requires_follow_up">
+                <label class="form-check-label" for="requiresFollowUp">
+                  Follow-up required
+                </label>
+              </div>
+            </div>
+            
+            <div class="col-12" id="followUpFields" style="display: none;">
+              <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label">Follow-up due date</label>
+                  <input name="follow_up_due_date" type="date" class="form-control">
+                </div>
+            
+                <div class="col-md-2">
+                  <label class="form-label">Hour</label>
+                  <select name="follow_up_due_hour" class="form-select">
+                    <option value="">Hour</option>
+                    {% for h in range(1, 13) %}
+                      <option value="{{ h }}">{{ h }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+            
+                <div class="col-md-2">
+                  <label class="form-label">Minute</label>
+                  <select name="follow_up_due_minute" class="form-select">
+                    <option value="">Minute</option>
+                    <option value="00">00</option>
+                    <option value="15">15</option>
+                    <option value="30">30</option>
+                    <option value="45">45</option>
+                  </select>
+                </div>
+            
+                <div class="col-md-2">
+                  <label class="form-label">AM / PM</label>
+                  <select name="follow_up_due_ampm" class="form-select">
+                    <option value="">AM / PM</option>
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+            
+                <div class="col-md-3">
+                  <div class="text-muted small">
+                    Tip: Use Notes for the follow-up plan and deliverable if needed.
+                  </div>
+                </div>
+              </div>
+            </div>
+ 
             <div class="col-12">
               <button class="btn btn-outline-primary mt-2" type="button" data-bs-toggle="collapse" data-bs-target="#transcriptCollapse">
                 Paste transcript and summary (optional)
@@ -564,11 +617,26 @@
                       {% if e["summary_clean"] %}
                         <div class="mt-2"><span class="text-muted">Summary:</span> {{ e["summary_clean"] }}</div>
                       {% endif %}
+                    
+                      {% if e["requires_follow_up"] %}
+                        <div class="mt-2">
+                          <span class="badge bg-warning-subtle text-dark">Follow-up</span>
+                    
+                          {% if e["follow_up_due_at"] %}
+                            <span class="text-muted small ms-2">Due: {{ e["follow_up_due_at"] }}</span>
+                          {% endif %}
+                    
+                          {% if e["follow_up_completed"] %}
+                            <span class="badge bg-success-subtle text-dark ms-2">Completed</span>
+                          {% endif %}
+                        </div>
+                      {% endif %}
                     </td>
+
                     <td class="text-end">
                       <div class="d-inline-flex gap-2">
                         <a class="btn btn-sm btn-outline-secondary"
-                           href="{{ url_for('edit_engagement', engagement_id=e['id'], next=request.path) }}">
+                           href="{{ url_for('edit_engagement', engagement_id=e['id'], next=request.path, return_tab='engagements') }}">
                           Edit
                         </a>
                     
@@ -591,8 +659,55 @@
     </div>
   </div>
 
+  <!-- Followups tab -->
   <div class="tab-pane fade" id="pane-followups" role="tabpanel">
-    <!-- FOLLOW-UPS CONTENT GOES HERE -->
+  
+    <div class="card mt-4">
+      <div class="card-header">Follow-ups for this contact</div>
+      <div class="card-body bg-white">
+  
+        {% if followups_for_contact and followups_for_contact|length > 0 %}
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0 align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 180px;">Due</th>
+                  <th style="width: 140px;">Type</th>
+                  <th>Context</th>
+                  <th style="width: 120px;" class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for f in followups_for_contact %}
+                  <tr>
+                    <td class="text-muted">{{ f["follow_up_due_at"] or "—" }}</td>
+                    <td>{{ (f["engagement_type"] or "")|replace("_"," ")|title }}</td>
+                    <td>
+                      {% if f["notes"] %}<div>{{ f["notes"] }}</div>{% endif %}
+                      {% if f["summary_clean"] %}<div class="text-muted small">{{ f["summary_clean"] }}</div>{% endif %}
+                    </td>
+                    <td class="text-end">
+                      <a class="btn btn-sm btn-outline-primary"
+                         href="{{ url_for('edit_engagement',
+                                          engagement_id=f['id'],
+                                          return_to='contact',
+                                          return_tab='followups',
+                                          next=url_for('edit_contact', contact_id=c['id']) ~ '#followups') }}">
+                        Open
+                      </a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-muted">No follow-ups for this contact.</div>
+        {% endif %}
+  
+      </div>
+    </div>
+  
   </div>
 
   <div class="tab-pane fade" id="pane-transactions" role="tabpanel">
@@ -699,69 +814,125 @@
                 {% if ns.selected_tx %}
                   <a
                     class="btn btn-sm btn-outline-primary"
-                    href="{{ url_for('edit_transaction', transaction_id=ns.selected_tx['id'], next=url_for('edit_contact', contact_id=c['id'], tx_id=ns.selected_tx['id'])) }}"
+                    href="{{ url_for('edit_transaction',
+                                     transaction_id=ns.selected_tx['id'],
+                                     next=url_for('edit_contact',
+                                                  contact_id=c['id'],
+                                                  tx_id=ns.selected_tx['id'])) }}"
                   >
                     View / Edit
                   </a>
                 {% endif %}
               </div>
-    
+            
+              <hr class="mt-2 mb-3">
+            
               {% if ns.selected_tx %}
-                <div class="mb-2">
+            
+                <!-- Row 2: Address -->
+                <div class="mb-3">
                   <div class="text-muted small">Address</div>
                   <div class="fw-semibold">{{ ns.selected_tx['address'] or '—' }}</div>
                 </div>
-    
-                <div class="mb-2">
-                  <div class="text-muted small">Type</div>
-                  <div>{{ ns.selected_tx['transaction_type'] or '—' }}</div>
+            
+                <!-- Row 3: Type | Status -->
+                <div class="row mb-3">
+                  <div class="col-md-6">
+                    <div class="text-muted small">Type</div>
+                    <div class="fw-semibold">
+                      {% set tx_type = (ns.selected_tx['transaction_type'] or '')|lower %}
+                      {% if tx_type in ['buy','sell','rent','lease'] %}
+                        {{ tx_type|title }}
+                      {% elif tx_type %}
+                        Other
+                      {% else %}
+                        Other
+                      {% endif %}
+                    </div>
+                  </div>
+            
+                  <div class="col-md-6">
+                    <div class="text-muted small">Status</div>
+            
+                    {% set s = (ns.selected_tx['status'] or '') %}
+                    <div class="fw-semibold
+                      {% if s == 'active' %} text-success
+                      {% elif s == 'pending_uc' %} text-warning
+                      {% elif s == 'closed' %} text-primary
+                      {% endif %}">
+                      {{ status_labels.get(s, s)|replace('_',' ')|title }}
+                    </div>
+                  </div>
                 </div>
-    
-                <div class="mb-2">
-                  <div class="text-muted small">Status</div>
-                  <div>{{ status_labels.get(ns.selected_tx['status'], ns.selected_tx['status']) }}</div>
+            
+                <!-- Row 4: List | Offer | Closed/Sold -->
+                <div class="row mb-3 g-2">
+                  <div class="col-md-4">
+                    <div class="text-muted small">List Price</div>
+                    <div class="fw-semibold">
+                      {% if ns.selected_tx['list_price'] %}
+                        ${{ "{:,.0f}".format(ns.selected_tx['list_price']) }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </div>
+                  </div>
+            
+                  <div class="col-md-4">
+                    <div class="text-muted small">Offer Price</div>
+                    <div class="fw-semibold">
+                      {% if ns.selected_tx['offer_price'] %}
+                        ${{ "{:,.0f}".format(ns.selected_tx['offer_price']) }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </div>
+                  </div>
+            
+                  <div class="col-md-4">
+                    <div class="text-muted small">Closed / Sold Price</div>
+                    <div class="fw-semibold">
+                      {% if ns.selected_tx.get('closed_price') %}
+                        ${{ "{:,.0f}".format(ns.selected_tx['closed_price']) }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </div>
+                  </div>
                 </div>
-    
+            
+                <!-- Row 5: Expected Close | Next milestone -->
                 <div class="row g-2">
-                  <div class="col-6">
-                    <div class="text-muted small">List</div>
-                    <div>{% if ns.selected_tx['list_price'] %}${{ "{:,.0f}".format(ns.selected_tx['list_price']) }}{% else %}—{% endif %}</div>
+                  <div class="col-md-6">
+                    <div class="text-muted small">Expected Close</div>
+                    <div class="fw-semibold">{{ ns.selected_tx['expected_close_date'] or '—' }}</div>
                   </div>
-                  <div class="col-6">
-                    <div class="text-muted small">Offer</div>
-                    <div>{% if ns.selected_tx['offer_price'] %}${{ "{:,.0f}".format(ns.selected_tx['offer_price']) }}{% else %}—{% endif %}</div>
+            
+                  <div class="col-md-6">
+                    <div class="text-muted small">Next milestone</div>
+            
+                    {% if next_deadlines %}
+                      {% for d in next_deadlines[:2] %}
+                        <div class="fw-semibold">
+                          {{ d['label'] }}: {{ d['due_at'] }}
+                        </div>
+                      {% endfor %}
+                    {% else %}
+                      <div class="text-muted">No upcoming deadlines</div>
+                    {% endif %}
                   </div>
                 </div>
-    
-                <div class="mt-2">
-                  <div class="text-muted small">Expected Close</div>
-                  <div>{{ ns.selected_tx['expected_close_date'] or '—' }}</div>
-                </div>
-    
-                {# Use bracket access to avoid .get issues #}
-                {% if ns.selected_tx['notes'] %}
-                  <div class="mt-2">
-                    <div class="text-muted small">Notes</div>
-                    <div class="small">{{ ns.selected_tx['notes'] }}</div>
-                  </div>
-                {% endif %}
+            
               {% else %}
                 <div class="text-muted">Select a transaction to view details.</div>
               {% endif %}
             </div>
           </div>
-    
-        </div>
-    
+        </div>  {# /row g-0 #}
+
       {% else %}
         <div class="p-3 text-muted">No transactions yet.</div>
       {% endif %}
-    </div>
-  </div>
-</div>
-
-
-      </div> <!-- /tab-content -->
     </div>   <!-- /card-body -->
   </div>     <!-- /card -->
     
@@ -850,7 +1021,7 @@
     </script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
-        // If URL has a hash like #transactions, open that tab
+        // 1) If URL has a hash like #engagements, always honor it
         if (window.location.hash) {
           const hash = window.location.hash.replace("#", "");
           const map = {
@@ -863,10 +1034,11 @@
           if (btnId) {
             const btn = document.getElementById(btnId);
             if (btn) new bootstrap.Tab(btn).show();
+            return; // critical: do not let tx_id override an explicit hash
           }
         }
     
-        // If you are selecting a transaction via tx_id, open transactions tab automatically
+        // 2) If selecting a transaction via tx_id, open transactions tab
         const params = new URLSearchParams(window.location.search);
         if (params.get("tx_id")) {
           const btn = document.getElementById("tab-transactions");
@@ -874,5 +1046,20 @@
         }
       });
     </script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        var cb = document.getElementById("requiresFollowUp");
+        var box = document.getElementById("followUpFields");
+        if (!cb || !box) return;
+    
+        function sync() {
+          box.style.display = cb.checked ? "" : "none";
+        }
+    
+        cb.addEventListener("change", sync);
+        sync();
+      });
+    </script>
+    
     
     {% endblock %}

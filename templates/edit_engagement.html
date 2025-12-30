@@ -9,13 +9,19 @@
       <h2 class="mb-0">Edit Engagement</h2>
       <div class="text-muted small">Update the engagement details, notes, and transcript fields.</div>
     </div>
-    <a class="btn btn-outline-secondary" href="{{ next }}">Back</a>
-  </div>
+      <a class="btn btn-outline-secondary"
+         href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements">
+        Back
+      </a>
+    </div>
 
   <div class="card">
     <div class="card-body bg-white">
       <form method="post">
         <input type="hidden" name="next" value="{{ next }}">
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <input type="hidden" name="return_tab" value="{{ return_tab }}">
+        <input type="hidden" name="return_to" value="{{ return_to }}">
 
         <div class="row g-3">
           <div class="col-md-4">
@@ -86,7 +92,10 @@
           </div>
 
           <div class="col-12 d-flex justify-content-end gap-2">
-            <a class="btn btn-outline-secondary" href="{{ next }}">Cancel</a>
+            <a class="btn btn-outline-secondary"
+               href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements">
+              Cancel
+            </a>
             <button class="btn btn-success" type="submit">Save changes</button>
           </div>
         </div>

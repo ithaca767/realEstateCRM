@@ -4,7 +4,18 @@ def list_engagements_for_contact(conn, user_id: int, contact_id: int, limit: int
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT id, engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean
+        SELECT
+          id,
+          engagement_type,
+          occurred_at,
+          outcome,
+          notes,
+          transcript_raw,
+          summary_clean,
+          requires_follow_up,
+          follow_up_due_at,
+          follow_up_completed,
+          follow_up_completed_at
         FROM engagements
         WHERE user_id = %s AND contact_id = %s
         ORDER BY occurred_at DESC, id DESC
@@ -12,20 +23,55 @@ def list_engagements_for_contact(conn, user_id: int, contact_id: int, limit: int
         """,
         (user_id, contact_id, limit),
     )
-    rows = cur.fetchall()
-    return rows
+    return cur.fetchall()
 
-def insert_engagement(conn, user_id: int, contact_id: int, engagement_type: str, occurred_at, outcome, notes, transcript_raw, summary_clean):
+def insert_engagement(
+    conn,
+    user_id: int,
+    contact_id: int,
+    engagement_type: str,
+    occurred_at,
+    outcome,
+    notes,
+    transcript_raw,
+    summary_clean,
+    requires_follow_up: bool = False,
+    follow_up_due_at=None,
+):
     cur = conn.cursor()
     cur.execute(
         """
         INSERT INTO engagements
-          (user_id, contact_id, engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean)
+          (
+            user_id,
+            contact_id,
+            engagement_type,
+            occurred_at,
+            outcome,
+            notes,
+            transcript_raw,
+            summary_clean,
+            requires_follow_up,
+            follow_up_due_at,
+            follow_up_completed,
+            follow_up_completed_at
+          )
         VALUES
-          (%s, %s, %s, %s, %s, %s, %s, %s)
+          (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, false, NULL)
         RETURNING id
         """,
-        (user_id, contact_id, engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean),
+        (
+            user_id,
+            contact_id,
+            engagement_type,
+            occurred_at,
+            outcome,
+            notes,
+            transcript_raw,
+            summary_clean,
+            requires_follow_up,
+            follow_up_due_at,
+        ),
     )
     row = cur.fetchone()
     new_id = row["id"] if row else None

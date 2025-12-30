@@ -17,6 +17,7 @@ from engagements import (
 
 from dotenv import load_dotenv
 load_dotenv()
+APP_ENV = os.getenv("APP_ENV", "LOCAL").upper()
 
 from flask import (
     Flask,
@@ -51,8 +52,11 @@ from psycopg2.extras import RealDictCursor
 app = Flask(__name__)
 
 @app.context_processor
-def inject_app_version():
-    return {"APP_VERSION": APP_VERSION}
+def inject_app_globals():
+    return {
+        "APP_VERSION": APP_VERSION,
+        "APP_ENV": APP_ENV,
+    }
 
 # --- Security & session config ---
 SECRET_KEY = os.environ.get("SECRET_KEY")
@@ -94,11 +98,26 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 SHORTCUT_API_KEY = os.environ.get("SHORTCUT_API_KEY")  # optional shared secret
 
 def get_db():
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL is not set")
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-    return conn
+    # Pick DB based on environment
+    if APP_ENV == "PROD":
+        db_url = os.getenv("PROD_DATABASE_URL") or os.getenv("DATABASE_URL")
+    else:
+        db_url = os.getenv("LOCAL_DATABASE_URL") or os.getenv("DATABASE_URL")
 
+    if not db_url:
+        raise RuntimeError(f"Database URL is not set for APP_ENV={APP_ENV}")
+
+    # Normalize scheme for psycopg2 (some providers still use postgres://)
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+    # Safety stop: never allow local environment to connect to production DB
+    if APP_ENV != "PROD":
+        # Block common prod indicators. Adjust if your prod URL differs.
+        if "realestatecrm_db" in db_url or "render.com" in db_url or "10.22." in db_url:
+            raise RuntimeError("Safety stop: LOCAL environment cannot connect to production database.")
+
+    return psycopg2.connect(db_url, cursor_factory=RealDictCursor)
 
 class User(UserMixin):
     def __init__(self, row):
@@ -216,6 +235,8 @@ def get_professionals_for_dropdown(category=None):
         conn.close()
 
 def init_db():
+    if APP_ENV == "PROD":
+        raise RuntimeError("init_db() is disabled in production.")
     conn = get_db()
     cur = conn.cursor()
     try:
@@ -2199,28 +2220,37 @@ FOLLOWUPS_TEMPLATE = """
                     </thead>
                     <tbody>
                     {% for c in rows %}
-                        <tr>
-                            <td>
-                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}">
-                                    {% if c["first_name"] or c["last_name"] %}
-                                        {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                                    {% else %}
-                                        {{ c["name"] }}
-                                    {% endif %}
-                                </a>
-                            </td>
-                            <td>{{ c["next_follow_up"] or "" }}</td>
-                            <td>{{ c["next_follow_up_time"] or "" }}</td>
-                            <td>{{ c["pipeline_stage"] or "" }}</td>
-                            <td>{{ c["priority"] or "" }}</td>
-                            <td>{{ c["target_area"] or "" }}</td>
-                            <td>
-                                <a href="{{ url_for('edit_contact', contact_id=c['id']) }}"
-                                   class="btn btn-sm btn-outline-primary">
-                                   Open
-                                </a>
-                            </td>
-                        </tr>
+                      <tr>
+                        <td>
+                          <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}">
+                            {% if c["first_name"] or c["last_name"] %}
+                              {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                            {% else %}
+                              {{ c["name"] or "Unnamed Contact" }}
+                            {% endif %}
+                          </a>
+                        </td>
+                      
+                        <td>
+                          {{ c["follow_up_due_at"] }}
+                        </td>
+                      
+                        <td style="min-width: 320px;">
+                          {% set ctx = c["notes"] or c["outcome"] or c["summary_clean"] %}
+                          {% if ctx %}
+                            <div class="small">{{ ctx }}</div>
+                          {% else %}
+                            <span class="text-muted small">No context yet</span>
+                          {% endif %}
+                        </td>
+                      
+                        <td>
+                          <a href="{{ url_for('edit_engagement', engagement_id=c['engagement_id'], next=request.path) }}"
+                             class="btn btn-sm btn-outline-primary">
+                            Open
+                          </a>
+                        </td>
+                      </tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -3320,6 +3350,28 @@ def edit_contact(contact_id):
 
     engagements = list_engagements_for_contact(conn, current_user.id, contact_id, limit=50)
 
+    cur.execute(
+        """
+        SELECT
+          id,
+          engagement_type,
+          follow_up_due_at,
+          follow_up_completed,
+          outcome,
+          notes,
+          summary_clean
+        FROM engagements
+        WHERE user_id = %s
+          AND contact_id = %s
+          AND requires_follow_up = TRUE
+          AND follow_up_completed = FALSE
+          AND follow_up_due_at IS NOT NULL
+        ORDER BY follow_up_due_at ASC, id ASC
+        """,
+        (current_user.id, contact_id),
+    )
+    followups_for_contact = cur.fetchall() or []
+
     # Pre-fill follow-up time selects if we have a stored time
     next_time_hour = None
     next_time_minute = None
@@ -3356,6 +3408,8 @@ def edit_contact(contact_id):
             address,
             list_price,
             offer_price,
+            accepted_price,
+            closed_price,
             expected_close_date,
             updated_at
         FROM transactions
@@ -3378,8 +3432,34 @@ def edit_contact(contact_id):
                     break
         if not selected_tx:
             selected_tx = transactions[0]  # default to first row
-        if not tx_id and selected_tx:
-            return redirect(url_for("edit_contact", contact_id=contact_id, tx_id=selected_tx["id"]))
+
+    # Next milestones (top 2 upcoming deadlines for the selected transaction)
+    next_deadlines = []
+    
+    if selected_tx:
+        cur.execute(
+            """
+            SELECT
+                label,
+                due_at
+            FROM transaction_deadlines
+            WHERE user_id = %s
+              AND transaction_id = %s
+              AND due_at IS NOT NULL
+            ORDER BY due_at ASC
+            LIMIT 2
+            """,
+            (current_user.id, selected_tx["id"]),
+        )
+        next_deadlines = cur.fetchall() or []
+
+
+        # IMPORTANT:
+        # Do not auto-redirect to tx_id here.
+        # Contact pages must default to Engagements unless the user explicitly selects a transaction.
+        # Do not force tx_id into the URL.
+        # selected_tx is still used for split-view rendering default.
+        pass
 
     
     # NEW: split interactions into open and completed
@@ -3428,6 +3508,7 @@ def edit_contact(contact_id):
         c=contact,
         associations=associations,
         engagements=engagements,
+        followups_for_contact=followups_for_contact,        
         special_dates=special_dates,
         open_interactions=open_interactions,
         completed_interactions=completed_interactions,
@@ -3445,6 +3526,7 @@ def edit_contact(contact_id):
         selected_tx=selected_tx,
         transactions=transactions,
         transaction_statuses=TRANSACTION_STATUSES,
+        next_deadlines=next_deadlines,        
     )
 
 @app.route("/contacts/search")
@@ -3580,6 +3662,8 @@ def delete_contact_association(contact_id, assoc_id):
     conn.close()
     return redirect(next_url)
 
+from datetime import datetime
+
 @app.route("/contacts/<int:contact_id>/engagements/add", methods=["POST"])
 @login_required
 def add_engagement(contact_id):
@@ -3590,29 +3674,58 @@ def add_engagement(contact_id):
     notes = (request.form.get("notes") or "").strip() or None
     transcript_raw = (request.form.get("transcript_raw") or "").strip() or None
     summary_clean = (request.form.get("summary_clean") or "").strip() or None
-    
+
     occurred_date = (request.form.get("occurred_date") or "").strip()
     time_hour = (request.form.get("time_hour") or "").strip()
     time_minute = (request.form.get("time_minute") or "").strip()
     time_ampm = (request.form.get("time_ampm") or "").strip()
-    
+
     if occurred_date:
         dt = datetime.strptime(occurred_date, "%Y-%m-%d")
-    
+
         if time_hour and time_minute and time_ampm:
             h = int(time_hour)
             m = int(time_minute)
-    
+
             if time_ampm.upper() == "PM" and h != 12:
                 h += 12
             if time_ampm.upper() == "AM" and h == 12:
                 h = 0
-    
+
             occurred_at = dt.replace(hour=h, minute=m)
         else:
             occurred_at = dt
     else:
         occurred_at = datetime.now()
+
+    # Follow-up parsing
+    requires_follow_up = (request.form.get("requires_follow_up") == "on")
+
+    follow_up_due_at = None
+    if requires_follow_up:
+        fu_date = (request.form.get("follow_up_due_date") or "").strip()
+        fu_hour = (request.form.get("follow_up_due_hour") or "").strip()
+        fu_minute = (request.form.get("follow_up_due_minute") or "").strip()
+        fu_ampm = (request.form.get("follow_up_due_ampm") or "").strip()
+
+        if fu_date:
+            fu_dt = datetime.strptime(fu_date, "%Y-%m-%d")
+            if fu_hour and fu_minute and fu_ampm:
+                h = int(fu_hour)
+                m = int(fu_minute)
+
+                if fu_ampm.upper() == "PM" and h != 12:
+                    h += 12
+                if fu_ampm.upper() == "AM" and h == 12:
+                    h = 0
+
+                follow_up_due_at = fu_dt.replace(hour=h, minute=m)
+            else:
+                follow_up_due_at = fu_dt
+        else:
+            # If checkbox is checked but no date is provided, treat as not set
+            # You can also choose to flash an error and redirect back instead.
+            follow_up_due_at = None
 
     insert_engagement(
         conn=conn,
@@ -3624,11 +3737,12 @@ def add_engagement(contact_id):
         notes=notes,
         transcript_raw=transcript_raw,
         summary_clean=summary_clean,
+        requires_follow_up=requires_follow_up,
+        follow_up_due_at=follow_up_due_at,
     )
 
     flash("Engagement added.", "success")
-    return redirect(url_for("edit_contact", contact_id=contact_id))
-
+    return redirect(url_for("edit_contact", contact_id=contact_id, saved=1) + "#engagements")
 
 @app.route("/engagements/<int:engagement_id>/delete", methods=["POST"])
 @login_required
@@ -3650,82 +3764,123 @@ def edit_engagement(engagement_id):
     conn = get_db()
     cur = conn.cursor()
 
+    # Load engagement (must belong to current user)
     cur.execute(
         """
-        SELECT id, contact_id, engagement_type, occurred_at, outcome, notes, transcript_raw, summary_clean,
-               requires_follow_up, follow_up_due_at, follow_up_completed, follow_up_completed_at
+        SELECT
+          id,
+          user_id,
+          contact_id,
+          engagement_type,
+          occurred_at,
+          outcome,
+          notes,
+          transcript_raw,
+          summary_clean,
+          requires_follow_up,
+          follow_up_due_at,
+          follow_up_completed,
+          follow_up_completed_at
         FROM engagements
         WHERE id = %s AND user_id = %s
         """,
         (engagement_id, current_user.id),
     )
     e = cur.fetchone()
-
     if not e:
         conn.close()
-        return "Engagement not found", 404
+        flash("Engagement not found.", "danger")
+        return redirect(url_for("contacts"))
 
-    next_url = (
-        request.args.get("next")
-        or request.form.get("next")
-        or url_for("edit_contact", contact_id=e["contact_id"])
-    )
+    # Return/next handling
+    # next_url: a normal URL to go back to (e.g., /followups or /edit/123)
+    # return_to: allows forcing the return destination (e.g., "contact")
+    # return_tab: allows forcing a hash tab (e.g., "engagements")
+    next_url = (request.args.get("next") or request.form.get("next") or "").strip()
+    return_to = (request.args.get("return_to") or request.form.get("return_to") or "").strip()
+    return_tab = (request.args.get("return_tab") or request.form.get("return_tab") or "").strip()
 
     if request.method == "POST":
+        # Basic fields
         engagement_type = (request.form.get("engagement_type") or "call").strip()
-        occurred_at_str = (request.form.get("occurred_at") or "").strip()
         outcome = (request.form.get("outcome") or "").strip() or None
         notes = (request.form.get("notes") or "").strip() or None
         transcript_raw = (request.form.get("transcript_raw") or "").strip() or None
         summary_clean = (request.form.get("summary_clean") or "").strip() or None
 
-        occurred_at = e["occurred_at"]
-        if occurred_at_str:
-            try:
-                occurred_at = datetime.strptime(occurred_at_str, "%Y-%m-%dT%H:%M")
-            except Exception:
-                pass
+        # Occurred_at parsing
+        occurred_date = (request.form.get("occurred_date") or "").strip()
+        time_hour = (request.form.get("time_hour") or "").strip()
+        time_minute = (request.form.get("time_minute") or "").strip()
+        time_ampm = (request.form.get("time_ampm") or "").strip()
 
-        # Follow-up fields
+        if occurred_date:
+            dt = datetime.strptime(occurred_date, "%Y-%m-%d")
+            if time_hour and time_minute and time_ampm:
+                h = int(time_hour)
+                m = int(time_minute)
+                if time_ampm.upper() == "PM" and h != 12:
+                    h += 12
+                if time_ampm.upper() == "AM" and h == 12:
+                    h = 0
+                occurred_at = dt.replace(hour=h, minute=m)
+            else:
+                occurred_at = dt
+        else:
+            occurred_at = e["occurred_at"]
+
+        # Follow-up parsing
+        requires_follow_up = (request.form.get("requires_follow_up") == "on")
+        follow_up_completed = (request.form.get("follow_up_completed") == "on")
+
         follow_up_due_at = None
-        follow_up_due_at_str = (request.form.get("follow_up_due_at") or "").strip()
-        if follow_up_due_at_str:
-            try:
-                follow_up_due_at = datetime.strptime(follow_up_due_at_str, "%Y-%m-%dT%H:%M")
-            except Exception:
+        follow_up_completed_at = None
+
+        if requires_follow_up:
+            fu_date = (request.form.get("follow_up_due_date") or "").strip()
+            fu_hour = (request.form.get("follow_up_due_hour") or "").strip()
+            fu_minute = (request.form.get("follow_up_due_minute") or "").strip()
+            fu_ampm = (request.form.get("follow_up_due_ampm") or "").strip()
+
+            if fu_date:
+                fu_dt = datetime.strptime(fu_date, "%Y-%m-%d")
+                if fu_hour and fu_minute and fu_ampm:
+                    h = int(fu_hour)
+                    m = int(fu_minute)
+                    if fu_ampm.upper() == "PM" and h != 12:
+                        h += 12
+                    if fu_ampm.upper() == "AM" and h == 12:
+                        h = 0
+                    follow_up_due_at = fu_dt.replace(hour=h, minute=m)
+                else:
+                    follow_up_due_at = fu_dt
+            else:
                 follow_up_due_at = None
 
-        follow_up_completed = (request.form.get("follow_up_completed") == "on")
-        requires_follow_up = (request.form.get("requires_follow_up") == "on")
-
-        # Completed implies requires
-        if follow_up_completed:
-            requires_follow_up = True
-
-        # If not requiring a follow-up, clear follow-up fields
-        if not requires_follow_up:
+            if follow_up_completed:
+                follow_up_completed_at = datetime.now()
+        else:
+            # If not a follow-up, force follow-up fields to off/null
             follow_up_due_at = None
             follow_up_completed = False
+            follow_up_completed_at = None
 
+        # Persist
         cur.execute(
             """
             UPDATE engagements
-            SET engagement_type = %s,
-                occurred_at = %s,
-                outcome = %s,
-                notes = %s,
-                transcript_raw = %s,
-                summary_clean = %s,
-
-                requires_follow_up = %s,
-                follow_up_due_at = %s,
-                follow_up_completed = %s,
-                follow_up_completed_at = CASE
-                    WHEN %s = TRUE THEN COALESCE(follow_up_completed_at, now())
-                    ELSE NULL
-                END,
-
-                updated_at = now()
+            SET
+              engagement_type = %s,
+              occurred_at = %s,
+              outcome = %s,
+              notes = %s,
+              transcript_raw = %s,
+              summary_clean = %s,
+              requires_follow_up = %s,
+              follow_up_due_at = %s,
+              follow_up_completed = %s,
+              follow_up_completed_at = %s,
+              updated_at = now()
             WHERE id = %s AND user_id = %s
             """,
             (
@@ -3738,20 +3893,41 @@ def edit_engagement(engagement_id):
                 requires_follow_up,
                 follow_up_due_at,
                 follow_up_completed,
-                follow_up_completed,  # used by CASE
+                follow_up_completed_at,
                 engagement_id,
                 current_user.id,
             ),
         )
         conn.commit()
         conn.close()
-        return redirect(next_url)
 
+        flash("Engagement updated.", "success")
+
+        # Return logic (POST)
+        # 1) If caller explicitly wants to go back to a specific contact tab
+        if return_to == "contact":
+            tab = (return_tab or "engagements").lstrip("#")  # allow "followups" or "#followups"
+            return redirect(url_for("edit_contact", contact_id=e["contact_id"]) + f"#{tab}")
+
+        # 2) If next_url was provided, honor it, and optionally enforce a tab hash
+        if next_url:
+            if return_tab:
+                tab = return_tab.lstrip("#")
+                if f"#{tab}" not in next_url:
+                    return redirect(next_url + f"#{tab}")
+            return redirect(next_url)
+
+        # 3) Safe fallback
+        return redirect(url_for("edit_contact", contact_id=e["contact_id"]) + "#engagements")
+
+    # GET: render edit form
     conn.close()
     return render_template(
         "edit_engagement.html",
         e=e,
-        next=next_url,
+        next_url=next_url,
+        return_to=return_to,
+        return_tab=return_tab,
         active_page="contacts",
     )
 
@@ -4513,30 +4689,44 @@ def seller_profile(contact_id):
         transaction_statuses=TRANSACTION_STATUSES,
     )
 
+from datetime import date
+
 @app.route("/followups")
 @login_required
 def followups():
-    today_str = date.today().isoformat()
+    today = date.today()
 
     conn = get_db()
     cur = conn.cursor()
+
     cur.execute(
         """
         SELECT
-            id,
-            name,
-            first_name,
-            last_name,
-            next_follow_up,
-            next_follow_up_time,
-            pipeline_stage,
-            priority,
-            target_area
-        FROM contacts
-        WHERE next_follow_up IS NOT NULL
-          AND next_follow_up <> ''
-        ORDER BY next_follow_up, name
-        """
+            e.id AS engagement_id,
+            e.contact_id,
+            e.engagement_type,
+            e.follow_up_due_at,
+            e.outcome,
+            e.notes,
+            e.summary_clean,
+
+            c.id AS contact_id,
+            c.name,
+            c.first_name,
+            c.last_name,
+            c.pipeline_stage,
+            c.priority,
+            c.target_area
+
+        FROM engagements e
+        JOIN contacts c ON c.id = e.contact_id
+        WHERE e.user_id = %s
+          AND e.requires_follow_up = TRUE
+          AND e.follow_up_completed = FALSE
+          AND e.follow_up_due_at IS NOT NULL
+        ORDER BY e.follow_up_due_at ASC, c.name ASC, e.id ASC
+        """,
+        (current_user.id,),
     )
     rows = cur.fetchall()
     conn.close()
@@ -4546,12 +4736,16 @@ def followups():
     upcoming = []
 
     for row in rows:
-        nf = row["next_follow_up"]
-        if not nf:
+        due = row.get("follow_up_due_at")
+        if not due:
             continue
-        if nf < today_str:
+
+        # Bucket by due date (date objects)
+        due_date = due.date()
+        
+        if due_date < today:
             overdue.append(row)
-        elif nf == today_str:
+        elif due_date == today:
             today_list.append(row)
         else:
             upcoming.append(row)
@@ -4561,7 +4755,7 @@ def followups():
         overdue=overdue,
         today_list=today_list,
         upcoming=upcoming,
-        today=today_str,
+        today=today.isoformat(),
         active_page="followups",
     )
 
@@ -4908,7 +5102,7 @@ def add_transaction_deadline(transaction_id):
 
     cur.execute(
         """
-        INSERT INTO transaction_deadlines (user_id, transaction_id, name, due_date, is_done, notes)
+          INSERT INTO transaction_deadlines (user_id, transaction_id, label, due_at, is_done, notes)
         VALUES (%s, %s, %s, %s, false, %s)
         """,
         (current_user.id, transaction_id, name, due_date, notes),
