@@ -3411,6 +3411,11 @@ def edit_contact(contact_id):
             accepted_price,
             closed_price,
             expected_close_date,
+            attorney_review_end_date,
+            inspection_deadline,
+            financing_contingency_date,
+            appraisal_deadline,
+            mortgage_commitment_date,
             updated_at
         FROM transactions
         WHERE contact_id = %s AND user_id = %s
@@ -3432,11 +3437,12 @@ def edit_contact(contact_id):
                     break
         if not selected_tx:
             selected_tx = transactions[0]  # default to first row
-
-    # Next milestones (top 2 upcoming deadlines for the selected transaction)
+    
+    # Next milestones (top 2 upcoming items for the selected transaction)
     next_deadlines = []
     
     if selected_tx:
+        # 1) Pull user-entered deadlines
         cur.execute(
             """
             SELECT
@@ -3448,12 +3454,32 @@ def edit_contact(contact_id):
               AND due_date IS NOT NULL
               AND is_done = FALSE
             ORDER BY due_date ASC
-            LIMIT 2
             """,
             (current_user.id, selected_tx["id"]),
         )
-        next_deadlines = cur.fetchall() or []
-
+        db_deadlines = cur.fetchall() or []
+    
+        # 2) Derive milestones from transaction fields (these are not in transaction_deadlines)
+        derived = []
+        field_map = [
+            ("Attorney review end", "attorney_review_end_date"),
+            ("Inspection deadline", "inspection_deadline"),
+            ("Financing contingency", "financing_contingency_date"),
+            ("Appraisal deadline", "appraisal_deadline"),
+            ("Mortgage commitment", "mortgage_commitment_date"),
+            ("Expected close", "expected_close_date"),
+        ]
+    
+        for label, field in field_map:
+            dt = selected_tx.get(field)
+            if dt:
+                derived.append({"name": label, "due_date": dt})
+    
+        # 3) Merge, sort by date, take top 2
+        merged = db_deadlines + derived
+        merged.sort(key=lambda x: x["due_date"] or date.max)
+    
+        next_deadlines = merged[:2]
 
         # IMPORTANT:
         # Do not auto-redirect to tx_id here.
