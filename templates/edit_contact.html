@@ -914,7 +914,7 @@
                     {% if next_deadlines %}
                       {% for d in next_deadlines[:2] %}
                         <div class="fw-semibold">
-                          {{ d['label'] }}: {{ d['due_at'] }}
+                          {{ d['name'] }}: {{ d['due_date'] }}
                         </div>
                       {% endfor %}
                     {% else %}

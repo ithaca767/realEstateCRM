@@ -9,7 +9,7 @@
   <h3 class="mb-1">
     {% if mode == "edit" %}Edit Transaction{% else %}New Transaction{% endif %}
   </h3>
-  
+
   {% if mode == "edit" and contact %}
     <div class="text-muted small mb-3">
       For:
@@ -22,314 +22,325 @@
   <div class="card card-soft mb-4">
     <div class="card-body bg-white">
 
+      {# ----------------------------
+         TRANSACTION FORM (ONLY)
+         ---------------------------- #}
       <form method="post">
         {% if next_url %}
           <input type="hidden" name="next" value="{{ next_url }}">
         {% endif %}
- 
-    <div class="row mb-3">
-      <div class="col-12">
-        <label class="form-label">Address</label>
-        <input
-          type="text"
-          class="form-control"
-          name="address"
-          value="{% if tx and tx.address %}{{ tx.address }}{% endif %}"
-          placeholder="123 Main St, Keyport, NJ 07735"
-        >
-      </div>
-    </div>
 
-    <div class="row mb-3">
-      <div class="col-md-4">
-        <label class="form-label">Status</label>
-        <select class="form-select" name="status" required>
-          {% for value, label in transaction_statuses %}
-            <option value="{{ value }}"
-              {% if tx and tx.status == value %}selected{% endif %}>
-              {{ label }}
-            </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Transaction Type</label>
-      
-        {% set selected_tx_type = (tx.transaction_type if tx else (default_tx_type or 'sell')) %}
-      
-        <select class="form-select" name="transaction_type">
-          <option value="buy" {% if selected_tx_type == "buy" %}selected{% endif %}>Buy</option>
-          <option value="sell" {% if selected_tx_type == "sell" %}selected{% endif %}>Sell</option>
-          <option value="rent" {% if selected_tx_type == "rent" %}selected{% endif %}>Rent</option>
-          <option value="lease" {% if selected_tx_type == "lease" %}selected{% endif %}>Lease</option>
-          <option value="unknown" {% if selected_tx_type == "unknown" %}selected{% endif %}>Unknown</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="row mb-3">
-      <div class="col-md-3">
-        <label class="form-label">List Price</label>
-        <input
-          type="number"
-          step="0.01"
-          class="form-control"
-          name="list_price"
-          value="{% if tx and tx.list_price is not none %}{{ tx.list_price }}{% endif %}"
-          placeholder="0.00"
-        >
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Offer Price</label>
-        <input
-          type="number"
-          step="0.01"
-          class="form-control"
-          name="offer_price"
-          value="{% if tx and tx.offer_price is not none %}{{ tx.offer_price }}{% endif %}"
-          placeholder="0.00"
-        >
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Expected Close Date</label>
-        <input
-          type="date"
-          class="form-control"
-          name="expected_close_date"
-          value="{% if tx and tx.expected_close_date %}{{ tx.expected_close_date }}{% endif %}"
-        >
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Actual Close Date</label>
-        <input
-          type="date"
-          class="form-control"
-          name="actual_close_date"
-          value="{% if tx and tx.actual_close_date %}{{ tx.actual_close_date }}{% endif %}"
-        >
-      </div>
-    </div>
-
-    <div class="row mb-3">
-      <div class="col-md-4">
-        <label class="form-label">Attorney Review End</label>
-        <input
-          type="date"
-          class="form-control"
-          name="attorney_review_end_date"
-          value="{% if tx and tx['attorney_review_end_date'] %}{{ tx['attorney_review_end_date'] }}{% endif %}"
-        >
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Inspection Deadline</label>
-        <input
-          type="date"
-          class="form-control"
-          name="inspection_deadline"
-          value="{% if tx and tx['inspection_deadline'] %}{{ tx['inspection_deadline'] }}{% endif %}"
-        >
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Financing Contingency</label>
-        <input
-          type="date"
-          class="form-control"
-          name="financing_contingency_date"
-          value="{% if tx and tx['financing_contingency_date'] %}{{ tx['financing_contingency_date'] }}{% endif %}"
-        >
-      </div>
-    </div>
-
-    <div class="row mb-3">
-      <div class="col-md-6">
-        <label class="form-label">Appraisal Deadline</label>
-        <input
-          type="date"
-          class="form-control"
-          name="appraisal_deadline"
-          value="{% if tx and tx['appraisal_deadline'] %}{{ tx['appraisal_deadline'] }}{% endif %}"
-        >
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Mortgage Commitment</label>
-        <input
-          type="date"
-          class="form-control"
-          name="mortgage_commitment_date"
-          value="{% if tx and tx['mortgage_commitment_date'] %}{{ tx['mortgage_commitment_date'] }}{% endif %}"
-        >
-      </div>
-    </div>
-    
-    {% if mode == "edit" and tx %}
-          <!-- Deadlines (Phase 3.1: read-only) -->
-      <div class="p-3 border-bottom bg-white">
-        <form method="post" action="{{ url_for('add_transaction_deadline', transaction_id=tx['id']) }}">
-          {% if next_url %}
-            <input type="hidden" name="next" value="{{ next_url }}">
-          {% endif %}
-      
-          <div class="row g-2 align-items-end">
-            <div class="col-md-4">
-              <label class="form-label mb-1">Name</label>
-              <input name="name" class="form-control form-control-sm" placeholder="Inspection, appraisal, etc." required>
-            </div>
-      
-            <div class="col-md-3">
-              <label class="form-label mb-1">Due date</label>
-              <input name="due_date" type="date" class="form-control form-control-sm">
-            </div>
-      
-            <div class="col-md-4">
-              <label class="form-label mb-1">Notes</label>
-              <input name="notes" class="form-control form-control-sm" placeholder="Optional">
-            </div>
-      
-            <div class="col-md-1 d-grid">
-              <button class="btn btn-sm btn-primary" type="submit">Add</button>
-            </div>
+        <div class="row mb-3">
+          <div class="col-12">
+            <label class="form-label">Address</label>
+            <input
+              type="text"
+              class="form-control"
+              name="address"
+              value="{% if tx and tx.address %}{{ tx.address }}{% endif %}"
+              placeholder="123 Main St, Keyport, NJ 07735"
+            >
           </div>
-        </form>
-      </div>
-      
-      <div class="card mt-4">
-        <div class="card-header fw-semibold">
-          Deadlines
         </div>
-        
-  
-        <div class="card-body p-0">
-          {% if deadlines and deadlines|length > 0 %}
-            <div class="table-responsive">
-              <table class="table mb-0">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Due Date</th>
-                    <th>Status</th>
-                    <th>Notes</th>
-                    <th class="text-end">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for d in deadlines %}
-                    <tr>
-                      <td class="fw-semibold">{{ d['name'] }}</td>
-                    
-                      <td>
-                        {% if d['due_date'] %}
-                          {{ d['due_date'] }}
-                        {% else %}
-                          <span class="text-muted">—</span>
-                        {% endif %}
-                      </td>
-                    
-                      <td>
-                        {% if d['is_done'] %}
-                          <span class="badge bg-success">Done</span>
-                        {% else %}
-                          <span class="badge bg-secondary">Pending</span>
-                        {% endif %}
-                      </td>
-                    
-                      <td class="text-muted">
-                        {% if d['notes'] %}
-                          {{ d['notes'] }}
-                        {% else %}
-                          <span class="text-muted">—</span>
-                        {% endif %}
-                      </td>
-                    
-                      <td class="text-end">
-                        <div class="d-inline-flex gap-1">
-                    
-                          <form method="post" action="{{ url_for('toggle_transaction_deadline', deadline_id=d['id']) }}">
-                            {% if next_url %}
-                              <input type="hidden" name="next" value="{{ next_url }}">
-                            {% endif %}
-                            <button type="submit" class="btn btn-sm btn-outline-primary">
-                              {% if d['is_done'] %}Mark Pending{% else %}Mark Done{% endif %}
-                            </button>
-                          </form>
-                    
-                          <button
-                            class="btn btn-sm btn-outline-secondary"
-                            type="button"
-                            data-bs-toggle="collapse"
-                            data-bs-target="#editDeadline{{ d['id'] }}"
-                          >
-                            Edit
-                          </button>
-                    
-                          <form method="post" action="{{ url_for('delete_transaction_deadline', deadline_id=d['id']) }}">
-                            {% if next_url %}
-                              <input type="hidden" name="next" value="{{ next_url }}">
-                            {% endif %}
-                            <button type="submit" class="btn btn-sm btn-outline-danger">
-                              Delete
-                            </button>
-                          </form>
-                    
-                        </div>
-                      </td>
-                    </tr>
-                    
-                    <tr class="collapse" id="editDeadline{{ d['id'] }}">
-                      <td colspan="5" class="bg-white">
-                        <form method="post" action="{{ url_for('edit_transaction_deadline', deadline_id=d['id']) }}" class="p-2">
-                          {% if next_url %}
-                            <input type="hidden" name="next" value="{{ next_url }}">
-                          {% endif %}
-                    
-                          <div class="row g-2 align-items-end">
-                            <div class="col-md-4">
-                              <label class="form-label mb-1">Name</label>
-                              <input name="name" class="form-control form-control-sm" value="{{ d['name'] }}" required>
-                            </div>
-                    
-                            <div class="col-md-3">
-                              <label class="form-label mb-1">Due date</label>
-                              <input name="due_date" type="date" class="form-control form-control-sm" value="{{ d['due_date'] }}">
-                            </div>
-                    
-                            <div class="col-md-4">
-                              <label class="form-label mb-1">Notes</label>
-                              <input name="notes" class="form-control form-control-sm" value="{{ d['notes'] or '' }}">
-                            </div>
-                    
-                            <div class="col-md-1 d-grid">
-                              <button class="btn btn-sm btn-success" type="submit">Save</button>
-                            </div>
-                          </div>
-                        </form>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          {% else %}
-            <div class="p-3 text-muted">No deadlines yet.</div>
+
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Status</label>
+            <select class="form-select" name="status" required>
+              {% for value, label in transaction_statuses %}
+                <option value="{{ value }}"
+                  {% if tx and tx.status == value %}selected{% endif %}>
+                  {{ label }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Transaction Type</label>
+
+            {% set selected_tx_type = (tx.transaction_type if tx else (default_tx_type or 'sell')) %}
+
+            <select class="form-select" name="transaction_type">
+              <option value="buy" {% if selected_tx_type == "buy" %}selected{% endif %}>Buy</option>
+              <option value="sell" {% if selected_tx_type == "sell" %}selected{% endif %}>Sell</option>
+              <option value="rent" {% if selected_tx_type == "rent" %}selected{% endif %}>Rent</option>
+              <option value="lease" {% if selected_tx_type == "lease" %}selected{% endif %}>Lease</option>
+              <option value="unknown" {% if selected_tx_type == "unknown" %}selected{% endif %}>Unknown</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <label class="form-label">List Price</label>
+            <input
+              type="number"
+              step="0.01"
+              class="form-control"
+              name="list_price"
+              value="{% if tx and tx.list_price is not none %}{{ tx.list_price }}{% endif %}"
+              placeholder="0.00"
+            >
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Offer Price</label>
+            <input
+              type="number"
+              step="0.01"
+              class="form-control"
+              name="offer_price"
+              value="{% if tx and tx.offer_price is not none %}{{ tx.offer_price }}{% endif %}"
+              placeholder="0.00"
+            >
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Expected Close Date</label>
+            <input
+              type="date"
+              class="form-control"
+              name="expected_close_date"
+              value="{% if tx and tx.expected_close_date %}{{ tx.expected_close_date }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Actual Close Date</label>
+            <input
+              type="date"
+              class="form-control"
+              name="actual_close_date"
+              value="{% if tx and tx.actual_close_date %}{{ tx.actual_close_date }}{% endif %}"
+            >
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Attorney Review End</label>
+            <input
+              type="date"
+              class="form-control"
+              name="attorney_review_end_date"
+              value="{% if tx and tx['attorney_review_end_date'] %}{{ tx['attorney_review_end_date'] }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Inspection Deadline</label>
+            <input
+              type="date"
+              class="form-control"
+              name="inspection_deadline"
+              value="{% if tx and tx['inspection_deadline'] %}{{ tx['inspection_deadline'] }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Financing Contingency</label>
+            <input
+              type="date"
+              class="form-control"
+              name="financing_contingency_date"
+              value="{% if tx and tx['financing_contingency_date'] %}{{ tx['financing_contingency_date'] }}{% endif %}"
+            >
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Appraisal Deadline</label>
+            <input
+              type="date"
+              class="form-control"
+              name="appraisal_deadline"
+              value="{% if tx and tx['appraisal_deadline'] %}{{ tx['appraisal_deadline'] }}{% endif %}"
+            >
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Mortgage Commitment</label>
+            <input
+              type="date"
+              class="form-control"
+              name="mortgage_commitment_date"
+              value="{% if tx and tx['mortgage_commitment_date'] %}{{ tx['mortgage_commitment_date'] }}{% endif %}"
+            >
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-primary">
+            {% if mode == "edit" %}Save Changes{% else %}Create Transaction{% endif %}
+          </button>
+
+          {% if next_url %}
+            <a href="{{ next_url }}" class="btn btn-secondary">Cancel</a>
           {% endif %}
         </div>
-      </div>
+      </form>
+
+      {# ----------------------------
+         DEADLINES (SEPARATE FORMS)
+         ONLY SHOW IN EDIT MODE
+         ---------------------------- #}
+      {% if mode == "edit" and tx %}
+
+        <div class="p-3 border-top mt-4 bg-white">
+          <form method="post" action="{{ url_for('add_transaction_deadline', transaction_id=tx['id']) }}">
+            {% if next_url %}
+              <input type="hidden" name="next" value="{{ next_url }}">
+            {% endif %}
+
+            <div class="row g-2 align-items-end">
+              <div class="col-md-4">
+                <label class="form-label mb-1">Name</label>
+                <input name="name" class="form-control form-control-sm" placeholder="Inspection, appraisal, etc." required>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label mb-1">Due date</label>
+                <input name="due_date" type="date" class="form-control form-control-sm">
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label mb-1">Notes</label>
+                <input name="notes" class="form-control form-control-sm" placeholder="Optional">
+              </div>
+
+              <div class="col-md-1 d-grid">
+                <button class="btn btn-sm btn-primary" type="submit">Add</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div class="card mt-4">
+          <div class="card-header fw-semibold">
+            Deadlines
+          </div>
+
+          <div class="card-body p-0">
+            {% if deadlines and deadlines|length > 0 %}
+              <div class="table-responsive">
+                <table class="table mb-0">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Due Date</th>
+                      <th>Status</th>
+                      <th>Notes</th>
+                      <th class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for d in deadlines %}
+                      <tr>
+                        <td class="fw-semibold">{{ d['name'] }}</td>
+
+                        <td>
+                          {% if d['due_date'] %}
+                            {{ d['due_date'] }}
+                          {% else %}
+                            <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+
+                        <td>
+                          {% if d['is_done'] %}
+                            <span class="badge bg-success">Done</span>
+                          {% else %}
+                            <span class="badge bg-secondary">Pending</span>
+                          {% endif %}
+                        </td>
+
+                        <td class="text-muted">
+                          {% if d['notes'] %}
+                            {{ d['notes'] }}
+                          {% else %}
+                            <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+
+                        <td class="text-end">
+                          <div class="d-inline-flex gap-1">
+
+                            <form method="post" action="{{ url_for('toggle_transaction_deadline', deadline_id=d['id']) }}">
+                              {% if next_url %}
+                                <input type="hidden" name="next" value="{{ next_url }}">
+                              {% endif %}
+                              <button type="submit" class="btn btn-sm btn-outline-primary">
+                                {% if d['is_done'] %}Mark Pending{% else %}Mark Done{% endif %}
+                              </button>
+                            </form>
+
+                            <button
+                              class="btn btn-sm btn-outline-secondary"
+                              type="button"
+                              data-bs-toggle="collapse"
+                              data-bs-target="#editDeadline{{ d['id'] }}"
+                            >
+                              Edit
+                            </button>
+
+                            <form method="post" action="{{ url_for('delete_transaction_deadline', deadline_id=d['id']) }}">
+                              {% if next_url %}
+                                <input type="hidden" name="next" value="{{ next_url }}">
+                              {% endif %}
+                              <button type="submit" class="btn btn-sm btn-outline-danger">
+                                Delete
+                              </button>
+                            </form>
+
+                          </div>
+                        </td>
+                      </tr>
+
+                      <tr class="collapse" id="editDeadline{{ d['id'] }}">
+                        <td colspan="5" class="bg-white">
+                          <form method="post" action="{{ url_for('edit_transaction_deadline', deadline_id=d['id']) }}" class="p-2">
+                            {% if next_url %}
+                              <input type="hidden" name="next" value="{{ next_url }}">
+                            {% endif %}
+
+                            <div class="row g-2 align-items-end">
+                              <div class="col-md-4">
+                                <label class="form-label mb-1">Name</label>
+                                <input name="name" class="form-control form-control-sm" value="{{ d['name'] }}" required>
+                              </div>
+
+                              <div class="col-md-3">
+                                <label class="form-label mb-1">Due date</label>
+                                <input name="due_date" type="date" class="form-control form-control-sm" value="{{ d['due_date'] }}">
+                              </div>
+
+                              <div class="col-md-4">
+                                <label class="form-label mb-1">Notes</label>
+                                <input name="notes" class="form-control form-control-sm" value="{{ d['notes'] or '' }}">
+                              </div>
+
+                              <div class="col-md-1 d-grid">
+                                <button class="btn btn-sm btn-success" type="submit">Save</button>
+                              </div>
+                            </div>
+                          </form>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="p-3 text-muted">No deadlines yet.</div>
+            {% endif %}
+          </div>
+        </div>
+
       {% endif %}
 
-    <div class="d-flex gap-2 mt-3">
-      <button type="submit" class="btn btn-primary">
-        {% if mode == "edit" %}Save Changes{% else %}Create Transaction{% endif %}
-      </button>
-
-      {% if next_url %}
-        <a href="{{ next_url }}" class="btn btn-secondary">Cancel</a>
-      {% endif %}
     </div>
-  </form>
+  </div>
 </div>
 {% endblock %}

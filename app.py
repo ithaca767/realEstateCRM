@@ -3440,13 +3440,14 @@ def edit_contact(contact_id):
         cur.execute(
             """
             SELECT
-                label,
-                due_at
+                name,
+                due_date
             FROM transaction_deadlines
             WHERE user_id = %s
               AND transaction_id = %s
-              AND due_at IS NOT NULL
-            ORDER BY due_at ASC
+              AND due_date IS NOT NULL
+              AND is_done = FALSE
+            ORDER BY due_date ASC
             LIMIT 2
             """,
             (current_user.id, selected_tx["id"]),
@@ -5102,7 +5103,7 @@ def add_transaction_deadline(transaction_id):
 
     cur.execute(
         """
-          INSERT INTO transaction_deadlines (user_id, transaction_id, label, due_at, is_done, notes)
+        INSERT INTO transaction_deadlines (user_id, transaction_id, name, due_date, is_done, notes)
         VALUES (%s, %s, %s, %s, false, %s)
         """,
         (current_user.id, transaction_id, name, due_date, notes),

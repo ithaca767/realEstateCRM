@@ -7,3 +7,6 @@ venv/
 ~$*.docx
 localdbstart
 
+
+# Local only
+transaction_deadlines_backup.csv
