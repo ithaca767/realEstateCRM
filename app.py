@@ -4291,15 +4291,67 @@ def tasks_new():
             conn.close()
 
     # GET
+    modal = (request.args.get("modal") == "1") or (request.headers.get("X-Requested-With") == "XMLHttpRequest")
+
+    transactions = []
+    engagements = []
+
+    if prefill_contact_id:
+        # Recent transactions for this contact (limit 5)
+        cur.execute(
+            """
+            SELECT
+              id,
+              COALESCE(
+                NULLIF(TRIM(address), ''),
+                NULLIF(TRIM(address_line), ''),
+                ''
+              ) AS address,
+              transaction_type,
+              status,
+              expected_close_date
+            FROM transactions
+            WHERE user_id = %s AND contact_id = %s
+            ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+            LIMIT 5
+            """,
+            (current_user.id, prefill_contact_id),
+        )
+        transactions = cur.fetchall()
+
+        # Recent engagements for this contact (limit 15)
+        cur.execute(
+            """
+            SELECT
+              id,
+              engagement_type,
+              occurred_at,
+              COALESCE(
+                NULLIF(TRIM(summary_clean), ''),
+                NULLIF(TRIM(notes), ''),
+                ''
+              ) AS summary_display
+            FROM engagements
+            WHERE user_id = %s AND contact_id = %s
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT 15
+            """,
+            (current_user.id, prefill_contact_id),
+        )
+        engagements = cur.fetchall()
+
     conn.close()
+
     return render_template(
-        "tasks/form.html",
+        "tasks/form_modal.html" if modal else "tasks/form.html",
         mode="new",
         task=None,
         statuses=TASK_STATUSES,
         next_url=next_url,
         prefill_contact_id=prefill_contact_id,
         prefill_contact_name=prefill_contact_name,
+        transactions=transactions,
+        engagements=engagements,
     )
 
 @app.route("/tasks/modal/new")

@@ -50,12 +50,14 @@
         </ul>
   
         <div class="ms-auto">
-          <a
-            class="btn btn-sm btn-outline-primary"
-            href="{{ url_for('tasks_modal_new', contact_id=c['id'], next=request.path ~ '#engagements') }}"
-          >
-            + Add Task
-          </a>
+          <button type="button"
+                  class="btn btn-sm btn-primary"
+                  data-bs-toggle="modal"
+                  data-bs-target="#taskModal"
+                  data-contact-id="{{ c['id'] }}"
+                  data-next="{{ url_for('edit_contact', contact_id=c['id']) }}#engagements">
+            + Task
+          </button>
         </div>
       </div>
   
@@ -949,10 +951,13 @@
   </div>       <!-- /tab-content -->
 </div>         <!-- /outer card-body -->
 </div>         <!-- /outer card -->
+
+{% include "tasks/form_modal.html" %}
 {% endblock %}
 
     
 {% block extra_scripts %}
+    <script src="{{ url_for('static', filename='js/task_form.js') }}"></script>
     <script>
       (function () {
         const searchInput = document.getElementById("assocSearch");
@@ -1077,6 +1082,7 @@
         sync();
       });
     </script>
+    
 {% endblock %}
   
     

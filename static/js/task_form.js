@@ -1,3 +1,10 @@
+// static/js/task_form.js
+//
+// Notes:
+// - initTaskFormEnhancements() binds behaviors to a rendered task form instance.
+// - The task modal loader is bound once at DOMContentLoaded and fetches /tasks/new?modal=1
+//   then calls initTaskFormEnhancements() after injecting HTML.
+
 window.initTaskFormEnhancements = function initTaskFormEnhancements() {
   // Bind once per rendered form instance
   const contactHiddenId = document.getElementById("taskContactId");
@@ -50,7 +57,12 @@ window.initTaskFormEnhancements = function initTaskFormEnhancements() {
     if (engHelp) engHelp.textContent = "Loading...";
 
     try {
-      const resp = await fetch(`/tasks/options?contact_id=${encodeURIComponent(cid)}`, { credentials: "include" });
+      const resp = await fetch(`/tasks/options?contact_id=${encodeURIComponent(cid)}`, {
+        credentials: "include",
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
       const data = await resp.json();
 
       (data.transactions || []).forEach((tx) => {
@@ -115,7 +127,16 @@ window.initTaskFormEnhancements = function initTaskFormEnhancements() {
       return;
     }
 
-    const resp = await fetch(`/contacts/search?q=${encodeURIComponent(term)}`, { credentials: "include" });
+    const resp = await fetch(`/contacts/search?q=${encodeURIComponent(term)}`, {
+      credentials: "include",
+    });
+
+    if (!resp.ok) {
+      contactResultsEl.style.display = "";
+      contactResultsEl.innerHTML = `<div class="list-group-item text-danger">Search failed.</div>`;
+      return;
+    }
+
     const data = await resp.json();
 
     contactResultsEl.innerHTML = "";
@@ -156,17 +177,78 @@ window.initTaskFormEnhancements = function initTaskFormEnhancements() {
   // If prefilled, show selected badge and populate dropdowns
   if (contactHiddenId.value) {
     const label = (contactInput.value || "").trim();
-    contactShowSelected(label ? label : ("Contact #" + contactHiddenId.value));
+    contactShowSelected(label ? label : "Contact #" + contactHiddenId.value);
   }
 
   refreshTaskContactScopedDropdowns();
 
   // Close contact dropdown if clicking elsewhere
-  document.addEventListener("click", (evt) => {
-    const clickedInside = contactInput.contains(evt.target) || contactResultsEl.contains(evt.target) || (contactSelectedWrap && contactSelectedWrap.contains(evt.target));
-    if (!clickedInside) contactResultsEl.style.display = "none";
-  });
+  if (!window.__taskFormDocClickBound) {
+    window.__taskFormDocClickBound = true;
 
-  // NOTE: Remove or ignore the old initEntitySelector() calls for transaction/engagement.
-  // If you keep Professional as a search field, we will wire that separately after you confirm the HTML IDs still exist.
+    document.addEventListener("click", (evt) => {
+      // Since this handler is global, re-resolve elements each click (modal content can change)
+      const input = document.getElementById("taskContactSearch");
+      const results = document.getElementById("taskContactResults");
+      const selectedWrap = document.getElementById("taskContactSelected");
+
+      if (!input || !results) return;
+
+      const clickedInside =
+        input.contains(evt.target) ||
+        results.contains(evt.target) ||
+        (selectedWrap && selectedWrap.contains(evt.target));
+
+      if (!clickedInside) results.style.display = "none";
+    });
+  }
+
+  // Professional selector wiring is intentionally deferred.
 };
+
+// Bind the modal loader once, then init enhancements after HTML is injected.
+document.addEventListener("DOMContentLoaded", () => {
+  // If we are on a full page form (not modal), initialize immediately
+  if (document.getElementById("taskContactId") && window.initTaskFormEnhancements) {
+    window.initTaskFormEnhancements();
+  }
+
+  const modalEl = document.getElementById("taskModal");
+  if (!modalEl) return;
+
+  modalEl.addEventListener("show.bs.modal", async (event) => {
+    const trigger = event.relatedTarget;
+    const contactId = trigger?.getAttribute("data-contact-id") || "";
+    const nextUrl = trigger?.getAttribute("data-next") || "";
+
+    const body = modalEl.querySelector(".modal-body");
+    if (!body) return;
+
+    body.innerHTML = "Loading...";
+
+    const url =
+      "/tasks/new?modal=1" +
+      "&contact_id=" +
+      encodeURIComponent(contactId) +
+      "&next=" +
+      encodeURIComponent(nextUrl);
+
+    try {
+      const resp = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+      body.innerHTML = await resp.text();
+
+      // After injecting the form HTML, bind behaviors to that DOM.
+      if (window.initTaskFormEnhancements) {
+        window.initTaskFormEnhancements();
+      }
+    } catch (err) {
+      console.error(err);
+      body.innerHTML =
+        '<div class="alert alert-danger mb-0">' +
+        "Could not load the task form. Please refresh and try again." +
+        "</div>";
+    }
+  });
+});

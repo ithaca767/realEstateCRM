@@ -183,9 +183,20 @@
         </div>
 
         <div class="col-12 d-flex gap-2">
-          <button type="submit" class="btn btn-sm btn-primary">{% if mode == "edit" %}Save Changes{% else %}Create Task{% endif %}</button>
+          <button type="submit" class="btn btn-sm btn-primary">
+            {% if mode == "edit" %}Save Changes{% else %}Create Task{% endif %}
+          </button>
+        
           {% if mode == "edit" and task %}
-            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tasks_view', task_id=task.id) }}">Cancel</a>
+            <a class="btn btn-sm btn-outline-secondary"
+               href="{{ url_for('tasks_view', task_id=task.id) }}">
+              Cancel
+            </a>
+          {% else %}
+            <a class="btn btn-sm btn-outline-secondary"
+               href="{{ next or url_for('tasks_list') }}">
+              Cancel
+            </a>
           {% endif %}
         </div>
       </div>
