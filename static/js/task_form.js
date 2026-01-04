@@ -249,6 +249,26 @@ document.addEventListener("DOMContentLoaded", () => {
         '<div class="alert alert-danger mb-0">' +
         "Could not load the task form. Please refresh and try again." +
         "</div>";
-    }
+    }    
   });
 });
+(function () {
+  const modalEl = document.getElementById("taskModal");
+  if (!modalEl) return;
+
+  if (modalEl.dataset.focusFixBound === "1") return;
+  modalEl.dataset.focusFixBound = "1";
+
+  let lastTrigger = null;
+
+  modalEl.addEventListener("show.bs.modal", (event) => {
+    lastTrigger = event.relatedTarget || null;
+  });
+
+  modalEl.addEventListener("hidden.bs.modal", () => {
+    if (lastTrigger && typeof lastTrigger.focus === "function") {
+      lastTrigger.focus();
+    }
+    lastTrigger = null;
+  });
+})();
