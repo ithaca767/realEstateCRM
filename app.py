@@ -6,7 +6,7 @@ import io
 
 from version import APP_VERSION
 from functools import wraps
-from datetime import date, datetime, timedelta, time
+from datetime import date, datetime, timedelta, time, timezone
 from math import ceil
 
 from engagements import (
@@ -40,6 +40,18 @@ from flask_login import (
     logout_user,
     login_required,
     current_user,
+)
+
+from tasks import (
+    TASK_STATUSES,
+    list_tasks_for_user,
+    get_task,
+    create_task,
+    update_task,
+    complete_task,
+    snooze_task,
+    reopen_task,
+    cancel_task,
 )
 
 from urllib.parse import urlparse, urljoin
@@ -2838,6 +2850,49 @@ def dashboard():
     cur.execute(active_sql, tuple(active_params))
     active_rows = cur.fetchall()
 
+    cur.execute(
+        """
+        SELECT
+          e.id AS engagement_id,
+          e.contact_id,
+          e.engagement_type,
+          e.occurred_at,
+          e.follow_up_due_at,
+          COALESCE(NULLIF(TRIM(c.name), ''), NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), '(Unnamed)') AS contact_name
+        FROM engagements e
+        JOIN contacts c ON c.id = e.contact_id
+        WHERE e.user_id = %s
+          AND e.follow_up_due_at IS NOT NULL
+          AND e.follow_up_due_at < NOW()
+        ORDER BY e.follow_up_due_at ASC
+        LIMIT 50
+        """,
+        (current_user.id,),
+    )
+    overdue_followups = cur.fetchall() or []
+    
+    cur.execute(
+        """
+        SELECT
+          e.id AS engagement_id,
+          e.contact_id,
+          e.engagement_type,
+          e.occurred_at,
+          e.follow_up_due_at,
+          COALESCE(NULLIF(TRIM(c.name), ''), NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), '(Unnamed)') AS contact_name
+        FROM engagements e
+        JOIN contacts c ON c.id = e.contact_id
+        WHERE e.user_id = %s
+          AND e.follow_up_due_at IS NOT NULL
+          AND e.follow_up_due_at >= NOW()
+          AND e.follow_up_due_at < (NOW() + INTERVAL '14 days')
+        ORDER BY e.follow_up_due_at ASC
+        LIMIT 50
+        """,
+        (current_user.id,),
+    )
+    upcoming_followups = cur.fetchall() or []
+
     # Active reasons badges
     now_dt = datetime.now()
     active_contacts = []
@@ -2967,6 +3022,9 @@ def dashboard():
 
     conn.close()
 
+    now = datetime.now(timezone.utc)
+    cutoff = now + timedelta(days=UPCOMING_DAYS)
+    
     followups_overdue = []
     followups_upcoming = []
     
@@ -2975,12 +3033,14 @@ def dashboard():
         if not due:
             continue
     
-        due_date = due.date()
-        if due_date < today:
+        # Safety: if due is naive for any reason, assume UTC to avoid comparison errors
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=timezone.utc)
+    
+        if due < now:
             followups_overdue.append(row)
-        else:
-            if due_date <= (today + timedelta(days=UPCOMING_DAYS)):
-                followups_upcoming.append(row)
+        elif due <= cutoff:
+            followups_upcoming.append(row)
 
     return render_template(
         "dashboard.html",
@@ -3189,22 +3249,27 @@ def add_contact():
 
     conn = get_db()
     cur = conn.cursor()
+
     cur.execute(
         """
         INSERT INTO contacts (
+            user_id,
             name, email, phone, lead_type, pipeline_stage, price_min, price_max,
             target_area, source, priority, last_contacted, next_follow_up, next_follow_up_time, notes,
             first_name, last_name,
             current_address, current_city, current_state, current_zip,
             subject_address, subject_city, subject_state, subject_zip
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+        VALUES (%s,
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s,
                 %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s)
         RETURNING id
         """,
         (
+            current_user.id,
             data["name"],
             data["email"],
             data["phone"],
@@ -3237,14 +3302,19 @@ def add_contact():
 
     conn.commit()
     conn.close()
-    return redirect(url_for("edit_contact", contact_id=new_id))
 
+    flash("Contact added.", "success")
+    return redirect(url_for("edit_contact", contact_id=new_id))
+  
 @app.route("/edit/<int:contact_id>", methods=["GET", "POST"])
 @login_required
 def edit_contact(contact_id):
     conn = get_db()
     cur = conn.cursor()
 
+    # -------------------------
+    # POST: update contact
+    # -------------------------
     if request.method == "POST":
         first_name = (request.form.get("first_name") or "").strip()
         last_name = (request.form.get("last_name") or "").strip()
@@ -3293,7 +3363,7 @@ def edit_contact(contact_id):
                 first_name = %s, last_name = %s,
                 current_address = %s, current_city = %s, current_state = %s, current_zip = %s,
                 subject_address = %s, subject_city = %s, subject_state = %s, subject_zip = %s
-            WHERE id = %s
+            WHERE id = %s AND user_id = %s
             """,
             (
                 data["name"],
@@ -3321,14 +3391,18 @@ def edit_contact(contact_id):
                 data["subject_state"],
                 data["subject_zip"],
                 contact_id,
+                current_user.id,
             ),
         )
+
         conn.commit()
         conn.close()
         return redirect(url_for("edit_contact", contact_id=contact_id, saved=1))
 
-    # GET: load contact and its interactions
-    cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
+    # -------------------------
+    # GET: load contact page
+    # -------------------------
+    cur.execute("SELECT * FROM contacts WHERE id = %s AND user_id = %s", (contact_id, current_user.id))
     contact = cur.fetchone()
 
     if not contact:
@@ -3336,20 +3410,15 @@ def edit_contact(contact_id):
         return "Contact not found", 404
 
     # Flags to indicate if this contact has buyer/seller profiles
-    cur.execute(
-        "SELECT id FROM buyer_profiles WHERE contact_id = %s LIMIT 1",
-        (contact_id,),
-    )
+    cur.execute("SELECT id FROM buyer_profiles WHERE contact_id = %s LIMIT 1", (contact_id,))
     has_buyer_profile = cur.fetchone() is not None
 
-    cur.execute(
-        "SELECT id FROM seller_profiles WHERE contact_id = %s LIMIT 1",
-        (contact_id,),
-    )
+    cur.execute("SELECT id FROM seller_profiles WHERE contact_id = %s LIMIT 1", (contact_id,))
     has_seller_profile = cur.fetchone() is not None
 
     engagements = list_engagements_for_contact(conn, current_user.id, contact_id, limit=50)
 
+    # Followups for this contact (from engagements)
     cur.execute(
         """
         SELECT
@@ -3398,7 +3467,8 @@ def edit_contact(contact_id):
             next_time_hour = None
             next_time_minute = None
             next_time_ampm = None
-    
+
+    # Transactions (top 5)
     cur.execute(
         """
         SELECT
@@ -3425,9 +3495,8 @@ def edit_contact(contact_id):
         (contact_id, current_user.id),
     )
     transactions = cur.fetchall()
-    
+
     tx_id = request.args.get("tx_id", type=int)
-    
     selected_tx = None
     if transactions:
         if tx_id:
@@ -3436,18 +3505,14 @@ def edit_contact(contact_id):
                     selected_tx = t
                     break
         if not selected_tx:
-            selected_tx = transactions[0]  # default to first row
-    
-    # Next milestones (top 2 upcoming items for the selected transaction)
+            selected_tx = transactions[0]
+
+    # Next milestones (top 2)
     next_deadlines = []
-    
     if selected_tx:
-        # 1) Pull user-entered deadlines
         cur.execute(
             """
-            SELECT
-                name,
-                due_date
+            SELECT name, due_date
             FROM transaction_deadlines
             WHERE user_id = %s
               AND transaction_id = %s
@@ -3458,8 +3523,7 @@ def edit_contact(contact_id):
             (current_user.id, selected_tx["id"]),
         )
         db_deadlines = cur.fetchall() or []
-    
-        # 2) Derive milestones from transaction fields (these are not in transaction_deadlines)
+
         derived = []
         field_map = [
             ("Attorney review end", "attorney_review_end_date"),
@@ -3469,27 +3533,16 @@ def edit_contact(contact_id):
             ("Mortgage commitment", "mortgage_commitment_date"),
             ("Expected close", "expected_close_date"),
         ]
-    
         for label, field in field_map:
             dt = selected_tx.get(field)
             if dt:
                 derived.append({"name": label, "due_date": dt})
-    
-        # 3) Merge, sort by date, take top 2
+
         merged = db_deadlines + derived
         merged.sort(key=lambda x: x["due_date"] or date.max)
-    
         next_deadlines = merged[:2]
 
-        # IMPORTANT:
-        # Do not auto-redirect to tx_id here.
-        # Contact pages must default to Engagements unless the user explicitly selects a transaction.
-        # Do not force tx_id into the URL.
-        # selected_tx is still used for split-view rendering default.
-        pass
-
-    
-    # NEW: split interactions into open and completed
+    # Interactions split
     cur.execute(
         """
         SELECT *
@@ -3517,13 +3570,17 @@ def edit_contact(contact_id):
         (current_user.id, contact_id),
     )
     completed_interactions = cur.fetchall()
-    #Load Special Dates
-    cur.execute("""
+
+    # Special dates
+    cur.execute(
+        """
         SELECT id, label, special_date, is_recurring, notes
         FROM contact_special_dates
         WHERE contact_id = %s
         ORDER BY special_date ASC, label ASC
-        """, (contact_id,))
+        """,
+        (contact_id,),
+    )
     special_dates = cur.fetchall()
 
     associations = get_contact_associations(conn, current_user.id, contact_id)
@@ -3535,7 +3592,7 @@ def edit_contact(contact_id):
         c=contact,
         associations=associations,
         engagements=engagements,
-        followups_for_contact=followups_for_contact,        
+        followups_for_contact=followups_for_contact,
         special_dates=special_dates,
         open_interactions=open_interactions,
         completed_interactions=completed_interactions,
@@ -3553,36 +3610,48 @@ def edit_contact(contact_id):
         selected_tx=selected_tx,
         transactions=transactions,
         transaction_statuses=TRANSACTION_STATUSES,
-        next_deadlines=next_deadlines,        
+        next_deadlines=next_deadlines,
     )
+
 
 @app.route("/contacts/search")
 @login_required
 def contacts_search():
     q = (request.args.get("q") or "").strip()
-    conn = get_db()
-    cur = conn.cursor()
-
-    if not q:
-        conn.close()
+    if len(q) < 2:
         return jsonify([])
 
-    like = f"%{q}%"
-    cur.execute(
-        """
-        SELECT id, name, email, phone
-        FROM contacts
-        WHERE user_id = %s
-          AND (name ILIKE %s OR email ILIKE %s OR phone ILIKE %s)
-        ORDER BY name ASC
-        LIMIT 10
-        """,
-        (current_user.id, like, like, like),
-    )
-    rows = cur.fetchall()
-    conn.close()
-    return jsonify(rows)
-
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        like = f"%{q}%"
+        cur.execute(
+            """
+            SELECT
+              id,
+              COALESCE(
+                NULLIF(TRIM(name), ''),
+                NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                '(Unnamed)'
+              ) AS name,
+              email,
+              phone
+            FROM contacts
+            WHERE user_id = %s
+              AND (
+                name ILIKE %s OR
+                CONCAT_WS(' ', first_name, last_name) ILIKE %s OR
+                email ILIKE %s OR
+                phone ILIKE %s
+              )
+            ORDER BY name ASC
+            LIMIT 10
+            """,
+            (current_user.id, like, like, like, like),
+        )
+        return jsonify(cur.fetchall() or [])
+    finally:
+        conn.close()
 
 @app.route("/contacts/<int:contact_id>/associations/add", methods=["POST"])
 @login_required
@@ -3689,7 +3758,151 @@ def delete_contact_association(contact_id, assoc_id):
     conn.close()
     return redirect(next_url)
 
-from datetime import datetime
+@app.route("/engagements/search")
+@login_required
+def engagements_search():
+    q = (request.args.get("q") or "").strip()
+    contact_id_raw = (request.args.get("contact_id") or "").strip()
+
+    # Contact required for this UX
+    if not contact_id_raw:
+        return jsonify([])
+
+    try:
+        contact_id = int(contact_id_raw)
+    except ValueError:
+        return jsonify([])
+
+    # Match the contact/transaction search behavior
+    if len(q) < 2:
+        return jsonify([])
+
+    like = f"%{q}%"
+
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # NOTE:
+        # This assumes common columns: engagements.id, engagements.user_id, engagements.contact_id,
+        # plus occurred_at, engagement_type, summary/notes.
+        #
+        # If your column names differ, tell me what they are and I’ll adjust in one pass.
+        cur.execute(
+            """
+            SELECT
+                id,
+                occurred_at,
+                engagement_type,
+                summary_clean,
+                notes
+            FROM engagements
+            WHERE user_id = %s
+              AND contact_id = %s
+              AND (
+                engagement_type ILIKE %s
+                OR COALESCE(summary_clean, '') ILIKE %s
+                OR COALESCE(notes, '') ILIKE %s
+              )
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT 10
+            """,
+            (current_user.id, contact_id, like, like, like),
+        )
+
+        rows = cur.fetchall() or []
+        out = []
+        for r in rows:
+            occurred = r.get("occurred_at")
+        
+            summary = (r.get("summary_clean") or "").strip()
+            if not summary:
+                summary = (r.get("notes") or "").strip()
+        
+            out.append(
+                {
+                    "id": r["id"],
+                    "occurred_at": occurred.date().isoformat() if occurred else "",
+                    "type_label": (r.get("engagement_type") or "").replace("_", " ").title(),
+                    "summary": summary,
+                }
+            )
+
+        return jsonify(out)
+
+    finally:
+        conn.close()
+
+@app.route("/transactions/search")
+@login_required
+def transactions_search():
+    q = (request.args.get("q") or "").strip()
+    contact_id_raw = (request.args.get("contact_id") or "").strip()
+
+    # For this UX, contact is required
+    if not contact_id_raw:
+        return jsonify([])
+
+    try:
+        contact_id = int(contact_id_raw)
+    except ValueError:
+        return jsonify([])
+
+    # Match the Contact search behavior
+    if len(q) < 2:
+        return jsonify([])
+
+    status_labels = dict(TRANSACTION_STATUSES)
+    like = f"%{q}%"
+
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute(
+            """
+            SELECT
+                id,
+                status,
+                transaction_type,
+                address,
+                expected_close_date,
+                updated_at
+            FROM transactions
+            WHERE contact_id = %s
+              AND user_id = %s
+              AND (
+                address ILIKE %s
+                OR status ILIKE %s
+                OR transaction_type ILIKE %s
+              )
+            ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+            LIMIT 10
+            """,
+            (contact_id, current_user.id, like, like, like),
+        )
+
+        rows = cur.fetchall() or []
+        out = []
+        for r in rows:
+            out.append(
+                {
+                    "id": r["id"],
+                    "address": r.get("address") or "",
+                    "status_label": status_labels.get(r.get("status"), (r.get("status") or "")),
+                    "transaction_type": r.get("transaction_type") or "",
+                    "expected_close_date": (
+                        r["expected_close_date"].isoformat()
+                        if r.get("expected_close_date")
+                        else ""
+                    ),
+                }
+            )
+
+        return jsonify(out)
+
+    finally:
+        conn.close()
 
 @app.route("/contacts/<int:contact_id>/engagements/add", methods=["POST"])
 @login_required
@@ -3725,33 +3938,37 @@ def add_engagement(contact_id):
     else:
         occurred_at = datetime.now()
 
-    # Follow-up parsing
+    # Follow-up parsing (from split fields)
     requires_follow_up = (request.form.get("requires_follow_up") == "on")
 
     follow_up_due_at = None
     if requires_follow_up:
         fu_date = (request.form.get("follow_up_due_date") or "").strip()
         fu_hour = (request.form.get("follow_up_due_hour") or "").strip()
-        fu_minute = (request.form.get("follow_up_due_minute") or "").strip()
-        fu_ampm = (request.form.get("follow_up_due_ampm") or "").strip()
+        fu_min = (request.form.get("follow_up_due_minute") or "").strip()
+        fu_ampm = (request.form.get("follow_up_due_ampm") or "").strip().upper()
 
         if fu_date:
-            fu_dt = datetime.strptime(fu_date, "%Y-%m-%d")
-            if fu_hour and fu_minute and fu_ampm:
+            if fu_hour and fu_min and fu_ampm:
                 h = int(fu_hour)
-                m = int(fu_minute)
+                m = int(fu_min)
 
-                if fu_ampm.upper() == "PM" and h != 12:
+                if fu_ampm == "PM" and h != 12:
                     h += 12
-                if fu_ampm.upper() == "AM" and h == 12:
+                if fu_ampm == "AM" and h == 12:
                     h = 0
 
-                follow_up_due_at = fu_dt.replace(hour=h, minute=m)
+                follow_up_due_at = datetime.fromisoformat(fu_date).replace(
+                    hour=h, minute=m, second=0, microsecond=0
+                )
             else:
-                follow_up_due_at = fu_dt
+                # date provided but no time: store as midnight
+                follow_up_due_at = datetime.fromisoformat(fu_date).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
         else:
-            # If checkbox is checked but no date is provided, treat as not set
-            # You can also choose to flash an error and redirect back instead.
+            # checkbox checked but no date: treat as not a follow-up
+            requires_follow_up = False
             follow_up_due_at = None
 
     insert_engagement(
@@ -3768,6 +3985,7 @@ def add_engagement(contact_id):
         follow_up_due_at=follow_up_due_at,
     )
 
+    conn.close()
     flash("Engagement added.", "success")
     return redirect(url_for("edit_contact", contact_id=contact_id, saved=1) + "#engagements")
 
@@ -3856,38 +4074,35 @@ def edit_engagement(engagement_id):
         else:
             occurred_at = e["occurred_at"]
 
-        # Follow-up parsing
+        # Follow-up parsing (datetime-local: follow_up_due_at = "2026-01-01T14:30")
         requires_follow_up = (request.form.get("requires_follow_up") == "on")
         follow_up_completed = (request.form.get("follow_up_completed") == "on")
-
+        
         follow_up_due_at = None
         follow_up_completed_at = None
-
+        
         if requires_follow_up:
-            fu_date = (request.form.get("follow_up_due_date") or "").strip()
-            fu_hour = (request.form.get("follow_up_due_hour") or "").strip()
-            fu_minute = (request.form.get("follow_up_due_minute") or "").strip()
-            fu_ampm = (request.form.get("follow_up_due_ampm") or "").strip()
-
-            if fu_date:
-                fu_dt = datetime.strptime(fu_date, "%Y-%m-%d")
-                if fu_hour and fu_minute and fu_ampm:
-                    h = int(fu_hour)
-                    m = int(fu_minute)
-                    if fu_ampm.upper() == "PM" and h != 12:
-                        h += 12
-                    if fu_ampm.upper() == "AM" and h == 12:
-                        h = 0
-                    follow_up_due_at = fu_dt.replace(hour=h, minute=m)
-                else:
+            fu_raw = (request.form.get("follow_up_due_at") or "").strip()
+        
+            if fu_raw:
+                try:
+                    fu_dt = datetime.fromisoformat(fu_raw)  # naive local time from HTML
+                    if fu_dt.tzinfo is None:
+                        fu_dt = fu_dt.replace(tzinfo=timezone.utc)  # consistent with your dashboard logic
                     follow_up_due_at = fu_dt
+                except ValueError:
+                    flash("Invalid follow-up date/time.", "warning")
+                    requires_follow_up = False
+                    follow_up_due_at = None
+        
             else:
+                # checkbox checked but no datetime supplied
+                requires_follow_up = False
                 follow_up_due_at = None
-
+        
             if follow_up_completed:
-                follow_up_completed_at = datetime.now()
+                follow_up_completed_at = datetime.now(timezone.utc)
         else:
-            # If not a follow-up, force follow-up fields to off/null
             follow_up_due_at = None
             follow_up_completed = False
             follow_up_completed_at = None
@@ -3957,6 +4172,670 @@ def edit_engagement(engagement_id):
         return_tab=return_tab,
         active_page="contacts",
     )
+
+# =========================================================
+# Phase 5 (v0.11.0): Tasks
+# Authoritative spec: Ulysses_CRM_Phase_5_Design_and_Scope_v2.md
+# Local-first
+# =========================================================
+
+@app.route("/tasks")
+@login_required
+def tasks_list():
+    status = request.args.get("status")
+    if status and status not in TASK_STATUSES:
+        flash("Invalid task status filter.", "warning")
+        return redirect(url_for("tasks_list"))
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        tasks = list_tasks_for_user(cur, current_user.id, status=status)
+
+        # Build contact_id -> display_name map for UI polish
+        contact_ids = [t.get("contact_id") for t in tasks if t.get("contact_id")]
+        contact_map = {}
+
+        if contact_ids:
+            contact_ids = sorted(set(contact_ids))
+
+            # IMPORTANT: pass a Python list to ANY(), not a tuple
+            cur.execute(
+                """
+                SELECT
+                  id,
+                  COALESCE(
+                    NULLIF(TRIM(name), ''),
+                    NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                    '(Unnamed)'
+                  ) AS display_name
+                FROM contacts
+                WHERE user_id = %s
+                  AND id = ANY(%s::int[])
+                """,
+                (current_user.id, contact_ids),
+            )
+            rows = cur.fetchall() or []
+            contact_map = {r["id"]: r["display_name"] for r in rows}
+
+        return render_template(
+            "tasks/list.html",
+            tasks=tasks,
+            status=status,
+            statuses=TASK_STATUSES,
+            contact_map=contact_map,
+        )
+    finally:
+        conn.close()
+
+
+@app.route("/tasks/new", methods=["GET", "POST"])
+@login_required
+def tasks_new():
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Prefill from querystring (coming from contact page button)
+    prefill_contact_id = request.args.get("contact_id", type=int)
+    next_url = (request.args.get("next") or "").strip() or None
+
+    prefill_contact_name = ""
+    if prefill_contact_id:
+        cur.execute(
+            """
+            SELECT
+              COALESCE(
+                NULLIF(TRIM(name), ''),
+                NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                '(Unnamed)'
+              ) AS display_name
+            FROM contacts
+            WHERE user_id = %s AND id = %s
+            """,
+            (current_user.id, prefill_contact_id),
+        )
+        row = cur.fetchone()
+        prefill_contact_name = (row["display_name"] if row else "") or ""
+
+    if request.method == "POST":
+        next_post = (request.form.get("next") or "").strip() or url_for("tasks_list")
+
+        data = {
+            "title": (request.form.get("title") or "").strip(),
+            "description": (request.form.get("description") or "").strip() or None,
+            "task_type": (request.form.get("task_type") or "").strip() or None,
+            "priority": (request.form.get("priority") or "").strip() or None,
+            "status": (request.form.get("status") or "open").strip(),
+            "contact_id": request.form.get("contact_id", type=int),
+            "transaction_id": request.form.get("transaction_id", type=int),
+            "engagement_id": request.form.get("engagement_id", type=int),
+            "professional_id": request.form.get("professional_id", type=int),
+            "due_date": (request.form.get("due_date") or "").strip() or None,
+            "due_at": (request.form.get("due_at") or "").strip() or None,
+        }
+
+        # Guardrails
+        if not data["title"]:
+            flash("Title is required.", "warning")
+            return redirect(request.full_path)
+
+        try:
+            task_id = create_task(cur, current_user.id, data)
+            conn.commit()
+            flash("Task created.", "success")
+            return redirect(next_post or url_for("tasks_view", task_id=task_id))
+        except Exception as e:
+            conn.rollback()
+            flash(f"Could not create task: {e}", "danger")
+        finally:
+            conn.close()
+
+    # GET
+    conn.close()
+    return render_template(
+        "tasks/form.html",
+        mode="new",
+        task=None,
+        statuses=TASK_STATUSES,
+        next_url=next_url,
+        prefill_contact_id=prefill_contact_id,
+        prefill_contact_name=prefill_contact_name,
+    )
+
+@app.route("/tasks/modal/new")
+@login_required
+def tasks_modal_new():
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        prefill_contact_id = request.args.get("contact_id", type=int)
+        next_url = (request.args.get("next") or "").strip() or None
+
+        prefill_contact_name = ""
+        if prefill_contact_id:
+            cur.execute(
+                """
+                SELECT
+                  COALESCE(
+                    NULLIF(TRIM(name), ''),
+                    NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                    '(Unnamed)'
+                  ) AS display_name
+                FROM contacts
+                WHERE user_id = %s AND id = %s
+                """,
+                (current_user.id, prefill_contact_id),
+            )
+            row = cur.fetchone()
+            prefill_contact_name = (row["display_name"] if row else "") or ""
+
+        transactions = []
+        engagements = []
+
+        if prefill_contact_id:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    status,
+                    transaction_type,
+                    address,
+                    expected_close_date,
+                    updated_at
+                FROM transactions
+                WHERE user_id = %s AND contact_id = %s
+                ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+                LIMIT 25
+                """,
+                (current_user.id, prefill_contact_id),
+            )
+            transactions = cur.fetchall() or []
+
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    engagement_type,
+                    occurred_at,
+                    summary_clean,
+                    notes
+                FROM engagements
+                WHERE user_id = %s AND contact_id = %s
+                ORDER BY occurred_at DESC, id DESC
+                LIMIT 25
+                """,
+                (current_user.id, prefill_contact_id),
+            )
+            engagements = cur.fetchall() or []
+
+            for e in engagements:
+                s = (e.get("summary_clean") or "").strip()
+                if not s:
+                    s = (e.get("notes") or "").strip()
+                e["summary_display"] = (s[:80] + "...") if len(s) > 80 else s
+
+        return render_template(
+            "tasks/form_modal.html",
+            mode="new",
+            task=None,
+            statuses=TASK_STATUSES,
+            next_url=next_url,
+            prefill_contact_id=prefill_contact_id,
+            prefill_contact_name=prefill_contact_name,
+            form_action=url_for("tasks_new"),
+            transactions=transactions,
+            engagements=engagements,
+        )
+    finally:
+        conn.close()
+
+@app.route("/tasks/<int:task_id>")
+@login_required
+def tasks_view(task_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        task = get_task(cur, current_user.id, task_id)
+        if not task:
+            abort(404)
+
+        # Contact display name (existing)
+        contact_name = None
+        if task.get("contact_id"):
+            cur.execute(
+                """
+                SELECT
+                  COALESCE(
+                    NULLIF(TRIM(name), ''),
+                    NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                    '(Unnamed)'
+                  ) AS display_name
+                FROM contacts
+                WHERE user_id = %s AND id = %s
+                """,
+                (current_user.id, task["contact_id"]),
+            )
+            row = cur.fetchone()
+            contact_name = row["display_name"] if row else None
+
+        # Contextual wildcard display data
+        transaction = None
+        transactions = []
+
+        engagement = None
+        engagements = []
+
+        professional = None
+        professionals = []
+
+        # Transactions: if selected show 1, else show recent for contact
+        if task.get("transaction_id"):
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    status,
+                    transaction_type,
+                    address,
+                    expected_close_date,
+                    updated_at
+                FROM transactions
+                WHERE id = %s AND user_id = %s
+                """,
+                (task["transaction_id"], current_user.id),
+            )
+            transaction = cur.fetchone()
+
+        elif task.get("contact_id"):
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    status,
+                    transaction_type,
+                    address,
+                    expected_close_date,
+                    updated_at
+                FROM transactions
+                WHERE contact_id = %s AND user_id = %s
+                ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+                LIMIT 10
+                """,
+                (task["contact_id"], current_user.id),
+            )
+            transactions = cur.fetchall() or []
+
+        # Engagements: if selected show 1, else show recent for contact
+        if task.get("engagement_id"):
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    engagement_type,
+                    occurred_at,
+                    summary_clean,
+                    notes
+                FROM engagements
+                WHERE id = %s AND user_id = %s
+                """,
+                (task["engagement_id"], current_user.id),
+            )
+            engagement = cur.fetchone()
+            if engagement:
+                summary = (engagement.get("summary_clean") or "").strip()
+                if not summary:
+                    summary = (engagement.get("notes") or "").strip()
+                engagement["summary_display"] = summary
+
+        elif task.get("contact_id"):
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    engagement_type,
+                    occurred_at,
+                    summary_clean,
+                    notes
+                FROM engagements
+                WHERE contact_id = %s AND user_id = %s
+                ORDER BY occurred_at DESC, id DESC
+                LIMIT 10
+                """,
+                (task["contact_id"], current_user.id),
+            )
+            engagements = cur.fetchall() or []
+            for e in engagements:
+                summary = (e.get("summary_clean") or "").strip()
+                if not summary:
+                    summary = (e.get("notes") or "").strip()
+                e["summary_display"] = summary
+
+        # Professionals: if selected show 1, else show a small global list
+        # (No contact-scoping exists yet for professionals.)
+        if task.get("professional_id"):
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    name,
+                    category,
+                    company
+                FROM professionals
+                WHERE id = %s
+                """,
+                (task["professional_id"],),
+            )
+            professional = cur.fetchone()
+
+        else:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    name,
+                    category,
+                    company
+                FROM professionals
+                ORDER BY name ASC, id DESC
+                LIMIT 10
+                """
+            )
+            professionals = cur.fetchall() or []
+
+        return render_template(
+            "tasks/view.html",
+            task=task,
+            contact_name=contact_name,
+            transaction=transaction,
+            transactions=transactions,
+            engagement=engagement,
+            engagements=engagements,
+            professional=professional,
+            professionals=professionals,
+        )
+    finally:
+        conn.close()
+
+@app.route("/tasks/<int:task_id>/edit", methods=["GET", "POST"])
+@login_required
+def tasks_edit(task_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        task = get_task(cur, current_user.id, task_id)
+        if not task:
+            abort(404)
+
+        if request.method == "POST":
+            form = request.form
+            data = {
+                "title": form.get("title"),
+                "description": form.get("description") or None,
+                "task_type": form.get("task_type") or None,
+                "priority": form.get("priority") or None,
+                "status": form.get("status") or "open",
+                "contact_id": form.get("contact_id") or None,
+                "transaction_id": form.get("transaction_id") or None,
+                "engagement_id": form.get("engagement_id") or None,
+                "professional_id": form.get("professional_id") or None,
+                "due_date": form.get("due_date") or None,
+                "due_at": form.get("due_at") or None,
+            }
+
+            try:
+                update_task(cur, current_user.id, task_id, data)
+                conn.commit()
+                flash("Task updated.", "success")
+                return redirect(url_for("tasks_view", task_id=task_id))
+            except Exception as e:
+                conn.rollback()
+                flash(f"Could not update task: {e}", "danger")
+
+        return render_template("tasks/form.html", mode="edit", task=task, statuses=TASK_STATUSES)
+    finally:
+        conn.close()
+
+@app.route("/tasks/modal/<int:task_id>/edit")
+@login_required
+def tasks_modal_edit(task_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        task = get_task(cur, current_user.id, task_id)
+        if not task:
+            abort(404)
+
+        transactions = []
+        engagements = []
+
+        contact_id = task.get("contact_id")
+        if contact_id:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    status,
+                    transaction_type,
+                    address,
+                    expected_close_date,
+                    updated_at
+                FROM transactions
+                WHERE user_id = %s AND contact_id = %s
+                ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+                LIMIT 25
+                """,
+                (current_user.id, contact_id),
+            )
+            transactions = cur.fetchall() or []
+
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    engagement_type,
+                    occurred_at,
+                    summary_clean,
+                    notes
+                FROM engagements
+                WHERE user_id = %s AND contact_id = %s
+                ORDER BY occurred_at DESC, id DESC
+                LIMIT 25
+                """,
+                (current_user.id, contact_id),
+            )
+            engagements = cur.fetchall() or []
+
+            for e in engagements:
+                s = (e.get("summary_clean") or "").strip()
+                if not s:
+                    s = (e.get("notes") or "").strip()
+                e["summary_display"] = (s[:80] + "...") if len(s) > 80 else s
+
+        return render_template(
+            "tasks/form_modal.html",
+            mode="edit",
+            task=task,
+            statuses=TASK_STATUSES,
+            next_url=(request.args.get("next") or "").strip() or None,
+            prefill_contact_id=None,
+            prefill_contact_name="",
+            form_action=url_for("tasks_edit", task_id=task_id),
+            transactions=transactions,
+            engagements=engagements,
+        )
+    finally:
+        conn.close()
+
+# -------------------------
+# Task actions (POST only)
+# -------------------------
+
+@app.route("/tasks/options")
+@login_required
+def tasks_options():
+    contact_id = request.args.get("contact_id", type=int)
+    if not contact_id:
+        return jsonify({"transactions": [], "engagements": []})
+
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute(
+            """
+            SELECT id, status, transaction_type, address, expected_close_date, updated_at
+            FROM transactions
+            WHERE user_id = %s AND contact_id = %s
+            ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+            LIMIT 25
+            """,
+            (current_user.id, contact_id),
+        )
+        transactions = cur.fetchall() or []
+
+        cur.execute(
+            """
+            SELECT id, engagement_type, occurred_at, summary_clean, notes
+            FROM engagements
+            WHERE user_id = %s AND contact_id = %s
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT 25
+            """,
+            (current_user.id, contact_id),
+        )
+        engagements = cur.fetchall() or []
+
+        out_eng = []
+        for e in engagements:
+            s = (e.get("summary_clean") or "").strip() or (e.get("notes") or "").strip()
+            if len(s) > 80:
+                s = s[:80] + "..."
+            out_eng.append(
+                {
+                    "id": e["id"],
+                    "engagement_type": e.get("engagement_type") or "",
+                    "occurred_at": (e["occurred_at"].date().isoformat() if e.get("occurred_at") else ""),
+                    "summary": s,
+                }
+            )
+
+        out_tx = []
+        for tx in transactions:
+            out_tx.append(
+                {
+                    "id": tx["id"],
+                    "address": tx.get("address") or "",
+                    "transaction_type": tx.get("transaction_type") or "",
+                    "status": tx.get("status") or "",
+                    "expected_close_date": (tx["expected_close_date"].isoformat() if tx.get("expected_close_date") else ""),
+                }
+            )
+
+        return jsonify({"transactions": out_tx, "engagements": out_eng})
+    finally:
+        conn.close()
+
+@app.route("/tasks/<int:task_id>/complete", methods=["POST"])
+@login_required
+def tasks_complete(task_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        # verify ownership first
+        task = get_task(cur, current_user.id, task_id)
+        if not task:
+            abort(404)
+
+        complete_task(cur, current_user.id, task_id)
+        conn.commit()
+        flash("Task marked completed.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Could not complete task: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(request.referrer or url_for("tasks_view", task_id=task_id))
+
+
+@app.route("/tasks/<int:task_id>/snooze", methods=["POST"])
+@login_required
+def tasks_snooze(task_id):
+    snoozed_until_str = (request.form.get("snoozed_until") or "").strip()
+    if not snoozed_until_str:
+        flash("Please provide a snooze date/time.", "warning")
+        return redirect(request.referrer or url_for("tasks_view", task_id=task_id))
+
+    # Accept HTML datetime-local like: 2025-12-30T18:30
+    # We'll parse as naive local time and store as timestamptz; Postgres will interpret with server TZ.
+    try:
+        snoozed_until = datetime.fromisoformat(snoozed_until_str)
+    except ValueError:
+        flash("Invalid snooze date/time format.", "warning")
+        return redirect(request.referrer or url_for("tasks_view", task_id=task_id))
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        task = get_task(cur, current_user.id, task_id)
+        if not task:
+            abort(404)
+
+        snooze_task(cur, current_user.id, task_id, snoozed_until)
+        conn.commit()
+        flash("Task snoozed.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Could not snooze task: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(request.referrer or url_for("tasks_view", task_id=task_id))
+
+
+@app.route("/tasks/<int:task_id>/reopen", methods=["POST"])
+@login_required
+def tasks_reopen(task_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        reopen_task(cur, current_user.id, task_id)
+        conn.commit()
+
+        flash("Task reopened. Update details as needed.", "info")
+        return redirect(url_for("tasks_edit", task_id=task_id))
+
+    except Exception:
+        conn.rollback()
+        app.logger.exception("Task reopen failed")
+        flash("Could not reopen task.", "danger")
+        return redirect(url_for("tasks_view", task_id=task_id))
+
+    finally:
+        conn.close()
+
+@app.route("/tasks/<int:task_id>/cancel", methods=["POST"])
+@login_required
+def tasks_cancel(task_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        task = get_task(cur, current_user.id, task_id)
+        if not task:
+            abort(404)
+
+        cancel_task(cur, current_user.id, task_id)
+        conn.commit()
+        flash("Task canceled.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Could not cancel task: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(request.referrer or url_for("tasks_view", task_id=task_id))
+
 
 @app.route("/add_interaction/<int:contact_id>", methods=["POST"])
 @login_required
@@ -4449,6 +5328,58 @@ def edit_professional(prof_id):
         active_page="professionals"
     )
 
+@app.route("/professionals/search")
+@login_required
+def professionals_search():
+    q = (request.args.get("q") or "").strip()
+
+    # Match live-search behavior everywhere else
+    if len(q) < 2:
+        return jsonify([])
+
+    like = f"%{q}%"
+
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute(
+            """
+            SELECT
+                id,
+                name,
+                company,
+                category
+            FROM professionals
+            WHERE
+                (
+                  name ILIKE %s
+                  OR COALESCE(company, '') ILIKE %s
+                  OR COALESCE(category, '') ILIKE %s
+                )
+            ORDER BY name ASC, id DESC
+            LIMIT 10
+            """,
+            (like, like, like),
+        )
+
+        rows = cur.fetchall() or []
+        out = []
+        for r in rows:
+            out.append(
+                {
+                    "id": r["id"],
+                    "display_name": r.get("name") or "",
+                    "role_label": (r.get("category") or "").title(),
+                    "company": r.get("company") or "",
+                }
+            )
+
+        return jsonify(out)
+
+    finally:
+        conn.close()
+
 @app.route("/professionals/<int:prof_id>/delete", methods=["POST"])
 @login_required
 def delete_professional(prof_id):
@@ -4716,8 +5647,6 @@ def seller_profile(contact_id):
         transaction_statuses=TRANSACTION_STATUSES,
     )
 
-from datetime import date
-
 @app.route("/followups")
 @login_required
 def followups():
@@ -4758,21 +5687,26 @@ def followups():
     rows = cur.fetchall()
     conn.close()
 
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+    
     overdue = []
     today_list = []
     upcoming = []
-
+    
     for row in rows:
         due = row.get("follow_up_due_at")
         if not due:
             continue
-
-        # Bucket by due date (date objects)
-        due_date = due.date()
-        
-        if due_date < today:
+    
+        # Safety: normalize naive timestamps
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=timezone.utc)
+    
+        if due < now:
             overdue.append(row)
-        elif due_date == today:
+        elif today_start <= due < today_end:
             today_list.append(row)
         else:
             upcoming.append(row)
@@ -4785,6 +5719,33 @@ def followups():
         today=today.isoformat(),
         active_page="followups",
     )
+
+@app.route("/followups/<int:engagement_id>/clear", methods=["POST"])
+@login_required
+def followup_clear(engagement_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE engagements
+            SET follow_up_completed = TRUE,
+                follow_up_due_at = NULL
+            WHERE user_id = %s
+              AND id = %s
+            """,
+            (current_user.id, engagement_id),
+        )
+        conn.commit()
+        flash("Follow-up cleared.", "success")
+        return redirect(url_for("dashboard") + "#followups")
+    except Exception:
+        conn.rollback()
+        app.logger.exception("Failed to clear follow-up")
+        flash("Could not clear follow-up.", "danger")
+        return redirect(url_for("dashboard") + "#followups")
+    finally:
+        conn.close()
 
 @app.route("/interaction/<int:interaction_id>/complete", methods=["POST"])
 @login_required

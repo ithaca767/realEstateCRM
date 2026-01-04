@@ -338,6 +338,16 @@
         <!-- Follow-ups tab -->
         <div class="tab-pane fade" id="followups" role="tabpanel" aria-labelledby="followups-tab">
 
+          {% macro contact_display(c) %}
+            {% if c.get("contact_name") %}
+              {{ c["contact_name"] }}
+            {% elif c.get("first_name") or c.get("last_name") %}
+              {{ (c.get("first_name") or "") ~ (" " if c.get("first_name") and c.get("last_name") else "") ~ (c.get("last_name") or "") }}
+            {% else %}
+              {{ c.get("name") or "Unnamed Contact" }}
+            {% endif %}
+          {% endmacro %}
+
           {% macro followup_table(rows) %}
             {% if rows and rows|length > 0 %}
               <div class="table-responsive">
@@ -345,47 +355,59 @@
                   <thead class="table-light">
                     <tr>
                       <th>Name</th>
-                      <th>Date</th>
-                      <th>Time</th>
+                      <th style="width: 220px;">Due</th>
                       <th>Last Engagement</th>
-                      <th style="width: 140px;">Actions</th>
+                      <th style="width: 220px;" class="text-end">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {% for c in rows %}
                       <tr>
                         <td>
-                          <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">                            {% if c["first_name"] or c["last_name"] %}
-                              {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                            {% else %}
-                              {{ c["name"] or "Unnamed Contact" }}
-                            {% endif %}
+                          <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
+                            {{ contact_display(c) }}
                           </a>
                         </td>
-                        <td>{{ c["follow_up_due_at"] or "" }}</td>
-                        <td></td>
+
+                        <td>
+                          {% if c.get("follow_up_due_at") %}
+                            {{ c["follow_up_due_at"] }}
+                          {% else %}
+                            <span class="text-muted">None</span>
+                          {% endif %}
+                        </td>
 
                         <td style="min-width: 280px;">
-                          {% if c["last_engagement_at"] %}
+                          {% if c.get("last_engagement_at") %}
                             <div class="small">
-                              <strong>{{ c["last_engagement_type"] or "engagement" }}</strong>
+                              <strong>{{ c.get("last_engagement_type") or "engagement" }}</strong>
                               <span class="text-muted">({{ c["last_engagement_at"] }})</span>
                             </div>
-                            {% if c["last_engagement_outcome"] %}
-                              <div class="text-muted small">{{ c["last_engagement_outcome"] }}</div>
-                            {% elif c["last_engagement_summary"] %}
-                              <div class="text-muted small">{{ c["last_engagement_summary"] }}</div>
+
+                            {% set detail = c.get("last_engagement_outcome") or c.get("last_engagement_summary") %}
+                            {% if detail %}
+                              <div class="text-muted small">{{ detail }}</div>
                             {% endif %}
                           {% else %}
                             <span class="text-muted small">No engagement context yet</span>
                           {% endif %}
                         </td>
 
-                        <td>
-                          <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements"
-                             class="btn btn-sm btn-outline-primary">
-                            Open
-                          </a>
+                        <td class="text-end">
+                          <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements"
+                               class="btn btn-sm btn-outline-primary">
+                              Open
+                            </a>
+
+                            {% if c.get("engagement_id") %}
+                              <form method="post" action="{{ url_for('followup_clear', engagement_id=c['engagement_id']) }}">
+                                <button type="submit" class="btn btn-sm btn-outline-success">
+                                  Done
+                                </button>
+                              </form>
+                            {% endif %}
+                          </div>
                         </td>
                       </tr>
                     {% endfor %}
@@ -405,7 +427,7 @@
               {{ followup_table(followups_overdue) }}
             </div>
           </div>
-          
+
           <div class="card">
             <div class="card-header bg-success-subtle text-dark fw-semibold">
               Upcoming (next {{ upcoming_days }} days)

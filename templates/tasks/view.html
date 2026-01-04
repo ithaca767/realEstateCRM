@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Task{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">{{ task.title }}</h2>
+
+    {% set badge_class = "bg-secondary" %}
+    {% if task.status == "open" %}{% set badge_class = "bg-primary" %}{% endif %}
+    {% if task.status == "completed" %}{% set badge_class = "bg-success" %}{% endif %}
+    {% if task.status == "snoozed" %}{% set badge_class = "bg-warning text-dark" %}{% endif %}
+    {% if task.status == "canceled" %}{% set badge_class = "bg-secondary" %}{% endif %}
+
+    <div class="text-muted">
+      Status:
+      <span class="badge {{ badge_class }}">
+        {{ task.status|replace('_',' ')|title }}
+      </span>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="button"
+            class="btn btn-sm btn-outline-primary"
+            onclick="openTaskModal('{{ url_for('tasks_modal_edit', task_id=task.id) }}', 'Edit Task')">
+      View / Edit
+    </button>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-body">
+
+    {% if task.description %}
+      <div class="mb-3">
+        <div class="text-muted small">Description</div>
+        <div>{{ task.description }}</div>
+      </div>
+    {% endif %}
+
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div class="text-muted small">Priority</div>
+        <div>{{ task.priority if task.priority else '—' }}</div>
+      </div>
+
+      <div class="col-md-3">
+        <div class="text-muted small">Task Type</div>
+        <div>{{ task.task_type if task.task_type else '—' }}</div>
+      </div>
+
+      <div class="col-md-3">
+        <div class="text-muted small">Due</div>
+        <div>
+          {% if task.due_at %}{{ task.due_at }}
+          {% elif task.due_date %}{{ task.due_date }}
+          {% else %}—{% endif %}
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <div class="text-muted small">Contact</div>
+        <div>
+          {% if task.contact_id %}
+            <a href="{{ url_for('edit_contact', contact_id=task.contact_id) }}">
+              {{ contact_name if contact_name else ("Contact #" ~ task.contact_id) }}
+            </a>
+          {% else %}
+            —
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <hr class="my-3">
+    
+    <div class="row g-3">
+    
+      <!-- Transactions -->
+      <div class="col-md-3">
+        <div class="text-muted small">Transactions</div>
+    
+        {% if transaction %}
+          <div class="fw-semibold">{{ transaction.address or ("Transaction #" ~ transaction.id) }}</div>
+          <div class="text-muted small">
+            {% if transaction.transaction_type %}{{ transaction.transaction_type|replace("_"," ")|title }}{% endif %}
+            {% if transaction.status %} · {{ transaction.status|replace("_"," ")|title }}{% endif %}
+          </div>
+    
+        {% elif transactions and transactions|length > 0 %}
+          <div class="vstack gap-2">
+            {% for tx in transactions %}
+              <div>
+                <div class="fw-semibold">{{ tx.address or ("Transaction #" ~ tx.id) }}</div>
+                <div class="text-muted small">
+                  {% if tx.transaction_type %}{{ tx.transaction_type|replace("_"," ")|title }}{% endif %}
+                  {% if tx.status %} · {{ tx.status|replace("_"," ")|title }}{% endif %}
+                  {% if tx.expected_close_date %} · {{ tx.expected_close_date }}{% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+    
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    
+      <!-- Engagements -->
+      <div class="col-md-3">
+        <div class="text-muted small">Engagements</div>
+    
+        {% if engagement %}
+          <div class="fw-semibold">
+            {{ (engagement.engagement_type or "")|replace("_"," ")|title }}
+            {% if engagement.occurred_at %} · {{ engagement.occurred_at.date() }}{% endif %}
+          </div>
+          <div class="text-muted small">
+            {{ engagement.summary_display if engagement.summary_display else "No notes or summary" }}
+          </div>
+    
+        {% elif engagements and engagements|length > 0 %}
+          <div class="vstack gap-2">
+            {% for e in engagements %}
+              <div>
+                <div class="fw-semibold">
+                  {{ (e.engagement_type or "")|replace("_"," ")|title }}
+                  {% if e.occurred_at %} · {{ e.occurred_at.date() }}{% endif %}
+                </div>
+                <div class="text-muted small">
+                  {{ e.summary_display if e.summary_display else "No notes or summary" }}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+    
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    
+      <!-- Professionals -->
+      <div class="col-md-3">
+        <div class="text-muted small">Professionals</div>
+    
+        {% if professional %}
+          <div class="fw-semibold">{{ professional.name or ("Professional #" ~ professional.id) }}</div>
+          <div class="text-muted small">
+            {% if professional.category %}{{ professional.category|replace("_"," ")|title }}{% endif %}
+            {% if professional.company %}{% if professional.category %} · {% endif %}{{ professional.company }}{% endif %}
+          </div>
+    
+        {% elif professionals and professionals|length > 0 %}
+          <div class="vstack gap-2">
+            {% for p in professionals %}
+              <div>
+                <div class="fw-semibold">{{ p.name or ("Professional #" ~ p.id) }}</div>
+                <div class="text-muted small">
+                  {% if p.category %}{{ p.category|replace("_"," ")|title }}{% endif %}
+                  {% if p.company %}{% if p.category %} · {% endif %}{{ p.company }}{% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+    
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    
+      <!-- Snoozed Until -->
+      <div class="col-md-3">
+        <div class="text-muted small">Snoozed Until</div>
+        <div>{{ task.snoozed_until if task.snoozed_until else '—' }}</div>
+      </div>
+    
+    </div>
+
+    <hr class="my-3">
+
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+      {% if task.status != 'completed' %}
+        <form method="post" action="{{ url_for('tasks_complete', task_id=task.id) }}">
+          <button type="submit" class="btn btn-sm btn-outline-success">Complete</button>
+        </form>
+      {% endif %}
+
+      {% if task.status != 'canceled' %}
+        <form method="post" action="{{ url_for('tasks_cancel', task_id=task.id) }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
+        </form>
+      {% endif %}
+
+      {% if task.status != 'open' %}
+        <form method="post" action="{{ url_for('tasks_reopen', task_id=task.id) }}">
+          <button type="submit" class="btn btn-sm btn-outline-secondary">Reopen</button>
+        </form>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('tasks_snooze', task_id=task.id) }}" class="d-flex gap-2 align-items-center">
+        <input type="datetime-local" name="snoozed_until" class="form-control form-control-sm">
+        <button type="submit" class="btn btn-sm btn-outline-warning">Snooze</button>
+      </form>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -82,4 +82,8 @@ a.tx-address {
   white-space: nowrap;
 }
 
+.btn-link:hover {
+  text-decoration: underline;
+}
+
 

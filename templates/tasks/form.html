@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "edit" %}Edit Task{% else %}New Task{% endif %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">
+      {% if mode == "edit" %}Edit Task{% else %}New Task{% endif %}
+    </h2>
+    <div class="text-muted">Create and manage tasks</div>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div class="text-muted small">
+        {% if task and task.contact_id %}
+          Linked to:
+          <a href="{{ url_for('edit_contact', contact_id=task.contact_id) }}">
+            {{ task.contact_name if task.contact_name else ("Contact #" ~ task.contact_id) }}
+          </a>
+        {% elif prefill_contact_id %}
+          Linked to: Contact #{{ prefill_contact_id }}
+        {% endif %}
+      </div>
+    
+      <div class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('tasks_list') }}">
+          Back to Tasks
+        </a>
+      </div>
+    </div>
+  
+    <form method="post">
+      <input type="hidden" name="next" value="{{ next_url or request.args.get('next','') }}">
+
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label">Title</label>
+          <input type="text" name="title" class="form-control" value="{{ task.title if task else '' }}" required>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" rows="3">{{ task.description if task and task.description else '' }}</textarea>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select">
+            {% for s in statuses %}
+              <option value="{{ s }}" {% if task and task.status == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Priority</label>
+          <input type="text" name="priority" class="form-control" value="{{ task.priority if task and task.priority else '' }}">
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Task Type</label>
+          <input type="text" name="task_type" class="form-control" value="{{ task.task_type if task and task.task_type else '' }}">
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Due Date</label>
+          <input type="date" name="due_date" class="form-control" value="{{ task.due_date if task and task.due_date else '' }}">
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Due Time (optional)</label>
+          <input type="datetime-local" name="due_at" class="form-control" value="">
+          <div class="form-text">We will improve prefill formatting after the first working pass.</div>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">Contact</label>
+        
+          <input type="hidden"
+                 name="contact_id"
+                 id="taskContactId"
+                 value="{% if task and task.contact_id %}{{ task.contact_id }}{% else %}{{ prefill_contact_id or '' }}{% endif %}">
+        
+          <input type="text"
+                 class="form-control"
+                 id="taskContactSearch"
+                 placeholder="Search contacts by name, email, or phone"
+                 autocomplete="off"
+                 value="{% if task and task.contact_name %}{{ task.contact_name }}{% elif prefill_contact_name %}{{ prefill_contact_name }}{% else %}{% endif %}">
+        
+          <div class="list-group mt-2" id="taskContactResults" style="display:none;"></div>
+        
+          <div class="mt-2" id="taskContactSelected" style="display:none;">
+            <span class="badge bg-primary-subtle text-dark" id="taskContactSelectedLabel"></span>
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="taskContactClear">Clear</button>
+          </div>
+        
+          <div class="form-text">Type at least 2 characters, then click a result.</div>
+        </div>
+               
+        <div class="col-md-4">
+          <label class="form-label">Transaction</label>
+        
+          <input type="hidden" name="transaction_id" id="taskTransactionId"
+                 value="{{ task.transaction_id if task and task.transaction_id else '' }}">
+        
+          <div class="position-relative">
+            <input type="text"
+                   class="form-control"
+                   id="taskTransactionSearch"
+                   placeholder="Search transactions for selected contact"
+                   autocomplete="off"
+                   value="{{ task.transaction_label if task and task.transaction_label else '' }}">
+        
+            <div class="list-group mt-2 position-absolute w-100 shadow-sm"
+                 id="taskTransactionResults"
+                 style="display:none; z-index:1050; max-height:240px; overflow:auto;"></div>
+          </div>
+        
+          <div class="mt-2" id="taskTransactionSelected" style="display:none;">
+            <span class="badge bg-secondary" id="taskTransactionSelectedLabel"></span>
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="taskTransactionClear">Clear</button>
+          </div>
+        
+          <div class="form-text" id="taskTransactionHelp"></div>
+        </div>
+        
+        <div class="col-md-4">
+          <label class="form-label">Engagement</label>
+        
+          <input type="hidden" name="engagement_id" id="taskEngagementId"
+                 value="{{ task.engagement_id if task and task.engagement_id else '' }}">
+        
+          <div class="position-relative">
+            <input type="text"
+                   class="form-control"
+                   id="taskEngagementSearch"
+                   placeholder="Search engagements for selected contact"
+                   autocomplete="off"
+                   value="{{ task.engagement_label if task and task.engagement_label else '' }}">
+        
+            <div class="list-group mt-2 position-absolute w-100 shadow-sm"
+                 id="taskEngagementResults"
+                 style="display:none; z-index:1050; max-height:240px; overflow:auto;"></div>
+          </div>
+        
+          <div class="mt-2" id="taskEngagementSelected" style="display:none;">
+            <span class="badge bg-secondary" id="taskEngagementSelectedLabel"></span>
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="taskEngagementClear">Clear</button>
+          </div>
+        
+          <div class="form-text" id="taskEngagementHelp"></div>
+        </div>
+        
+        <div class="col-md-4">
+          <label class="form-label">Professional</label>
+        
+          <input type="hidden" name="professional_id" id="taskProfessionalId"
+                 value="{{ task.professional_id if task and task.professional_id else '' }}">
+        
+          <div class="position-relative">
+            <input type="text"
+                   class="form-control"
+                   id="taskProfessionalSearch"
+                   placeholder="Search professionals"
+                   autocomplete="off"
+                   value="{{ task.professional_label if task and task.professional_label else '' }}">
+        
+            <div class="list-group mt-2 position-absolute w-100 shadow-sm"
+                 id="taskProfessionalResults"
+                 style="display:none; z-index:1050; max-height:240px; overflow:auto;"></div>
+          </div>
+        
+          <div class="mt-2" id="taskProfessionalSelected" style="display:none;">
+            <span class="badge bg-secondary" id="taskProfessionalSelectedLabel"></span>
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="taskProfessionalClear">Clear</button>
+          </div>
+        
+          <div class="form-text" id="taskProfessionalHelp"></div>
+        </div>
+
+        <div class="col-12 d-flex gap-2">
+          <button type="submit" class="btn btn-sm btn-primary">{% if mode == "edit" %}Save Changes{% else %}Create Task{% endif %}</button>
+          {% if mode == "edit" and task %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tasks_view', task_id=task.id) }}">Cancel</a>
+          {% endif %}
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    if (window.initTaskFormEnhancements) {
+      window.initTaskFormEnhancements();
+    }
+  });
+</script>
+{% endblock %}

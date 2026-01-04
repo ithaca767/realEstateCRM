@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Tasks{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Tasks</h2>
+    <div class="text-muted small">
+      {% if status %}
+        Filtered: {{ status|replace('_',' ')|title }}
+      {% else %}
+        All tasks
+      {% endif %}
+    </div>
+  </div>
+
+  <button
+    type="button"
+    class="btn btn-success"
+    onclick="openTaskModal('{{ url_for('tasks_modal_new') }}', 'New Task')">
+    + Add New Task
+  </button>
+</div>
+
+<div class="card mt-3">
+  <div class="card-body">
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <a class="btn btn-sm {% if not status %}btn-dark{% else %}btn-outline-dark{% endif %}"
+         href="{{ url_for('tasks_list') }}">All</a>
+      {% for s in statuses %}
+        <a class="btn btn-sm {% if status == s %}btn-dark{% else %}btn-outline-dark{% endif %}"
+           href="{{ url_for('tasks_list', status=s) }}">{{ s|replace('_',' ')|title }}</a>
+      {% endfor %}
+    </div>
+
+    {% if tasks and tasks|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Title</th>
+              <th style="width: 14%;">Status</th>
+              <th style="width: 16%;">Due</th>
+              <th style="width: 20%;" class="text-end">Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for t in tasks %}
+              <tr>
+                <td>
+                  <div class="fw-semibold">
+                    <button
+                      type="button"
+                      class="btn btn-link p-0 fw-semibold text-start text-decoration-none"
+                      onclick="openTaskModal('{{ url_for('tasks_modal_edit', task_id=t.id) }}', 'Edit Task')">
+                      {{ t.title }}
+                    </button>
+                  </div>
+
+                  {% if t.description %}
+                    <div class="text-muted small">{{ t.description }}</div>
+                  {% endif %}
+
+                  {% if t.contact_id %}
+                    <div class="small text-muted">
+                      Contact:
+                      <a href="{{ url_for('edit_contact', contact_id=t.contact_id) }}">
+                        {{ contact_map.get(t.contact_id|int, "Contact #" ~ t.contact_id) }}
+                      </a>
+                    </div>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% set badge_class = "bg-secondary" %}
+                  {% if t.status == "open" %}{% set badge_class = "bg-primary" %}{% endif %}
+                  {% if t.status == "completed" %}{% set badge_class = "bg-success" %}{% endif %}
+                  {% if t.status == "snoozed" %}{% set badge_class = "bg-warning text-dark" %}{% endif %}
+                  {% if t.status == "canceled" %}{% set badge_class = "bg-secondary" %}{% endif %}
+
+                  <span class="badge {{ badge_class }}">
+                    {{ t.status|replace('_',' ')|title }}
+                  </span>
+                </td>
+
+                <td>
+                  {% if t.due_at %}
+                    {{ t.due_at }}
+                  {% elif t.due_date %}
+                    {{ t.due_date }}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+
+                <td class="text-end">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-primary"
+                    onclick="openTaskModal('{{ url_for('tasks_modal_edit', task_id=t.id) }}', 'Edit Task')">
+                    Edit
+                  </button>
+                
+                  {% if t.status != 'completed' %}
+                    <form method="post" action="{{ url_for('tasks_complete', task_id=t.id) }}" class="d-inline">
+                      <button type="submit" class="btn btn-sm btn-outline-success">Complete</button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No tasks yet.</div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

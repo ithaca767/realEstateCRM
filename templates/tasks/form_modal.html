@@ -1,0 +1,144 @@
+<form method="post" action="{{ form_action }}">
+  <input type="hidden" name="next" value="{{ next_url or '' }}">
+
+  <div class="row g-3">
+    <div class="col-12">
+      <label class="form-label">Title</label>
+      <input type="text" name="title" class="form-control" value="{{ task.title if task else '' }}" required>
+    </div>
+
+    <div class="col-12">
+      <label class="form-label">Description</label>
+      <textarea name="description" class="form-control" rows="3">{{ task.description if task and task.description else '' }}</textarea>
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Status</label>
+      <select name="status" class="form-select">
+        {% for s in statuses %}
+          <option value="{{ s }}" {% if task and task.status == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Priority</label>
+      <input type="text" name="priority" class="form-control" value="{{ task.priority if task and task.priority else '' }}">
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Task Type</label>
+      <input type="text" name="task_type" class="form-control" value="{{ task.task_type if task and task.task_type else '' }}">
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Due Date</label>
+      <input type="date" name="due_date" class="form-control" value="{{ task.due_date if task and task.due_date else '' }}">
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Due Time (optional)</label>
+      <input type="datetime-local" name="due_at" class="form-control" value="">
+      <div class="form-text">We will improve prefill formatting after the first working pass.</div>
+    </div>
+
+    <div class="col-12">
+      <label class="form-label">Contact</label>
+
+      <input type="hidden"
+             name="contact_id"
+             id="taskContactId"
+             value="{% if task and task.contact_id %}{{ task.contact_id }}{% else %}{{ prefill_contact_id or '' }}{% endif %}">
+
+      <input type="text"
+             class="form-control"
+             id="taskContactSearch"
+             placeholder="Search contacts by name, email, or phone"
+             autocomplete="off"
+             value="{% if task and task.contact_name %}{{ task.contact_name }}{% elif prefill_contact_name %}{{ prefill_contact_name }}{% endif %}">
+
+      <div class="list-group mt-2" id="taskContactResults" style="display:none;"></div>
+
+      <div class="mt-2" id="taskContactSelected" style="display:none;">
+        <span class="badge bg-primary-subtle text-dark" id="taskContactSelectedLabel"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="taskContactClear">Clear</button>
+      </div>
+
+      <div class="form-text">Type at least 2 characters, then click a result.</div>
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Transaction</label>
+    
+      <select name="transaction_id" id="taskTransactionId" class="form-select">
+        <option value="">—</option>
+        {% if transactions %}
+          {% for tx in transactions %}
+            <option value="{{ tx.id }}"
+              {% if task and task.transaction_id and (task.transaction_id|int) == (tx.id|int) %}selected{% endif %}>
+              {{ tx.address or ("Transaction #" ~ tx.id) }}
+              {% if tx.transaction_type %} · {{ tx.transaction_type|replace("_"," ")|title }}{% endif %}
+              {% if tx.status %} · {{ tx.status|replace("_"," ")|title }}{% endif %}
+              {% if tx.expected_close_date %} · {{ tx.expected_close_date }}{% endif %}
+            </option>
+          {% endfor %}
+        {% endif %}
+      </select>
+    
+      <div class="form-text">Shows recent transactions for the selected contact.</div>
+    </div>
+    
+    <div class="col-md-4">
+      <label class="form-label">Engagement</label>
+    
+      <select name="engagement_id" id="taskEngagementId" class="form-select">
+        <option value="">—</option>
+        {% if engagements %}
+          {% for e in engagements %}
+            <option value="{{ e.id }}"
+              {% if task and task.engagement_id and (task.engagement_id|int) == (e.id|int) %}selected{% endif %}>
+              {{ (e.engagement_type or "")|replace("_"," ")|title }}
+              {% if e.occurred_at %} · {{ e.occurred_at.date() }}{% endif %}
+              {% if e.summary_display %} · {{ e.summary_display }}{% endif %}
+            </option>
+          {% endfor %}
+        {% endif %}
+      </select>
+    
+      <div class="form-text">Shows recent engagements for the selected contact.</div>
+    </div>
+    
+    <div class="col-md-4">
+      <label class="form-label">Professional</label>
+    
+      <input type="hidden" name="professional_id" id="taskProfessionalId"
+             value="{{ task.professional_id if task and task.professional_id else '' }}">
+    
+      <input type="text"
+             class="form-control"
+             id="taskProfessionalSearch"
+             placeholder="Search professionals"
+             autocomplete="off"
+             value="{{ task.professional_label if task and task.professional_label else '' }}">
+    
+      <div class="list-group mt-2 w-100 shadow-sm border"
+           id="taskProfessionalResults"
+           style="display:none; max-height:240px; overflow:auto;">
+      </div>
+    
+      <div class="mt-2" id="taskProfessionalSelected" style="display:none;">
+        <span class="badge bg-secondary" id="taskProfessionalSelectedLabel"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="taskProfessionalClear">Clear</button>
+      </div>
+    
+      <div class="form-text" id="taskProfessionalHelp"></div>
+    </div>
+
+    <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+      <button type="submit" class="btn btn-primary">
+        {% if mode == "edit" %}Save Changes{% else %}Create Task{% endif %}
+      </button>
+      <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+    </div>
+  </div>
+</form>
