@@ -11,7 +11,7 @@
         Edit Contact:
         {{ c['first_name'] }}{% if c['last_name'] %} {{ c['last_name'] }}{% endif %}
         {% if c['email'] %} · {{ c['email'] }}{% endif %}
-        {% if c['phone'] %} · {{ c['phone'] }}{% endif %}
+        {% if c['phone'] %} · {{ c['phone']|phone_display }}{% endif %}
       </div>
     </div>
   </div>
@@ -95,7 +95,7 @@
               </a>
             {% endif %}
           </div>
-                <form method="post">
+                <form id="contactForm" method="post">
                     <div class="row g-3">
                         <div class="col-md-3">
                             <label class="form-label">First Name *</label>
@@ -291,7 +291,7 @@
               </div>
       
               <div class="col-md-1">
-                <button class="btn btn-outline-primary w-100" type="submit">Add</button>
+                <button class="btn btn-outline-primary w-100 js-secondary-submit" type="submit">Add</button>
               </div>
             </div>
           </form>
@@ -372,7 +372,7 @@
                       </td>
                       <td>{{ a.relationship_type or "" }}</td>
                       <td>{{ a.other_email or "" }}</td>
-                      <td>{{ a.other_phone or "" }}</td>
+                      <td>{{ (a.other_phone or "")|phone_display }}</td>
                       <td>
                         <form method="POST" action="{{ url_for('delete_contact_association', contact_id=c['id'], assoc_id=a.id) }}">
                           <input type="hidden" name="next" value="{{ request.full_path }}">
@@ -624,24 +624,47 @@
                       <td class="text-muted">{{ e["occurred_at"] }}</td>
                       <td>{{ (e["engagement_type"] or "")|replace("_"," ")|title }}</td>
                       <td>
-                        {% if e["outcome"] %}<div><span class="text-muted">Outcome:</span> {{ e["outcome"] }}</div>{% endif %}
-                        {% if e["notes"] %}<div>{{ e["notes"] }}</div>{% endif %}
-                        {% if e["summary_clean"] %}
-                          <div class="mt-2"><span class="text-muted">Summary:</span> {{ e["summary_clean"] }}</div>
-                        {% endif %}
+                        {# Unique id for this engagement’s details block #}
+                        {% set desc_id = "engDesc_" ~ e["id"] %}
                       
-                        {% if e["requires_follow_up"] %}
-                          <div class="mt-2">
-                            <span class="badge bg-warning-subtle text-dark">Follow-up</span>
+                        <div class="eng-desc is-clamped clamp-2" id="{{ desc_id }}">
+                          {% if e["outcome"] %}
+                            <div><span class="text-muted">Outcome:</span> {{ e["outcome"] }}</div>
+                          {% endif %}
                       
-                            {% if e["follow_up_due_at"] %}
-                              <span class="text-muted small ms-2">Due: {{ e["follow_up_due_at"] }}</span>
-                            {% endif %}
+                          {% if e["notes"] %}
+                            <div>{{ e["notes"] }}</div>
+                          {% endif %}
                       
-                            {% if e["follow_up_completed"] %}
-                              <span class="badge bg-success-subtle text-dark ms-2">Completed</span>
-                            {% endif %}
-                          </div>
+                          {% if e["summary_clean"] %}
+                            <div class="mt-2"><span class="text-muted">Summary:</span> {{ e["summary_clean"] }}</div>
+                          {% endif %}
+                      
+                          {% if e["requires_follow_up"] %}
+                            <div class="mt-2">
+                              <span class="badge bg-warning-subtle text-dark">Follow-up</span>
+                      
+                              {% if e["follow_up_due_at"] %}
+                                <span class="text-muted small ms-2">Due: {{ e["follow_up_due_at"] }}</span>
+                              {% endif %}
+                      
+                              {% if e["follow_up_completed"] %}
+                                <span class="badge bg-success-subtle text-dark ms-2">Completed</span>
+                              {% endif %}
+                            </div>
+                          {% endif %}
+                        </div>
+                      
+                        {# Show toggle only when there’s enough text to justify it #}
+                        {% set _details_text = ((e["outcome"] or "") ~ " " ~ (e["notes"] or "") ~ " " ~ (e["summary_clean"] or "")) %}
+                        {% if _details_text|length > 140 %}
+                          <a class="small text-decoration-none eng-see-more"
+                             role="button"
+                             tabindex="0"
+                             data-eng-toggle="1"
+                             data-target="{{ desc_id }}">
+                            See more
+                          </a>
                         {% endif %}
                       </td>
   
@@ -952,12 +975,10 @@
 </div>         <!-- /outer card-body -->
 </div>         <!-- /outer card -->
 
-{% include "tasks/form_modal.html" %}
 {% endblock %}
 
     
 {% block extra_scripts %}
-    <script src="{{ url_for('static', filename='js/task_form.js') }}"></script>
     <script>
       (function () {
         const searchInput = document.getElementById("assocSearch");
@@ -1082,6 +1103,48 @@
         sync();
       });
     </script>
+    <script>
+    (function () {
+      const contactForm = document.getElementById("contactForm");
+      if (!contactForm) return;
+    
+      let isDirty = false;
+    
+      contactForm.addEventListener("input", function (e) {
+        const t = e.target;
+        if (!t) return;
+        if (t.tagName === "BUTTON") return;
+        isDirty = true;
+      });
+    
+      contactForm.addEventListener("submit", function () {
+        isDirty = false;
+      });
+    
+      function guardIfDirty(e) {
+        if (!isDirty) return;
+    
+        const ok = window.confirm(
+          "You have unsaved changes to this contact. Click Cancel to go back and save first. If you continue, your unsaved changes will be lost."
+        );
+    
+        if (!ok) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    
+      document.querySelectorAll(".js-secondary-submit").forEach(function (el) {
+        el.addEventListener("click", guardIfDirty);
+      });
+    
+      document.querySelectorAll("form").forEach(function (f) {
+        if (f === contactForm) return;
+        f.addEventListener("submit", guardIfDirty);
+      });
+    })();
+    </script>
+    
     
 {% endblock %}
   

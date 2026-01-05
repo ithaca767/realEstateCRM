@@ -224,14 +224,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const body = modalEl.querySelector(".modal-body");
     if (!body) return;
 
-    body.innerHTML = "Loading...";
+    body.innerHTML = '<div class="text-muted">Loading...</div>';
 
     const url =
       "/tasks/new?modal=1" +
-      "&contact_id=" +
-      encodeURIComponent(contactId) +
-      "&next=" +
-      encodeURIComponent(nextUrl);
+      "&contact_id=" + encodeURIComponent(contactId) +
+      "&next=" + encodeURIComponent(nextUrl);
 
     try {
       const resp = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
@@ -239,9 +237,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       body.innerHTML = await resp.text();
 
-      // After injecting the form HTML, bind behaviors to that DOM.
+      // After injecting the form HTML, bind task form behaviors to that DOM.
       if (window.initTaskFormEnhancements) {
         window.initTaskFormEnhancements();
+      }
+
+      // After injecting, bind engagement "See more" toggles if any exist in this DOM.
+      if (window.bindEngagementSeeMore) {
+        window.bindEngagementSeeMore(body);
       }
     } catch (err) {
       console.error(err);
@@ -249,9 +252,11 @@ document.addEventListener("DOMContentLoaded", () => {
         '<div class="alert alert-danger mb-0">' +
         "Could not load the task form. Please refresh and try again." +
         "</div>";
-    }    
+    }
   });
 });
+
+// Bootstrap modal focus warning fix: return focus to the trigger button
 (function () {
   const modalEl = document.getElementById("taskModal");
   if (!modalEl) return;
@@ -271,4 +276,39 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     lastTrigger = null;
   });
+})();
+
+// Engagement "See more / See less" toggle binder
+(function () {
+  function bindEngagementSeeMore(root) {
+    const scope = root || document;
+
+    scope.querySelectorAll('[data-eng-toggle="1"]').forEach((btn) => {
+      if (btn.dataset.bound === "1") return;
+      btn.dataset.bound = "1";
+
+      btn.addEventListener("click", () => {
+        const targetId = btn.getAttribute("data-target");
+        if (!targetId) return;
+
+        const desc = document.getElementById(targetId);
+        if (!desc) return;
+
+        const isClamped = desc.classList.contains("is-clamped");
+        if (isClamped) {
+          desc.classList.remove("is-clamped");
+          btn.textContent = "See less";
+        } else {
+          desc.classList.add("is-clamped");
+          btn.textContent = "See more";
+        }
+      });
+    });
+  }
+
+  // Expose for cases where we inject HTML and want to bind within that subtree.
+  window.bindEngagementSeeMore = bindEngagementSeeMore;
+
+  // Bind on initial page load
+  document.addEventListener("DOMContentLoaded", () => bindEngagementSeeMore(document));
 })();

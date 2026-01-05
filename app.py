@@ -8,6 +8,7 @@ from version import APP_VERSION
 from functools import wraps
 from datetime import date, datetime, timedelta, time, timezone
 from math import ceil
+from typing import Optional
 
 from engagements import (
     list_engagements_for_contact,
@@ -62,6 +63,10 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
+
+@app.template_filter("phone_display")
+def phone_display_filter(v):
+    return format_phone_display(v or "")
 
 @app.context_processor
 def inject_app_globals():
@@ -185,8 +190,46 @@ def truthy_checkbox(value):
 def normalize_email(email: str) -> str:
     return (email or "").strip().lower()
 
-def normalize_phone(phone: str) -> str:
-    return (phone or "").strip()
+import re
+
+def normalize_phone(phone: Optional[str]) -> Optional[str]:
+    """
+    Normalize a US phone number to E.164 (+1##########) when possible.
+    Returns None for blank input so DB stores NULL.
+    For non-US / unrecognized lengths, returns trimmed original string.
+    """
+    s = (phone or "").strip()
+    if not s:
+        return None
+
+    has_plus = s.startswith("+")
+    digits = re.sub(r"\D", "", s)
+
+    # US: 10 digits or 11 starting with 1
+    if len(digits) == 11 and digits.startswith("1"):
+        return "+1" + digits[1:]
+    if len(digits) == 10:
+        return "+1" + digits
+
+    # If user included + and we have digits, keep it like +<digits>
+    if has_plus and digits:
+        return "+" + digits
+
+    # Fallback: keep as typed (trimmed)
+    return s
+
+def format_phone_display(phone: str) -> str:
+    """
+    Display US E.164 +1########## as 732-555-1212.
+    Otherwise return the trimmed original.
+    """
+    s = (phone or "").strip()
+    m = re.fullmatch(r"\+1(\d{10})", s)
+    if not m:
+        return s
+
+    d = m.group(1)
+    return f"{d[0:3]}-{d[3:6]}-{d[6:10]}"
 
 def parse_int_or_none(value):
     """
@@ -361,7 +404,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS buyer_properties (
                 id SERIAL PRIMARY KEY,
                 buyer_profile_id INTEGER NOT NULL REFERENCES buyer_profiles(id) ON DELETE CASCADE,
-                address_line TEXT NOT NULL,
+                address_line TEXT,
                 city TEXT,
                 state TEXT,
                 postal_code TEXT,
@@ -2796,7 +2839,7 @@ def dashboard():
             FROM engagements e
             WHERE e.contact_id = c.id
             {engagements_scope_sql}
-            ORDER BY e.occurred_at DESC
+            ORDER BY e.occurred_at DESC NULLS LAST, e.id DESC
             LIMIT 1
         ) le ON TRUE
 
@@ -2921,27 +2964,41 @@ def dashboard():
         row["active_reasons"] = badges
         active_contacts.append(row)
 
-    # Recent engagements feed (last 10)
+    # Recent engagements feed: last engagement for up to 10 contacts
     recent_sql = f"""
-        SELECT
-            e.id,
-            e.contact_id,
-            c.name AS contact_name,
-            e.engagement_type,
-            e.occurred_at,
-            e.outcome,
-            e.summary_clean
-        FROM engagements e
-        JOIN contacts c ON c.id = e.contact_id
-        WHERE {contacts_scope_sql}
-        {"AND e.user_id = %s" if engagements_has_user else ""}
-        ORDER BY e.occurred_at DESC
+        SELECT *
+        FROM (
+            SELECT DISTINCT ON (e.contact_id)
+                e.id,
+                e.contact_id,
+                COALESCE(
+                    NULLIF(TRIM(c.name), ''),
+                    NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
+                    '(Unnamed)'
+                ) AS contact_name,
+                e.engagement_type,
+                e.occurred_at,
+                e.outcome,
+                e.summary_clean
+            FROM engagements e
+            JOIN contacts c ON c.id = e.contact_id
+            WHERE {contacts_scope_sql}
+            {"AND e.user_id = %s" if engagements_has_user else ""}
+            ORDER BY
+                e.contact_id,
+                e.occurred_at DESC NULLS LAST,
+                e.id DESC
+        ) t
+        ORDER BY
+            t.occurred_at DESC NULLS LAST,
+            t.id DESC
         LIMIT 10
     """
     recent_params = []
     recent_params += list(contacts_scope_params)
     if engagements_has_user:
         recent_params += [current_user.id]
+    
     cur.execute(recent_sql, tuple(recent_params))
     recent_engagements = cur.fetchall()
 
@@ -3222,7 +3279,7 @@ def add_contact():
         "first_name": first_name,
         "last_name": last_name,
         "email": (request.form.get("email") or "").strip(),
-        "phone": (request.form.get("phone") or "").strip(),
+        "phone": normalize_phone(request.form.get("phone")),
         "lead_type": (request.form.get("lead_type") or "").strip(),
         "pipeline_stage": (request.form.get("pipeline_stage") or "").strip(),
         "priority": (request.form.get("priority") or "").strip(),
@@ -3328,7 +3385,7 @@ def edit_contact(contact_id):
             "first_name": first_name,
             "last_name": last_name,
             "email": (request.form.get("email") or "").strip(),
-            "phone": (request.form.get("phone") or "").strip(),
+            "phone": normalize_phone(request.form.get("phone")),
             "lead_type": (request.form.get("lead_type") or "").strip(),
             "pipeline_stage": (request.form.get("pipeline_stage") or "").strip(),
             "priority": (request.form.get("priority") or "").strip(),
@@ -3694,7 +3751,7 @@ def create_and_associate_contact(contact_id):
     last_name = (request.form.get("last_name") or "").strip()
     full_name = f"{first_name} {last_name}".strip()
     email = (request.form.get("email") or "").strip()
-    phone = (request.form.get("phone") or "").strip()
+    phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
     relationship_type = (request.form.get("relationship_type") or "").strip() or None
     next_url = request.form.get("next") or url_for("edit_contact", contact_id=contact_id)
 
@@ -4053,27 +4110,19 @@ def edit_engagement(engagement_id):
         transcript_raw = (request.form.get("transcript_raw") or "").strip() or None
         summary_clean = (request.form.get("summary_clean") or "").strip() or None
 
-        # Occurred_at parsing
-        occurred_date = (request.form.get("occurred_date") or "").strip()
-        time_hour = (request.form.get("time_hour") or "").strip()
-        time_minute = (request.form.get("time_minute") or "").strip()
-        time_ampm = (request.form.get("time_ampm") or "").strip()
-
-        if occurred_date:
-            dt = datetime.strptime(occurred_date, "%Y-%m-%d")
-            if time_hour and time_minute and time_ampm:
-                h = int(time_hour)
-                m = int(time_minute)
-                if time_ampm.upper() == "PM" and h != 12:
-                    h += 12
-                if time_ampm.upper() == "AM" and h == 12:
-                    h = 0
-                occurred_at = dt.replace(hour=h, minute=m)
-            else:
-                occurred_at = dt
+        # Occurred_at parsing (from datetime-local input)
+        occurred_raw = (request.form.get("occurred_at") or "").strip()
+        
+        if occurred_raw:
+            try:
+                occurred_at = datetime.fromisoformat(occurred_raw)
+            except ValueError:
+                flash("Invalid engagement date/time.", "warning")
+                occurred_at = e["occurred_at"]
         else:
+            # Preserve existing value if nothing submitted
             occurred_at = e["occurred_at"]
-
+        
         # Follow-up parsing (datetime-local: follow_up_due_at = "2026-01-01T14:30")
         requires_follow_up = (request.form.get("requires_follow_up") == "on")
         follow_up_completed = (request.form.get("follow_up_completed") == "on")
@@ -4952,7 +5001,7 @@ def add_related(contact_id):
     related_name = (request.form.get("related_name") or "").strip()
     relationship = (request.form.get("relationship") or "").strip()
     email = (request.form.get("related_email") or "").strip()
-    phone = (request.form.get("related_phone") or "").strip()
+    phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
     notes = (request.form.get("related_notes") or "").strip()
 
     if not related_name:
@@ -5306,7 +5355,7 @@ def professionals():
     if request.method == "POST":
         name = request.form.get("name")
         company = request.form.get("company")
-        phone = request.form.get("phone")
+        phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
         email = request.form.get("email")
         category = request.form.get("category")
         grade = request.form.get("grade")
@@ -5344,7 +5393,7 @@ def edit_professional(prof_id):
     if request.method == "POST":
         name = request.form.get("name")
         company = request.form.get("company")
-        phone = request.form.get("phone")
+        phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
         email = request.form.get("email")
         category = request.form.get("category")
         grade = request.form.get("grade")
@@ -5508,19 +5557,19 @@ def seller_profile(contact_id):
         # Professionals - Attorney
         seller_attorney_name = (request.form.get("seller_attorney_name") or "").strip()
         seller_attorney_email = (request.form.get("seller_attorney_email") or "").strip()
-        seller_attorney_phone = (request.form.get("seller_attorney_phone") or "").strip()
+        seller_attorney_phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
         seller_attorney_referred = bool(request.form.get("seller_attorney_referred"))
 
         # Professionals - Lender
         seller_lender_name = (request.form.get("seller_lender_name") or "").strip()
         seller_lender_email = (request.form.get("seller_lender_email") or "").strip()
-        seller_lender_phone = (request.form.get("seller_lender_phone") or "").strip()
+        seller_lender_phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
         seller_lender_referred = bool(request.form.get("seller_lender_referred"))
 
         # Professionals - Home Inspector
         seller_inspector_name = (request.form.get("seller_inspector_name") or "").strip()
         seller_inspector_email = (request.form.get("seller_inspector_email") or "").strip()
-        seller_inspector_phone = (request.form.get("seller_inspector_phone") or "").strip()
+        seller_inspector_phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
         seller_inspector_referred = bool(request.form.get("seller_inspector_referred"))
 
         # Other professionals
@@ -6375,7 +6424,7 @@ def openhouse_public_signin(token):
         first_name = (request.form.get("first_name") or "").strip()
         last_name = (request.form.get("last_name") or "").strip()
         email = normalize_email(request.form.get("email"))
-        phone = normalize_phone(request.form.get("phone"))
+        phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
 
         working_with_agent = request.form.get("working_with_agent")
         if working_with_agent == "yes":
@@ -6386,7 +6435,7 @@ def openhouse_public_signin(token):
             working_with_agent_bool = None
 
         agent_name = (request.form.get("agent_name") or "").strip() or None
-        agent_phone = (request.form.get("agent_phone") or "").strip() or None
+        agent_phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
         agent_brokerage = (request.form.get("agent_brokerage") or "").strip() or None
 
         # Optional bullets (must remain below agent question in template)

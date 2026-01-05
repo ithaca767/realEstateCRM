@@ -86,4 +86,24 @@ a.tx-address {
   text-decoration: underline;
 }
 
+/* Engagement text clamp + toggle */
+.eng-desc {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.eng-desc.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.eng-desc.clamp-2 { -webkit-line-clamp: 2; }
+.eng-desc.clamp-3 { -webkit-line-clamp: 3; }
+
+.eng-see-more {
+  cursor: pointer;
+  user-select: none;
+}
+
 

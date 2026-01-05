@@ -112,7 +112,8 @@
               <tr>
                 <td>{{ full_name or 'Untitled' }}</td>
                 <td>{{ c["email"] }}</td>
-                <td>{{ c["phone"] }}</td>
+                <td>{{ c['phone']|phone_display }}
+</td>
                 <td>
                   {{ c["lead_type"] or '' }}
                   {% if c["pipeline_stage"] %}
