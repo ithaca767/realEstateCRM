@@ -7720,6 +7720,9 @@ def templates_index():
     where = []
     params = []
 
+    # Always hide archived templates by default
+    where.append("archived_at IS NULL")
+
     if q:
         where.append("(title ILIKE %s OR body ILIKE %s OR notes ILIKE %s)")
         like = f"%{q}%"
@@ -7743,12 +7746,24 @@ def templates_index():
     conn = conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("SELECT DISTINCT category FROM templates ORDER BY category ASC;")
+    cur.execute("""
+        SELECT DISTINCT category
+        FROM templates
+        WHERE archived_at IS NULL
+        ORDER BY category ASC;
+    """)
     categories = [r["category"] for r in cur.fetchall()]
 
     cur.execute(
         f"""
-        SELECT id, title, category, delivery_type, is_locked, updated_at
+        SELECT
+            id,
+            title,
+            category,
+            delivery_type,
+            is_locked,
+            created_at,
+            updated_at
         FROM templates
         {where_sql}
         ORDER BY updated_at DESC, id DESC;
