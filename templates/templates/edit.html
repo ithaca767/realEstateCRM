@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Page header (Contacts style) -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    {% if mode == "new" %}
+      <h2 class="mb-0">New Template</h2>
+      <div class="text-muted">Create a reusable message you can copy and paste to clients.</div>
+    {% else %}
+      <h2 class="mb-0">Edit Template</h2>
+      <div class="text-muted">Update draft content and lock it when canonical.</div>
+    {% endif %}
+  </div>
+
+  <div class="d-flex gap-2">
+    {% if mode == "edit" %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('templates_view', template_id=t.id) }}">Back</a>
+    {% else %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('templates_index') }}">Back</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Main panel card (Contacts style) -->
+<div class="card mt-3">
+  <div class="card-body">
+
+    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+      <div class="fw-semibold">Template Details</div>
+      <div class="small text-muted">
+        Allowed tokens:
+        <code>{{"{{client_name}}"}}</code>,
+        <code>{{"{{agent_name}}"}}</code>,
+        <code>{{"{{brokerage_footer}}"}}</code>
+      </div>
+    </div>
+
+    <form method="post">
+      <div class="row g-3">
+
+        <div class="col-md-6">
+          <label class="form-label">Title</label>
+          <input class="form-control" name="title" value="{{ t.title if t else '' }}" required>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Category</label>
+          <input id="categoryInput" class="form-control" name="category" value="{{ t.category if t else 'General' }}">
+
+          <div class="form-text mt-2">
+            Suggested categories:
+            <span class="d-inline-flex flex-wrap gap-2 mt-1">
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setCategory('Buyer – Onboarding')">Buyer – Onboarding</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setCategory('Buyer – Active Search')">Buyer – Active Search</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setCategory('Buyer – Under Contract')">Buyer – Under Contract</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setCategory('Seller – Onboarding')">Seller – Onboarding</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setCategory('Seller – Active Listing')">Seller – Active Listing</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setCategory('Contract / Legal')">Contract / Legal</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setCategory('Closing')">Closing</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setCategory('Past Client')">Past Client</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setCategory('General')">General</button>
+            </span>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Delivery Type</label>
+          <select class="form-select" name="delivery_type">
+            {% set dt = (t.delivery_type if t else 'either') %}
+            <option value="either" {% if dt == "either" %}selected{% endif %}>Either</option>
+            <option value="email" {% if dt == "email" %}selected{% endif %}>Email</option>
+            <option value="text" {% if dt == "text" %}selected{% endif %}>Text</option>
+          </select>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">Body</label>
+          <textarea class="form-control" name="body" rows="12">{{ t.body if t else '' }}</textarea>
+          <div class="form-text">
+            Use tokens where needed. Example: “Hi {{'{{client_name}}'}}”.
+          </div>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">Internal Notes</label>
+          <textarea class="form-control" name="notes" rows="5">{{ t.notes if t else '' }}</textarea>
+          <div class="form-text">
+            Optional. Include when to use this template and any guardrails.
+          </div>
+        </div>
+
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+        <div>
+          {% if mode == "edit" %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('templates_view', template_id=t.id) }}">Cancel</a>
+          {% else %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('templates_index') }}">Cancel</a>
+          {% endif %}
+        </div>
+
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-primary" type="submit">Save</button>
+        </div>
+      </div>
+
+    </form>
+
+  </div>
+</div>
+
+<script>
+function setCategory(value) {
+  const input = document.getElementById('categoryInput');
+  if (input) {
+    input.value = value;
+    input.focus();
+  }
+}
+</script>
+
+{% endblock %}

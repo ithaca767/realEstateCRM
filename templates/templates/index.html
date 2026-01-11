@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Templates</h2>
+    <div class="text-muted">
+      Reusable client messaging templates. Draft or lock when canonical.
+    </div>
+  </div>
+
+  <a class="btn btn-success" href="{{ url_for('templates_new') }}">
+    + New Template
+  </a>
+</div>
+
+<!-- Templates panel: tabs + search/filters + table -->
+<div class="card mt-3">
+  <div class="card-body">
+
+    <!-- Tabs + search/filters -->
+    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+
+      <!-- Tabs (match Contacts style) -->
+      <ul class="nav nav-tabs border-0">
+        {% set tab = request.args.get("tab", "all") %}
+        {% set qv = q or "" %}
+        {% set cat = selected_category or "" %}
+        {% set dt = selected_delivery_type or "" %}
+        {% set st = selected_status or "" %}
+
+        <li class="nav-item">
+          <a class="nav-link {% if tab == 'all' %}active{% endif %}"
+             href="{{ url_for('templates_index', tab='all', q=qv, category=cat, delivery_type=dt, status=st) }}">
+            All
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link {% if tab == 'draft' %}active{% endif %}"
+             href="{{ url_for('templates_index', tab='draft', q=qv, category=cat, delivery_type=dt, status='draft') }}">
+            Draft
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link {% if tab == 'locked' %}active{% endif %}"
+             href="{{ url_for('templates_index', tab='locked', q=qv, category=cat, delivery_type=dt, status='locked') }}">
+            Locked
+          </a>
+        </li>
+      </ul>
+
+      <!-- Search + filters (right side, like Contacts) -->
+      <form class="d-flex ms-3" method="get" action="{{ url_for('templates_index') }}">
+        <input type="hidden" name="tab" value="{{ tab }}">
+
+        <input
+          class="form-control form-control-sm"
+          type="search"
+          name="q"
+          placeholder="Search templates"
+          value="{{ q }}"
+          aria-label="Search"
+        >
+
+        <select class="form-select form-select-sm ms-2" name="category" style="max-width: 180px;">
+          <option value="">All categories</option>
+          {% for c in categories %}
+            <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+
+        <select class="form-select form-select-sm ms-2" name="delivery_type" style="max-width: 140px;">
+          <option value="">All delivery</option>
+          <option value="either" {% if selected_delivery_type == "either" %}selected{% endif %}>Either</option>
+          <option value="email" {% if selected_delivery_type == "email" %}selected{% endif %}>Email</option>
+          <option value="text" {% if selected_delivery_type == "text" %}selected{% endif %}>Text</option>
+        </select>
+
+        <button class="btn btn-sm btn-outline-secondary ms-2" type="submit">
+          Search
+        </button>
+      </form>
+    </div>
+
+    <!-- Info line (match Contacts style) -->
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <small class="text-muted">
+        Showing {{ templates|length }} template{{ '' if templates|length == 1 else 's' }}
+      </small>
+    </div>
+
+    <!-- Templates table -->
+    <div class="table-responsive">
+      <table class="table table-hover table-sm mb-0 align-middle contacts-table">
+        <thead class="table-light">
+          <tr>
+            <th>Title</th>
+            <th>Category</th>
+            <th>Delivery</th>
+            <th>Status</th>
+            <th class="text-end">Updated</th>
+            <th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if templates %}
+            {% for t in templates %}
+              <tr>
+                <td class="fw-semibold">
+                  {{ t.title }}
+                </td>
+                <td>{{ t.category }}</td>
+                <td class="text-capitalize">{{ t.delivery_type }}</td>
+                <td>
+                  {% if t.is_locked %}
+                    <span class="badge bg-success">Locked</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Draft</span>
+                  {% endif %}
+                </td>
+                <td class="text-end text-muted">
+                  {{ t.updated_at.strftime("%Y-%m-%d %I:%M %p") if t.updated_at else "" }}
+                </td>
+                <td class="text-end">
+                  <a href="{{ url_for('templates_view', template_id=t.id) }}"
+                     class="btn btn-sm btn-primary">
+                    Open
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" class="text-center text-muted p-4">
+                No templates yet.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
