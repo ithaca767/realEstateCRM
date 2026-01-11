@@ -9,6 +9,9 @@ from functools import wraps
 from datetime import date, datetime, timedelta, time, timezone
 from math import ceil
 from typing import Optional
+from zoneinfo import ZoneInfo
+NY = ZoneInfo("America/New_York")
+
 
 from engagements import (
     list_engagements_for_contact,
@@ -53,6 +56,7 @@ from tasks import (
     snooze_task,
     reopen_task,
     cancel_task,
+    delete_task,
 )
 
 from urllib.parse import urlparse, urljoin
@@ -152,6 +156,24 @@ class User(UserMixin):
         return bool(self._is_active)
 
 
+def parse_12h_time_to_24h(hour_str, minute_str, ampm_str, default_hour=9, default_minute=0):
+    hour_str = (hour_str or "").strip()
+    minute_str = (minute_str or "").strip()
+    ampm = (ampm_str or "").strip().upper()
+
+    if not hour_str or not minute_str or ampm not in ("AM", "PM"):
+        return default_hour, default_minute
+
+    hour12 = int(hour_str)
+    minute = int(minute_str)
+
+    if ampm == "AM":
+        hour24 = 0 if hour12 == 12 else hour12
+    else:  # PM
+        hour24 = 12 if hour12 == 12 else hour12 + 12
+
+    return hour24, minute
+
 @login_manager.user_loader
 def load_user(user_id):
     conn = get_db()
@@ -189,8 +211,6 @@ def truthy_checkbox(value):
 
 def normalize_email(email: str) -> str:
     return (email or "").strip().lower()
-
-import re
 
 def normalize_phone(phone: Optional[str]) -> Optional[str]:
     """
@@ -537,27 +557,37 @@ def get_contact_associations(conn, user_id, contact_id):
         SELECT
           ca.id,
           ca.relationship_type,
+          ca.notes,
+
           CASE
             WHEN ca.contact_id_primary = %s THEN ca.contact_id_related
             ELSE ca.contact_id_primary
           END AS other_contact_id,
-          c.name AS other_name,
+
+          COALESCE(
+            NULLIF(TRIM(c.name), ''),
+            NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
+            '(Unnamed)'
+          ) AS other_name,
+
           c.email AS other_email,
           c.phone AS other_phone
+
         FROM contact_associations ca
         JOIN contacts c
           ON c.id = CASE
             WHEN ca.contact_id_primary = %s THEN ca.contact_id_related
             ELSE ca.contact_id_primary
           END
+
         WHERE ca.user_id = %s
           AND (ca.contact_id_primary = %s OR ca.contact_id_related = %s)
-        ORDER BY c.name ASC
+
+        ORDER BY other_name ASC
         """,
         (contact_id, contact_id, user_id, contact_id, contact_id),
     )
     return cur.fetchall()
-
 
 def create_contact_association(conn, user_id, contact_id_a, contact_id_b, relationship_type=None):
     """
@@ -614,7 +644,6 @@ PRIORITIES = [
 
 SOURCES = [
     "Referral",
-    "Past client",
     "Online",
     "Open house",
     "Sign call",
@@ -1439,6 +1468,18 @@ EDIT_TEMPLATE = """
                     </div>
                 </div>
             </form>
+            
+            {% if c['archived_at'] %}
+              <div class="alert alert-warning d-flex justify-content-between align-items-center">
+                <div>
+                  <strong>This contact is archived.</strong>
+                  It is excluded from dashboards, active lists, follow-ups, and task defaults.
+                </div>
+                <form method="post" action="{{ url_for('unarchive_contact', contact_id=c['id']) }}" class="mb-0">
+                  <button type="submit" class="btn btn-sm btn-success">Unarchive</button>
+                </form>
+              </div>
+            {% endif %}
 
             <hr>
 
@@ -2636,35 +2677,45 @@ LISTING_CHECKLIST_DEFAULTS = [
 ]
 
 
-def ensure_listing_checklist_initialized(contact_id: int) -> None:
+def ensure_listing_checklist_initialized(user_id: int, contact_id: int) -> None:
     conn = get_db()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    cur.execute(
-        "SELECT 1 FROM listing_checklist_items WHERE contact_id = %s LIMIT 1",
-        (contact_id,)
-    )
-    if cur.fetchone():
+        cur.execute(
+            "SELECT archived_at FROM contacts WHERE id = %s AND user_id = %s",
+            (contact_id, user_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return
+        if row["archived_at"] is not None:
+            return
+
+        cur.execute(
+            "SELECT 1 FROM listing_checklist_items WHERE contact_id = %s LIMIT 1",
+            (contact_id,),
+        )
+        if cur.fetchone():
+            return
+
+        today = date.today()
+        rows = []
+        for item_key, label, offset in LISTING_CHECKLIST_DEFAULTS:
+            due = today + timedelta(days=offset) if isinstance(offset, int) else None
+            rows.append((contact_id, item_key, label, due))
+
+        cur.executemany(
+            """
+            INSERT INTO listing_checklist_items (contact_id, item_key, label, due_date)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (contact_id, item_key) DO NOTHING
+            """,
+            rows,
+        )
+        conn.commit()
+    finally:
         conn.close()
-        return
-
-    today = date.today()
-    rows = []
-    for item_key, label, offset in LISTING_CHECKLIST_DEFAULTS:
-        due = today + timedelta(days=offset) if isinstance(offset, int) else None
-        rows.append((contact_id, item_key, label, due))
-
-    cur.executemany(
-        """
-        INSERT INTO listing_checklist_items (contact_id, item_key, label, due_date)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (contact_id, item_key) DO NOTHING
-        """,
-        rows
-    )
-
-    conn.commit()
-    conn.close()
 
 def get_listing_checklist(contact_id: int):
     conn = get_db()
@@ -2686,6 +2737,36 @@ def get_listing_checklist(contact_id: int):
     total = len(rows)
     complete = sum(1 for r in rows if r["is_complete"])
     return rows, complete, total
+
+def _ics_escape(s: str) -> str:
+    return (s or "").replace("\\", "\\\\").replace("\r\n", "\\n").replace("\n", "\\n").replace(",", "\\,").replace(";", "\\;")
+
+def build_ics_event(title, description, start_dt, tzid="America/New_York", duration_minutes=15, uid=None):
+    dtstamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    dtstart = start_dt.strftime("%Y%m%dT%H%M%S")
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Ulysses CRM//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        f"UID:{_ics_escape(uid)}",
+        f"DTSTAMP:{dtstamp}",
+        f"SUMMARY:{_ics_escape(title)}",
+    ]
+
+    if description:
+        lines.append(f"DESCRIPTION:{_ics_escape(description)}")
+
+    lines.append(f"DTSTART;TZID={tzid}:{dtstart}")
+    lines.append(f"DURATION:PT{int(duration_minutes)}M")
+    lines.append("STATUS:CONFIRMED")
+    lines.append("END:VEVENT")
+    lines.append("END:VCALENDAR")
+
+    return "\r\n".join(lines) + "\r\n"
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -2963,6 +3044,61 @@ def dashboard():
 
         row["active_reasons"] = badges
         active_contacts.append(row)
+    
+    PAST_CLIENT_LIMIT = 25
+    
+    past_clients_sql = f"""
+        SELECT
+            c.id AS contact_id,
+            c.name,
+            c.first_name,
+            c.last_name,
+            c.next_follow_up,
+            c.next_follow_up_time,
+            c.priority,
+            c.target_area,
+    
+            le.occurred_at AS last_engagement_at,
+            le.engagement_type AS last_engagement_type,
+            le.outcome AS last_engagement_outcome,
+            le.summary_clean AS last_engagement_summary
+    
+        FROM contacts c
+    
+        LEFT JOIN LATERAL (
+            SELECT e.occurred_at, e.engagement_type, e.outcome, e.summary_clean
+            FROM engagements e
+            WHERE e.contact_id = c.id
+            {engagements_scope_sql}
+            ORDER BY e.occurred_at DESC NULLS LAST, e.id DESC
+            LIMIT 1
+        ) le ON TRUE
+    
+        WHERE {contacts_scope_sql}
+          AND c.archived_at IS NULL
+          AND c.pipeline_stage = %s
+    
+        ORDER BY
+          (CASE WHEN c.next_follow_up IS NULL THEN 1 ELSE 0 END),
+          c.next_follow_up ASC NULLS LAST,
+          le.occurred_at DESC NULLS LAST,
+          c.name ASC
+    
+        LIMIT %s
+    """
+    
+    past_clients_params = []
+    past_clients_params += list(contacts_scope_params)
+    
+    # LATERAL engagement scope
+    past_clients_params += list(engagements_scope_params)
+    
+    # pipeline stage + limit
+    past_clients_params += ["Past Client / Relationship", PAST_CLIENT_LIMIT]
+    
+    cur.execute(past_clients_sql, tuple(past_clients_params))
+    past_clients = cur.fetchall() or []
+
 
     # Recent engagements feed: last engagement for up to 10 contacts
     recent_sql = f"""
@@ -2976,6 +3112,7 @@ def dashboard():
                     NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
                     '(Unnamed)'
                 ) AS contact_name,
+                c.pipeline_stage,
                 e.engagement_type,
                 e.occurred_at,
                 e.outcome,
@@ -2983,6 +3120,7 @@ def dashboard():
             FROM engagements e
             JOIN contacts c ON c.id = e.contact_id
             WHERE {contacts_scope_sql}
+              AND c.archived_at IS NULL
             {"AND e.user_id = %s" if engagements_has_user else ""}
             ORDER BY
                 e.contact_id,
@@ -3102,6 +3240,7 @@ def dashboard():
     return render_template(
         "dashboard.html",
         active_contacts=active_contacts,
+        past_clients=past_clients,
         recent_engagements=recent_engagements,
         followups_overdue=followups_overdue,
         followups_upcoming=followups_upcoming,
@@ -3138,15 +3277,36 @@ def contacts():
     PAGE_SIZE = 10
     offset = (page - 1) * PAGE_SIZE
 
+    show_archived = request.args.get("show_archived", "").strip() in ("1", "true", "yes", "on")
+
+    # Query params
+    tab = (request.args.get("tab") or "all").lower()
+    search = (request.args.get("q") or "").strip()
+    show_archived = request.args.get("show_archived", "").strip() in ("1", "true", "yes", "on")
+    
+    try:
+        page = int(request.args.get("page", 1))
+        if page < 1:
+            page = 1
+    except ValueError:
+        page = 1
+    
+    PAGE_SIZE = 10
+    offset = (page - 1) * PAGE_SIZE
+    
     # Build WHERE clause parts
     where_clauses = []
     params = []
-
-    # Tabs mapped to your existing schema:
-    # Buyers  -> lead_type = "Buyer"
-    # Sellers -> lead_type = "Seller"
-    # Leads   -> pipeline_stage in ["New lead", "Nurture", "Active", "Under contract", "Closed", "Lost"]
-    # Past Clients -> pipeline_stage = "Past Client / Relationship"
+    
+    # Always scope by user
+    where_clauses.append("user_id = %s")
+    params.append(current_user.id)
+    
+    # Phase 6a default: exclude archived contacts unless explicitly requested
+    if not show_archived:
+        where_clauses.append("archived_at IS NULL")
+    
+    # Tabs mapped to your existing schema
     if tab == "buyers":
         where_clauses.append("lead_type = %s")
         params.append("Buyer")
@@ -3168,9 +3328,8 @@ def contacts():
     elif tab == "past_clients":
         where_clauses.append("pipeline_stage = %s")
         params.append("Past Client / Relationship")
-    # tab == "all" has no extra filter
-
-    # Search filter (name / email / phone / notes)
+    
+    # Search filter
     if search:
         where_clauses.append("""
             (
@@ -3184,8 +3343,8 @@ def contacts():
         """)
         like_value = f"%{search}%"
         params.extend([like_value] * 6)
+        where_sql = ""
 
-    where_sql = ""
     if where_clauses:
         where_sql = "WHERE " + " AND ".join(where_clauses)
 
@@ -3212,7 +3371,8 @@ def contacts():
             phone,
             lead_type,
             pipeline_stage,
-            notes
+            notes,
+            archived_at
         FROM contacts
         {where_sql}
         ORDER BY last_name NULLS LAST, first_name NULLS LAST, id ASC
@@ -3236,32 +3396,23 @@ def contacts():
         pipeline_stages=pipeline_stages,
         priorities=priorities,
         sources=sources,
+        show_archived=show_archived,
         today=today,
     )
 
 def parse_follow_up_time_from_form():
-    hour = request.form.get("next_follow_up_hour")
-    minute = request.form.get("next_follow_up_minute")
-    ampm = request.form.get("next_follow_up_ampm")
+    hour24, minute = parse_12h_time_to_24h(
+        request.form.get("next_follow_up_hour"),
+        request.form.get("next_follow_up_minute"),
+        request.form.get("next_follow_up_ampm"),
+        default_hour=None,
+        default_minute=None,
+    )
 
-    # If any field is missing or blank, return None
-    if not hour or not minute or not ampm:
+    if hour24 is None or minute is None:
         return None
 
-    try:
-        hour = int(hour)
-        minute = int(minute)
-
-        # Convert to 24-hour time
-        if ampm == "PM" and hour != 12:
-            hour += 12
-        elif ampm == "AM" and hour == 12:
-            hour = 0
-
-        return time(hour, minute)
-    except:
-        return None
-
+    return time(hour24, minute)
 
 @app.route("/add", methods=["POST"])
 @login_required
@@ -3459,7 +3610,33 @@ def edit_contact(contact_id):
     # -------------------------
     # GET: load contact page
     # -------------------------
-    cur.execute("SELECT * FROM contacts WHERE id = %s AND user_id = %s", (contact_id, current_user.id))
+    cur.execute(
+        """
+        SELECT
+          id,
+          first_name,
+          last_name,
+          name,
+          email,
+          phone,
+          lead_type,
+          pipeline_stage,
+          priority,
+          source,
+          current_address,
+          current_city,
+          current_state,
+          current_zip,
+          last_contacted,
+          next_follow_up,
+          next_follow_up_time,
+          notes,
+          archived_at
+        FROM contacts
+        WHERE id = %s AND user_id = %s
+        """,
+        (contact_id, current_user.id),
+    )
     contact = cur.fetchone()
 
     if not contact:
@@ -3467,10 +3644,16 @@ def edit_contact(contact_id):
         return "Contact not found", 404
 
     # Flags to indicate if this contact has buyer/seller profiles
-    cur.execute("SELECT id FROM buyer_profiles WHERE contact_id = %s LIMIT 1", (contact_id,))
+    cur.execute(
+        "SELECT id FROM buyer_profiles WHERE contact_id = %s LIMIT 1",
+        (contact_id,),
+    )
     has_buyer_profile = cur.fetchone() is not None
-
-    cur.execute("SELECT id FROM seller_profiles WHERE contact_id = %s LIMIT 1", (contact_id,))
+    
+    cur.execute(
+        "SELECT id FROM seller_profiles WHERE contact_id = %s LIMIT 1",
+        (contact_id,),
+    )
     has_seller_profile = cur.fetchone() is not None
 
     engagements = list_engagements_for_contact(conn, current_user.id, contact_id, limit=50)
@@ -3479,24 +3662,72 @@ def edit_contact(contact_id):
     cur.execute(
         """
         SELECT
-          id,
-          engagement_type,
-          follow_up_due_at,
-          follow_up_completed,
-          outcome,
-          notes,
-          summary_clean
-        FROM engagements
-        WHERE user_id = %s
-          AND contact_id = %s
-          AND requires_follow_up = TRUE
-          AND follow_up_completed = FALSE
-          AND follow_up_due_at IS NOT NULL
-        ORDER BY follow_up_due_at ASC, id ASC
+          e.id,
+          e.engagement_type,
+          e.follow_up_due_at,
+          e.follow_up_completed,
+          e.outcome,
+          e.notes,
+          e.summary_clean
+        FROM engagements e
+        JOIN contacts c ON c.id = e.contact_id
+        WHERE e.user_id = %s
+          AND e.contact_id = %s
+          AND c.user_id = %s
+          AND e.requires_follow_up = TRUE
+          AND e.follow_up_completed = FALSE
+        ORDER BY e.follow_up_due_at NULLS LAST, e.id ASC
         """,
-        (current_user.id, contact_id),
+        (current_user.id, contact_id, current_user.id),
     )
     followups_for_contact = cur.fetchall() or []
+    
+    def _parse_due_dt(val):
+        if val is None:
+            return None
+        if isinstance(val, datetime):
+            return val
+        if isinstance(val, date):
+            return datetime(val.year, val.month, val.day, 9, 0, 0)
+    
+        s = str(val).strip()
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                # if date-only parses to midnight, leave for now
+                return dt
+            except ValueError:
+                pass
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            return None
+    
+    now = datetime.now(NY)
+    today = now.date()
+    
+    for f in followups_for_contact:
+        due_dt = _parse_due_dt(f.get("follow_up_due_at"))
+    
+        if due_dt and due_dt.tzinfo is None:
+            due_dt = due_dt.replace(tzinfo=now.tzinfo)
+    
+        f["_due_dt"] = due_dt
+    
+        if not due_dt:
+            status = "none"
+        else:
+            due_date = due_dt.date()
+            if due_dt < now:
+                status = "overdue"
+            elif due_date == today:
+                status = "today"
+            elif (due_date - today).days <= 7:
+                status = "soon"
+            else:
+                status = "later"
+    
+        f["_due_status"] = status
 
     # Pre-fill follow-up time selects if we have a stored time
     next_time_hour = None
@@ -3791,7 +4022,182 @@ def create_and_associate_contact(contact_id):
     conn.commit()
     conn.close()
     return redirect(next_url)
-    
+
+def update_contact_association(conn, user_id, assoc_id, contact_id, relationship_type=None, notes=None):
+    relationship_type = (relationship_type or "").strip() or None
+    notes = (notes or "").strip() or None
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE contact_associations
+        SET relationship_type = %s,
+            notes = %s,
+            updated_at = NOW()
+        WHERE user_id = %s
+          AND id = %s
+          AND (contact_id_primary = %s OR contact_id_related = %s)
+        """,
+        (relationship_type, notes, user_id, assoc_id, contact_id, contact_id),
+    )
+    return cur.rowcount > 0
+@app.route("/contacts/<int:contact_id>/associations/<int:assoc_id>/edit", methods=["POST"])
+@login_required
+def edit_contact_association(contact_id, assoc_id):
+    next_post = (request.form.get("next") or "").strip() or url_for("edit_contact", contact_id=contact_id) + "#associations"
+
+    relationship_type = (request.form.get("relationship_type") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+
+    conn = get_db()
+    try:
+        ok = update_contact_association(
+            conn,
+            current_user.id,
+            assoc_id,
+            contact_id,
+            relationship_type=relationship_type,
+            notes=notes,
+        )
+        conn.commit()
+
+        if ok:
+            flash("Association updated.", "success")
+        else:
+            flash("Association not updated.", "warning")
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"Could not update association: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(next_post)
+
+@app.route("/contacts/<int:contact_id>/associations/<int:assoc_id>/update", methods=["POST"])
+@login_required
+def update_contact_association_route(contact_id, assoc_id):
+    next_post = (request.form.get("next") or "").strip() or url_for("edit_contact", contact_id=contact_id) + "#associations"
+
+    relationship_type = (request.form.get("relationship_type") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+
+    conn = get_db()
+    try:
+        ok = update_contact_association(conn, current_user.id, assoc_id, relationship_type, notes)
+        conn.commit()
+        flash("Association updated.", "success" if ok else "warning")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Could not update association: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(next_post)
+
+@app.route("/contacts/<int:contact_id>/associations/<int:association_id>/edit")
+@login_required
+def contact_association_edit(contact_id, association_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Verify master contact ownership
+        cur.execute("SELECT id FROM contacts WHERE id = %s AND user_id = %s", (contact_id, current_user.id))
+        if not cur.fetchone():
+            abort(404)
+
+        # Load association (must belong to this master contact)
+        cur.execute(
+            """
+            SELECT
+              ca.id,
+              ca.contact_id_primary,
+              ca.contact_id_related,
+              ca.relationship,
+              ca.notes,
+              COALESCE(
+                NULLIF(TRIM(c.name), ''),
+                NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
+                '(Unnamed)'
+              ) AS related_name
+            FROM contact_associations ca
+            JOIN contacts c ON c.id = ca.contact_id_related
+            WHERE ca.id = %s
+              AND ca.contact_id_primary = %s
+              AND c.user_id = %s
+            """,
+            (association_id, contact_id, current_user.id),
+        )
+        assoc = cur.fetchone()
+        if not assoc:
+            abort(404)
+
+        return render_template(
+            "contacts/association_edit_modal.html",
+            c_id=contact_id,
+            assoc=assoc,
+        )
+    finally:
+        conn.close()
+
+
+@app.route("/contacts/<int:contact_id>/associations/<int:association_id>/update", methods=["POST"])
+@login_required
+def contact_association_update(contact_id, association_id):
+    # Accept either field name (so you do not get stuck if templates differ)
+    relationship_type = (
+        (request.form.get("relationship_type") or "").strip()
+        or (request.form.get("relationship") or "").strip()
+        or None
+    )
+    notes = (request.form.get("notes") or "").strip() or None
+
+    next_url = (
+        (request.form.get("next") or "").strip()
+        or (url_for("edit_contact", contact_id=contact_id) + "#associations")
+    )
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Verify master contact ownership
+        cur.execute(
+            "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+            (contact_id, current_user.id),
+        )
+        if not cur.fetchone():
+            abort(404)
+
+        # Update the association row (works regardless of which side is primary)
+        cur.execute(
+            """
+            UPDATE contact_associations
+            SET relationship_type = %s,
+                notes = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND user_id = %s
+              AND (contact_id_primary = %s OR contact_id_related = %s)
+            """,
+            (relationship_type or None, notes or None, assoc_id, current_user.id, contact_id, contact_id),
+        )
+
+        if cur.rowcount != 1:
+            conn.rollback()
+            abort(404)
+
+        conn.commit()
+        flash("Association updated.", "success")
+        return redirect(next_url)
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"Could not update association: {e}", "danger")
+        return redirect(next_url)
+    finally:
+        conn.close()
 
 @app.route("/contacts/<int:contact_id>/associations/<int:assoc_id>/delete", methods=["POST"])
 @login_required
@@ -4116,6 +4522,8 @@ def edit_engagement(engagement_id):
         if occurred_raw:
             try:
                 occurred_at = datetime.fromisoformat(occurred_raw)
+                if occurred_at.tzinfo is None:
+                    occurred_at = occurred_at.replace(tzinfo=NY)
             except ValueError:
                 flash("Invalid engagement date/time.", "warning")
                 occurred_at = e["occurred_at"]
@@ -4135,9 +4543,9 @@ def edit_engagement(engagement_id):
         
             if fu_raw:
                 try:
-                    fu_dt = datetime.fromisoformat(fu_raw)  # naive local time from HTML
+                    fu_dt = datetime.fromisoformat(fu_raw)  # naive local time from HTML (NY)
                     if fu_dt.tzinfo is None:
-                        fu_dt = fu_dt.replace(tzinfo=timezone.utc)  # consistent with your dashboard logic
+                        fu_dt = fu_dt.replace(tzinfo=NY)
                     follow_up_due_at = fu_dt
                 except ValueError:
                     flash("Invalid follow-up date/time.", "warning")
@@ -4150,7 +4558,7 @@ def edit_engagement(engagement_id):
                 follow_up_due_at = None
         
             if follow_up_completed:
-                follow_up_completed_at = datetime.now(timezone.utc)
+                follow_up_completed_at = datetime.now(NY)
         else:
             follow_up_due_at = None
             follow_up_completed = False
@@ -4688,7 +5096,9 @@ def tasks_edit(task_id):
                 update_task(cur, current_user.id, task_id, data)
                 conn.commit()
                 flash("Task updated.", "success")
-                return redirect(url_for("tasks_view", task_id=task_id))
+                next_post = (request.form.get("next") or "").strip() or url_for("tasks_list")
+                return redirect(next_post)
+
             except Exception as e:
                 conn.rollback()
                 flash(f"Could not update task: {e}", "danger")
@@ -4937,6 +5347,35 @@ def tasks_cancel(task_id):
 
     return redirect(request.referrer or url_for("tasks_view", task_id=task_id))
 
+@app.route("/tasks/<int:task_id>/delete", methods=["POST"])
+@login_required
+def tasks_delete(task_id):
+    next_post = (request.form.get("next") or "").strip() or url_for("tasks_list")
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # verify ownership first
+        task = get_task(cur, current_user.id, task_id)
+        if not task:
+            abort(404)
+
+        ok = delete_task(cur, current_user.id, task_id)
+        conn.commit()
+
+        if ok:
+            flash("Task deleted.", "success")
+        else:
+            flash("Task not deleted.", "warning")
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"Could not delete task: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(next_post)
 
 @app.route("/add_interaction/<int:contact_id>", methods=["POST"])
 @login_required
@@ -5053,7 +5492,7 @@ def buyer_profile(contact_id):
     cur = conn.cursor()
 
     # Load contact
-    cur.execute("SELECT * FROM contacts WHERE id = %s", (contact_id,))
+    cur.execute("SELECT * FROM contacts WHERE id = %s AND user_id = %s", (contact_id, current_user.id))
     contact = cur.fetchone()
     if not contact:
         conn.close()
@@ -5145,33 +5584,88 @@ def buyer_profile(contact_id):
 
         # Branch 2: saving the main buyer profile
         else:
-            property_type = (request.form.get("property_type") or "").strip()
-            timeframe = (request.form.get("timeframe") or "").strip()
-            preapproval_status = (request.form.get("preapproval_status") or "").strip()
-            lender_name = (request.form.get("lender_name") or "").strip()
-            areas = (request.form.get("areas") or "").strip()
-            property_types = (request.form.get("property_types") or "").strip()
-            referral_source = (request.form.get("referral_source") or "").strip()
-            notes = (request.form.get("notes") or "").strip()
+            # Existing fields
+            property_type = (request.form.get("property_type") or "").strip() or None
+            timeframe = (request.form.get("timeframe") or "").strip() or None
+            preapproval_status = (request.form.get("preapproval_status") or "").strip() or None
+            lender_name = (request.form.get("lender_name") or "").strip() or None
+            areas = (request.form.get("areas") or "").strip() or None
+            property_types = (request.form.get("property_types") or "").strip() or None
+            referral_source = (request.form.get("referral_source") or "").strip() or None
+            notes = (request.form.get("notes") or "").strip() or None
 
             min_price = parse_int_or_none(request.form.get("min_price"))
             max_price = parse_int_or_none(request.form.get("max_price"))
+
+            # Professionals fields (template fields)
+            buyer_attorney_name = (request.form.get("buyer_attorney_name") or "").strip() or None
+            buyer_attorney_email = (request.form.get("buyer_attorney_email") or "").strip() or None
+            buyer_attorney_phone = (request.form.get("buyer_attorney_phone") or "").strip() or None
+            buyer_attorney_referred = truthy_checkbox(request.form.get("buyer_attorney_referred"))
+
+            buyer_lender_email = (request.form.get("buyer_lender_email") or "").strip() or None
+            buyer_lender_phone = (request.form.get("buyer_lender_phone") or "").strip() or None
+            buyer_lender_referred = truthy_checkbox(request.form.get("buyer_lender_referred"))
+
+            buyer_inspector_name = (request.form.get("buyer_inspector_name") or "").strip() or None
+            buyer_inspector_email = (request.form.get("buyer_inspector_email") or "").strip() or None
+            buyer_inspector_phone = (request.form.get("buyer_inspector_phone") or "").strip() or None
+            buyer_inspector_referred = truthy_checkbox(request.form.get("buyer_inspector_referred"))
+
+            other_professionals = (request.form.get("other_professionals") or "").strip() or None
+
+            # Checklist booleans
+            cis_signed = truthy_checkbox(request.form.get("cis_signed"))
+            buyer_agreement_signed = truthy_checkbox(request.form.get("buyer_agreement_signed"))
+            wire_fraud_notice_signed = truthy_checkbox(request.form.get("wire_fraud_notice_signed"))
+            dual_agency_consent_signed = truthy_checkbox(request.form.get("dual_agency_consent_signed"))
+
+            # Additional checklist items you added
+            preapproval_letter_received = truthy_checkbox(request.form.get("preapproval_letter_received"))
+            proof_of_funds_received = truthy_checkbox(request.form.get("proof_of_funds_received"))
+            photo_id_received = truthy_checkbox(request.form.get("photo_id_received"))
 
             if buyer_profile:
                 # Update existing buyer profile
                 cur.execute(
                     """
                     UPDATE buyer_profiles
-                    SET timeframe = %s,
-                        min_price = %s,
-                        max_price = %s,
-                        areas = %s,
-                        property_types = %s,
-                        property_type = %s,
-                        preapproval_status = %s,
-                        lender_name = %s,
-                        referral_source = %s,
-                        notes = %s
+                    SET
+                      timeframe = %s,
+                      min_price = %s,
+                      max_price = %s,
+                      areas = %s,
+                      property_types = %s,
+                      property_type = %s,
+                      preapproval_status = %s,
+                      lender_name = %s,
+                      referral_source = %s,
+                      notes = %s,
+
+                      cis_signed = %s,
+                      buyer_agreement_signed = %s,
+                      wire_fraud_notice_signed = %s,
+                      dual_agency_consent_signed = %s,
+
+                      preapproval_letter_received = %s,
+                      proof_of_funds_received = %s,
+                      photo_id_received = %s,
+
+                      buyer_attorney_name = %s,
+                      buyer_attorney_email = %s,
+                      buyer_attorney_phone = %s,
+                      buyer_attorney_referred = %s,
+
+                      buyer_lender_email = %s,
+                      buyer_lender_phone = %s,
+                      buyer_lender_referred = %s,
+
+                      buyer_inspector_name = %s,
+                      buyer_inspector_email = %s,
+                      buyer_inspector_phone = %s,
+                      buyer_inspector_referred = %s,
+
+                      other_professionals = %s
                     WHERE id = %s
                     """,
                     (
@@ -5185,6 +5679,31 @@ def buyer_profile(contact_id):
                         lender_name,
                         referral_source,
                         notes,
+
+                        cis_signed,
+                        buyer_agreement_signed,
+                        wire_fraud_notice_signed,
+                        dual_agency_consent_signed,
+
+                        preapproval_letter_received,
+                        proof_of_funds_received,
+                        photo_id_received,
+
+                        buyer_attorney_name,
+                        buyer_attorney_email,
+                        buyer_attorney_phone,
+                        buyer_attorney_referred,
+
+                        buyer_lender_email,
+                        buyer_lender_phone,
+                        buyer_lender_referred,
+
+                        buyer_inspector_name,
+                        buyer_inspector_email,
+                        buyer_inspector_phone,
+                        buyer_inspector_referred,
+
+                        other_professionals,
                         buyer_profile["id"],
                     ),
                 )
@@ -5193,19 +5712,52 @@ def buyer_profile(contact_id):
                 cur.execute(
                     """
                     INSERT INTO buyer_profiles (
-                        contact_id,
-                        timeframe,
-                        min_price,
-                        max_price,
-                        areas,
-                        property_types,
-                        property_type,
-                        preapproval_status,
-                        lender_name,
-                        referral_source,
-                        notes
+                      contact_id,
+                      timeframe,
+                      min_price,
+                      max_price,
+                      areas,
+                      property_types,
+                      property_type,
+                      preapproval_status,
+                      lender_name,
+                      referral_source,
+                      notes,
+
+                      cis_signed,
+                      buyer_agreement_signed,
+                      wire_fraud_notice_signed,
+                      dual_agency_consent_signed,
+
+                      preapproval_letter_received,
+                      proof_of_funds_received,
+                      photo_id_received,
+
+                      buyer_attorney_name,
+                      buyer_attorney_email,
+                      buyer_attorney_phone,
+                      buyer_attorney_referred,
+
+                      buyer_lender_email,
+                      buyer_lender_phone,
+                      buyer_lender_referred,
+
+                      buyer_inspector_name,
+                      buyer_inspector_email,
+                      buyer_inspector_phone,
+                      buyer_inspector_referred,
+
+                      other_professionals
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (
+                      %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                      %s, %s, %s, %s,
+                      %s, %s, %s,
+                      %s, %s, %s, %s,
+                      %s, %s, %s,
+                      %s, %s, %s, %s,
+                      %s
+                    )
                     RETURNING *
                     """,
                     (
@@ -5220,13 +5772,38 @@ def buyer_profile(contact_id):
                         lender_name,
                         referral_source,
                         notes,
+
+                        cis_signed,
+                        buyer_agreement_signed,
+                        wire_fraud_notice_signed,
+                        dual_agency_consent_signed,
+
+                        preapproval_letter_received,
+                        proof_of_funds_received,
+                        photo_id_received,
+
+                        buyer_attorney_name,
+                        buyer_attorney_email,
+                        buyer_attorney_phone,
+                        buyer_attorney_referred,
+
+                        buyer_lender_email,
+                        buyer_lender_phone,
+                        buyer_lender_referred,
+
+                        buyer_inspector_name,
+                        buyer_inspector_email,
+                        buyer_inspector_phone,
+                        buyer_inspector_referred,
+
+                        other_professionals,
                     ),
                 )
                 buyer_profile = cur.fetchone()
 
             conn.commit()
             return redirect(url_for("buyer_profile", contact_id=contact_id))
-
+  
     # After any POST handling: load subject properties for display
     if buyer_profile:
         cur.execute(
@@ -5269,9 +5846,9 @@ def buyer_profile(contact_id):
         # subject properties and other context
         subject_properties=subject_properties,
         contact_id=contact_id,
-        pros_attorneys=pros_attorneys,
-        pros_lenders=pros_lenders,
-        pros_inspectors=pros_inspectors,
+        pros_attorneys = get_professionals_for_dropdown("Attorney"),
+        pros_lenders = get_professionals_for_dropdown("Lender"),
+        pros_inspectors = get_professionals_for_dropdown("Inspector"),
         
         #transactions
         transactions=buyer_transactions,
@@ -5721,7 +6298,7 @@ def seller_profile(contact_id):
     pros_lenders = get_professionals_for_dropdown(category="Lender")
     pros_inspectors = get_professionals_for_dropdown(category="Inspector")
 
-    ensure_listing_checklist_initialized(contact_id)
+    ensure_listing_checklist_initialized(current_user.id, contact_id)
     checklist_items, checklist_complete, checklist_total = get_listing_checklist(contact_id)
     
     return render_template(
@@ -5766,7 +6343,7 @@ def followups():
             e.outcome,
             e.notes,
             e.summary_clean,
-
+    
             c.id AS contact_id,
             c.name,
             c.first_name,
@@ -5774,16 +6351,18 @@ def followups():
             c.pipeline_stage,
             c.priority,
             c.target_area
-
+    
         FROM engagements e
         JOIN contacts c ON c.id = e.contact_id
         WHERE e.user_id = %s
+          AND c.user_id = %s
+          AND c.archived_at IS NULL
           AND e.requires_follow_up = TRUE
           AND e.follow_up_completed = FALSE
           AND e.follow_up_due_at IS NOT NULL
         ORDER BY e.follow_up_due_at ASC, c.name ASC, e.id ASC
         """,
-        (current_user.id,),
+        (current_user.id, current_user.id),
     )
     rows = cur.fetchall()
     conn.close()
@@ -5845,6 +6424,113 @@ def followup_clear(engagement_id):
         app.logger.exception("Failed to clear follow-up")
         flash("Could not clear follow-up.", "danger")
         return redirect(url_for("dashboard") + "#followups")
+    finally:
+        conn.close()
+
+@app.route("/engagements/<int:engagement_id>/followup.ics")
+@login_required
+def followup_calendar_ics(engagement_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Pull from the same join you already use for followups_for_contact:
+        # Must return: contact name, follow_up_due_at (or NULL), notes/summary
+        cur.execute("""
+            SELECT
+              e.id,
+              e.follow_up_due_at,
+              COALESCE(NULLIF(TRIM(e.notes), ''), '') AS notes,
+              COALESCE(NULLIF(TRIM(e.summary_clean), ''), '') AS summary_clean,
+              c.id AS contact_id,
+              COALESCE(
+                NULLIF(TRIM(c.name), ''),
+                NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
+                '(Unnamed)'
+              ) AS contact_name
+            FROM engagements e
+            JOIN contacts c ON c.id = e.contact_id
+            WHERE e.id = %s
+              AND e.user_id = %s
+              AND c.user_id = %s
+              AND e.requires_follow_up = TRUE
+            LIMIT 1
+        """, (engagement_id, current_user.id, current_user.id))
+
+        row = cur.fetchone()
+        if not row:
+            abort(404)
+
+        eid = row["id"]
+        follow_up_due_at = row["follow_up_due_at"]
+        notes = row.get("notes") or ""
+        summary_clean = row.get("summary_clean") or ""
+        contact_id = row["contact_id"]
+        contact_name = row.get("contact_name") or "(Unnamed)"
+        
+        # Normalize follow_up_due_at to a datetime
+        start_dt = None
+        
+        if follow_up_due_at is None or str(follow_up_due_at).strip() == "":
+            now_local = datetime.now()
+            start_dt = datetime(now_local.year, now_local.month, now_local.day, 9, 0, 0)
+        
+        elif isinstance(follow_up_due_at, datetime):
+            start_dt = follow_up_due_at
+        
+        elif isinstance(follow_up_due_at, date):
+            start_dt = datetime(follow_up_due_at.year, follow_up_due_at.month, follow_up_due_at.day, 9, 0, 0)
+        
+        else:
+            # It's a string. Try common formats.
+            s = str(follow_up_due_at).strip()
+        
+            parsed = None
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    parsed = datetime.strptime(s, fmt)
+                    break
+                except ValueError:
+                    pass
+        
+            if parsed is None:
+                # Last resort: if it's ISO-ish, try fromisoformat
+                try:
+                    parsed = datetime.fromisoformat(s)
+                except Exception:
+                    parsed = None
+        
+            if parsed is None:
+                abort(400, description="Could not parse follow-up due date/time for calendar export.")
+        
+            start_dt = parsed
+        
+        # If time was effectively empty in UI and stored as midnight, bump to 9:00 AM
+        if start_dt.hour == 0 and start_dt.minute == 0:
+            start_dt = start_dt.replace(hour=9, minute=0, second=0)
+
+        description_parts = []
+        if notes:
+            description_parts.append(notes)
+        if summary_clean:
+            description_parts.append(f"Summary: {summary_clean}")
+        description = "\n\n".join(description_parts).strip()
+
+        ics = build_ics_event(
+            title=f"{contact_name} Followup",
+            description=description,
+            start_dt=start_dt,
+            tzid="America/New_York",
+            duration_minutes=15,
+            uid=f"ulysses-followup-{eid}-{contact_id}@ulyssescrm"
+        )
+
+        filename = f"{contact_name}-followup.ics".replace(" ", "_").replace("/", "-")
+        return Response(
+            ics,
+            mimetype="text/calendar; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
     finally:
         conn.close()
 
@@ -6748,24 +7434,82 @@ def followups_ics():
     return Response(ics_text, mimetype="text/calendar")
 
 
-@app.route("/delete/<int:contact_id>")
+@app.route("/delete/<int:contact_id>", methods=["POST"])
 @login_required
 def delete_contact(contact_id):
+    """
+    Backward compatible safety shim.
+    This route used to hard-delete contacts. It now archives them.
+    """
     conn = get_db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM contacts WHERE id = %s", (contact_id,))
-    conn.commit()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE contacts
+            SET archived_at = %s
+            WHERE id = %s AND user_id = %s AND archived_at IS NULL
+            """,
+            (datetime.utcnow(), contact_id, current_user.id),
+        )
+        if cur.rowcount == 0:
+            conn.rollback()
+            abort(404)
+        conn.commit()
+    finally:
+        conn.close()
+
+    flash("Contact archived. This did not delete any data.", "success")
     return redirect(url_for("contacts"))
 
+@app.route("/contacts/<int:contact_id>/archive", methods=["POST"])
+@login_required
+def archive_contact(contact_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE contacts
+            SET archived_at = %s
+            WHERE id = %s AND user_id = %s AND archived_at IS NULL
+            """,
+            (datetime.utcnow(), contact_id, current_user.id),
+        )
+        if cur.rowcount == 0:
+            conn.rollback()
+            abort(404)
+        conn.commit()
+    finally:
+        conn.close()
 
-def normalize_phone_digits(phone: str) -> str:
-    """
-    Strip non-digits from a phone string.
-    """
-    if not phone:
-        return ""
-    return re.sub(r"\\D+", "", phone)
+    flash("Contact archived. You can unarchive at any time.", "success")
+    return redirect(url_for("edit_contact", contact_id=contact_id))
+
+
+@app.route("/contacts/<int:contact_id>/unarchive", methods=["POST"])
+@login_required
+def unarchive_contact(contact_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE contacts
+            SET archived_at = NULL
+            WHERE id = %s AND user_id = %s AND archived_at IS NOT NULL
+            """,
+            (contact_id, current_user.id),
+        )
+        if cur.rowcount == 0:
+            conn.rollback()
+            abort(404)
+        conn.commit()
+    finally:
+        conn.close()
+
+    flash("Contact unarchived. Restored to active workflows.", "success")
+    return redirect(url_for("edit_contact", contact_id=contact_id))
 
 @app.route("/api/listing-checklist/<int:item_id>/update", methods=["POST"])
 @login_required
@@ -6937,6 +7681,387 @@ def api_add_interaction():
 
     conn.close()
     return jsonify({"status": "ok", "contact_id": cid})
+    
+ALLOWED_DELIVERY_TYPES = {"email", "text", "either"}
+
+def _render_template_body(raw: str, client_name: str, agent_name: str, brokerage_footer: str) -> str:
+    # Simple, safe substitution only for the three allowed tokens
+    out = (raw or "")
+    out = out.replace("{{client_name}}", client_name or "")
+    out = out.replace("{{agent_name}}", agent_name or "")
+    out = out.replace("{{brokerage_footer}}", brokerage_footer or "")
+    return out
+
+def _get_brokerage_footer() -> str:
+    # Phase 6b: keep it simple.
+    # Later this can be moved to a settings table or config page.
+    # For now you can hardcode, or pull from an env var if you already do that pattern.
+    return (
+        "Dennis Fotopoulos\n"
+        "Broker Associate\n"
+        "Heritage House Sotheby’s International Realty\n"
+        "Holmdel, NJ"
+    )
+
+@app.route("/templates")
+@login_required
+def templates_index():
+    q = (request.args.get("q") or "").strip()
+    category = (request.args.get("category") or "").strip()
+    delivery_type = (request.args.get("delivery_type") or "").strip()
+    status = (request.args.get("status") or "").strip()  # locked | draft | ""
+
+    tab = (request.args.get("tab") or "all").strip().lower()
+    if tab == "draft":
+        status = "draft"
+    elif tab == "locked":
+        status = "locked"
+
+    where = []
+    params = []
+
+    if q:
+        where.append("(title ILIKE %s OR body ILIKE %s OR notes ILIKE %s)")
+        like = f"%{q}%"
+        params += [like, like, like]
+
+    if category:
+        where.append("category = %s")
+        params.append(category)
+
+    if delivery_type:
+        where.append("delivery_type = %s")
+        params.append(delivery_type)
+
+    if status == "locked":
+        where.append("is_locked = TRUE")
+    elif status == "draft":
+        where.append("is_locked = FALSE")
+
+    where_sql = "WHERE " + " AND ".join(where) if where else ""
+
+    conn = conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT DISTINCT category FROM templates ORDER BY category ASC;")
+    categories = [r["category"] for r in cur.fetchall()]
+
+    cur.execute(
+        f"""
+        SELECT id, title, category, delivery_type, is_locked, updated_at
+        FROM templates
+        {where_sql}
+        ORDER BY updated_at DESC, id DESC;
+        """,
+        params
+    )
+    rows = cur.fetchall()
+    conn.close()
+    
+    templates = []
+    for r in rows:
+        templates.append({
+            "id": r["id"],
+            "title": r["title"],
+            "category": r["category"],
+            "delivery_type": r["delivery_type"],
+            "is_locked": r["is_locked"],
+            "updated_at": r["updated_at"],
+        })
+
+    return render_template(
+        "templates/index.html",
+        templates=templates,
+        categories=categories,
+        q=q,
+        selected_category=category,
+        selected_delivery_type=delivery_type,
+        selected_status=status
+    )
+
+@app.route("/templates/new", methods=["GET", "POST"])
+@login_required
+def templates_new():
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        category = (request.form.get("category") or "General").strip() or "General"
+        delivery_type = (request.form.get("delivery_type") or "either").strip() or "either"
+        body = (request.form.get("body") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+
+        if not title:
+            flash("Title is required.", "danger")
+            return redirect(url_for("templates_new"))
+
+        if delivery_type not in ALLOWED_DELIVERY_TYPES:
+            delivery_type = "either"
+
+        conn = conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO templates (title, category, delivery_type, body, notes, is_locked, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, FALSE, NOW(), NOW())
+            RETURNING id;
+            """,
+            (title, category, delivery_type, body, notes)
+        )
+        new_id = cur.fetchone()["id"]
+        conn.commit()
+        conn.close()
+
+        flash("Template created.", "success")
+        return redirect(url_for("templates_view", template_id=new_id))
+
+    return render_template("templates/edit.html", mode="new", t=None)
+
+@app.route("/templates/<int:template_id>")
+@login_required
+def templates_view(template_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, title, category, delivery_type, body, notes, is_locked, created_at, updated_at
+        FROM templates
+        WHERE id = %s;
+        """,
+        (template_id,)
+    )
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        abort(404)
+
+    t = {
+        "id": row["id"],
+        "title": row["title"],
+        "category": row["category"],
+        "delivery_type": row["delivery_type"],
+        "body": row["body"],
+        "notes": row["notes"],
+        "is_locked": row["is_locked"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+    # Optional: populate preview with a selected contact
+    contact_id = request.args.get("contact_id", type=int)
+    selected_contact = None
+
+    client_name = "Client Name"
+    if contact_id:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id,
+                   COALESCE(NULLIF(TRIM(first_name || ' ' || last_name), ''), email, 'Client') AS name
+            FROM contacts
+            WHERE id = %s;
+            """,
+            (contact_id,)
+        )
+        c = cur.fetchone()
+        conn.close()
+
+        if c:
+            selected_contact = {"id": c["id"], "name": c["name"]}
+            client_name = c["name"]
+
+    # Agent name (match your User model: first_name/last_name/email)
+    agent_name = " ".join([p for p in [current_user.first_name, current_user.last_name] if p]) or current_user.email or "Agent Name"
+    brokerage_footer = _get_brokerage_footer()
+
+    preview = _render_template_body(
+        t["body"],
+        client_name=client_name,
+        agent_name=agent_name,
+        brokerage_footer=brokerage_footer
+    )
+
+    return render_template(
+        "templates/view.html",
+        t=t,
+        preview=preview,
+        selected_contact=selected_contact
+    )
+
+@app.route("/templates/<int:template_id>/edit", methods=["GET", "POST"])
+@login_required
+def templates_edit(template_id):
+    conn = conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, title, category, delivery_type, body, notes, is_locked
+        FROM templates
+        WHERE id = %s;
+        """,
+        (template_id,)
+    )
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        abort(404)
+
+    t = {
+        "id": row[0],
+        "title": row[1],
+        "category": row[2],
+        "delivery_type": row[3],
+        "body": row[4],
+        "notes": row[5],
+        "is_locked": row[6],
+    }
+
+    if t["is_locked"]:
+        conn.close()
+        flash("This template is locked. Duplicate it to create an editable version.", "warning")
+        return redirect(url_for("templates_view", template_id=template_id))
+
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        category = (request.form.get("category") or "General").strip() or "General"
+        delivery_type = (request.form.get("delivery_type") or "either").strip() or "either"
+        body = (request.form.get("body") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+
+        if not title:
+            conn.close()
+            flash("Title is required.", "danger")
+            return redirect(url_for("templates_edit", template_id=template_id))
+
+        if delivery_type not in ALLOWED_DELIVERY_TYPES:
+            delivery_type = "either"
+
+        cur.execute(
+            """
+            UPDATE templates
+            SET title = %s,
+                category = %s,
+                delivery_type = %s,
+                body = %s,
+                notes = %s,
+                updated_at = NOW()
+            WHERE id = %s;
+            """,
+            (title, category, delivery_type, body, notes, template_id)
+        )
+        conn.commit()
+        conn.close()
+
+        flash("Template updated.", "success")
+        return redirect(url_for("templates_view", template_id=template_id))
+
+    conn.close()
+    return render_template("templates/edit.html", mode="edit", t=t)
+
+@app.route("/templates/<int:template_id>/lock", methods=["POST"])
+@login_required
+def templates_lock(template_id):
+    conn = conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT is_locked FROM templates WHERE id = %s;", (template_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        abort(404)
+
+    if row[0]:
+        conn.close()
+        flash("Template is already locked.", "info")
+        return redirect(url_for("templates_view", template_id=template_id))
+
+    cur.execute(
+        "UPDATE templates SET is_locked = TRUE, updated_at = NOW() WHERE id = %s;",
+        (template_id,)
+    )
+    conn.commit()
+    conn.close()
+
+    flash("Template locked.", "success")
+    return redirect(url_for("templates_view", template_id=template_id))
+
+@app.route("/templates/<int:template_id>/duplicate", methods=["POST"])
+@login_required
+def templates_duplicate(template_id):
+    conn = conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT title, category, delivery_type, body, notes
+        FROM templates
+        WHERE id = %s;
+        """,
+        (template_id,)
+    )
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        abort(404)
+
+    title, category, delivery_type, body, notes = row
+    new_title = f"{title} (Copy)"
+
+    cur.execute(
+        """
+        INSERT INTO templates (title, category, delivery_type, body, notes, is_locked, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, FALSE, NOW(), NOW())
+        RETURNING id;
+        """,
+        (new_title, category, delivery_type, body, notes)
+    )
+    new_id = cur.fetchone()[0]
+    conn.commit()
+    conn.close()
+
+    flash("Template duplicated. You can now edit the copy.", "success")
+    return redirect(url_for("templates_edit", template_id=new_id))
+
+@app.route("/api/contacts/search")
+@login_required
+def api_contacts_search():
+    q = (request.args.get("q") or "").strip()
+    limit = 10
+
+    if not q or len(q) < 2:
+        return jsonify([])
+
+    like = f"%{q}%"
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Adjust WHERE as needed to exclude archived contacts if you have archived_at
+    cur.execute(
+        """
+        SELECT id,
+               COALESCE(NULLIF(TRIM(first_name || ' ' || last_name), ''), email, 'Unnamed') AS name,
+               email
+        FROM contacts
+        WHERE (first_name ILIKE %s OR last_name ILIKE %s OR email ILIKE %s)
+        ORDER BY last_name NULLS LAST, first_name NULLS LAST
+        LIMIT %s;
+        """,
+        (like, like, like, limit)
+    )
+
+    rows = cur.fetchall()
+    conn.close()
+
+    results = []
+    for r in rows:
+        results.append({
+            "id": r["id"],
+            "name": r["name"],
+            "email": r.get("email") or ""
+        })
+
+    return jsonify(results)
+    
 
 if __name__ == "__main__":
     init_db()

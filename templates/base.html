@@ -94,6 +94,7 @@
           </a>
         </li>
 
+
         <li class="nav-item">
           <a href="{{ url_for('contacts') }}"
              class="nav-link {% if active_page == 'contacts' %}fw-semibold{% endif %}">
@@ -109,11 +110,18 @@
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('tasks_list') }}">Tasks</a>
+          <a href="{{ url_for('tasks_list') }}"
+             class="nav-link {% if active_page == 'tasks_list' %}fw-semibold{% endif %}">
+            Tasks
+          </a>
         </li>
 
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('openhouse_list') }}">Open Houses</a>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('templates_index') }}">Templates</a>
         </li>
 
         <li class="nav-item">

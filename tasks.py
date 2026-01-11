@@ -193,3 +193,13 @@ def cancel_task(cur, user_id: int, task_id: int) -> None:
         """,
         (user_id, task_id),
     )
+
+def delete_task(cur, user_id: int, task_id: int) -> bool:
+    cur.execute(
+        """
+        DELETE FROM tasks
+        WHERE user_id = %s AND id = %s
+        """,
+        (user_id, task_id),
+    )
+    return cur.rowcount == 1

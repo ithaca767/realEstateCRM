@@ -1,4 +1,4 @@
-<form method="post" action="{{ url_for('tasks_new') }}">
+<form method="post" action="{{ form_action or (url_for('tasks_edit', task_id=task.id) if mode == 'edit' and task else url_for('tasks_new')) }}">
   <input type="hidden" name="next" value="{{ next_url or '' }}">
 
   <div class="row g-3">
@@ -134,12 +134,34 @@
       <div class="form-text" id="taskProfessionalHelp"></div>
     </div>
 
-    <div class="col-12 d-flex justify-content-end gap-2 mt-2">
-      <button type="submit" class="btn btn-primary">
-        {% if mode == "edit" %}Save Changes{% else %}Create Task{% endif %}
+    <div class="col-12 d-flex justify-content-between align-items-center mt-3">
+
+  <div>
+    {% if mode == "edit" and task %}
+      <button type="submit"
+              class="btn btn-sm btn-outline-danger"
+              formaction="{{ url_for('tasks_delete', task_id=task.id) }}"
+              formmethod="post"
+              onclick="return confirm('Delete this task? This cannot be undone.');">
+        Delete Task
       </button>
-      <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-    </div>
+
+      <input type="hidden" name="next" value="{{ next_url or url_for('tasks_list') }}">
+    {% endif %}
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+      {% if mode == "edit" %}Save Changes{% else %}Create Task{% endif %}
+    </button>
+
+    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+      Close
+    </button>
+  </div>
+
+</div>
+
   </div>
 </form>
 

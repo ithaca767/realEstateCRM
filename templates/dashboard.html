@@ -107,9 +107,11 @@
         <!-- Outreach tab -->
         <div class="tab-pane fade show active" id="outreach" role="tabpanel" aria-labelledby="outreach-tab">
           <div class="row g-3">
-
-            <!-- Active Contacts -->
-            <div class="col-lg-8">
+        
+            <!-- LEFT COLUMN -->
+            <div class="col-12 col-lg-8">
+        
+              <!-- Active Contacts -->
               <div class="card">
                 <div class="card-header">
                   <div>
@@ -119,7 +121,7 @@
                     </div>
                   </div>
                 </div>
-
+        
                 <div class="card-body bg-white">
                   {% if active_contacts and active_contacts|length > 0 %}
                     <div class="table-responsive">
@@ -137,75 +139,43 @@
                           {% for c in active_contacts %}
                             <tr>
                               <td>
-                                <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">                                  {% if c["first_name"] or c["last_name"] %}
+                                <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
+                                  {% if c["first_name"] or c["last_name"] %}
                                     {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
                                   {% else %}
                                     {{ c["name"] or "Unnamed Contact" }}
                                   {% endif %}
                                 </a>
-
+        
                                 <div class="text-muted small mt-1">
-                                  {% if c["has_buyer_profile"] and c["has_seller_profile"] %}
-                                    <span class="badge bg-info text-dark me-1">Buyer</span>
-                                    <span class="badge bg-warning text-dark">Seller</span>
-                                  {% elif c["has_buyer_profile"] %}
+                                  {% if c["has_buyer_profile"] %}
                                     <span class="badge bg-info text-dark">Buyer</span>
-                                  {% elif c["has_seller_profile"] %}
+                                  {% endif %}
+                                  {% if c["has_seller_profile"] %}
                                     <span class="badge bg-warning text-dark">Seller</span>
                                   {% endif %}
                                 </div>
                               </td>
-
-                              <td style="min-width: 220px;">
-                                {% if c["active_reasons"] %}
-                                  {% for b in c["active_reasons"] %}
-                                    <span class="badge bg-secondary me-1 mb-1">{{ b }}</span>
-                                  {% endfor %}
-                                {% else %}
-                                  <span class="text-muted small">Active</span>
-                                {% endif %}
+        
+                              <td>
+                                {% for b in c["active_reasons"] %}
+                                  <span class="badge bg-secondary me-1">{{ b }}</span>
+                                {% endfor %}
                               </td>
-
-                              <td style="min-width: 160px;">
-                                {% if c["next_follow_up"] %}
-                                  <div>{{ c["next_follow_up"] }}</div>
-                                  {% if c["next_follow_up_time"] %}
-                                    <div class="text-muted small">{{ c["next_follow_up_time"] }}</div>
-                                  {% endif %}
-                                {% else %}
-                                  <span class="text-muted small">None</span>
-                                {% endif %}
+        
+                              <td>
+                                {{ c["next_follow_up"] or "—" }}
                               </td>
-
-                              <td style="min-width: 260px;">
+        
+                              <td>
                                 {% if c["last_engagement_at"] %}
-                                  <div class="small">
-                                    <strong>{{ c["last_engagement_type"] or "engagement" }}</strong>
-                                    <span class="text-muted">({{ c["last_engagement_at"] }})</span>
-                                  </div>
-
-                                  {% set detail = c["last_engagement_outcome"] or c["last_engagement_summary"] %}
-                                  {% if detail %}
-                                    {% set collapse_id = "acEngDetail" ~ c["contact_id"] %}
-                                    <div class="text-muted small">
-                                      <a class="text-decoration-none"
-                                         data-bs-toggle="collapse"
-                                         href="#{{ collapse_id }}"
-                                         role="button"
-                                         aria-expanded="false"
-                                         aria-controls="{{ collapse_id }}">
-                                        Details
-                                      </a>
-                                    </div>
-                                    <div class="collapse mt-1" id="{{ collapse_id }}">
-                                      <div class="small">{{ detail }}</div>
-                                    </div>
-                                  {% endif %}
+                                  <strong>{{ c["last_engagement_type"] }}</strong>
+                                  <div class="text-muted small">{{ c["last_engagement_at"] }}</div>
                                 {% else %}
                                   <span class="text-muted small">No engagements yet</span>
                                 {% endif %}
                               </td>
-
+        
                               <td>
                                 <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements"
                                    class="btn btn-sm btn-outline-primary">
@@ -222,116 +192,88 @@
                   {% endif %}
                 </div>
               </div>
-            </div>
-
-            <!-- Recent Engagements -->
-            <div class="col-lg-4">
+        
+              <!-- Past Clients -->
+              <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <div class="fw-semibold">Past Clients</div>
+                  <a class="btn btn-sm btn-outline-secondary"
+                     href="{{ url_for('contacts', tab='past_clients') }}">
+                    View all
+                  </a>
+                </div>
+        
+                <div class="card-body p-0">
+                  {% if past_clients and past_clients|length > 0 %}
+                    <div class="list-group list-group-flush">
+                      {% for pc in past_clients %}
+                        <a class="list-group-item list-group-item-action d-flex justify-content-between"
+                           href="{{ url_for('edit_contact', contact_id=pc['contact_id']) }}#engagements">
+                          <div>
+                            <div class="fw-semibold">
+                              {{ pc["name"] or "(Unnamed)" }}
+                            </div>
+                            <div class="text-muted small">
+                              Last engagement: {{ pc["last_engagement_at"] or "—" }}
+                            </div>
+                          </div>
+                          <div class="small text-muted">
+                            {{ pc["next_follow_up"] or "No follow-up" }}
+                          </div>
+                        </a>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <div class="p-3 text-muted">No past clients found.</div>
+                  {% endif %}
+                </div>
+              </div>
+        
+            </div> <!-- /LEFT COLUMN -->
+        
+            <!-- RIGHT COLUMN -->
+            <div class="col-12 col-lg-4">
+        
+              <!-- Recent Engagements -->
               <div class="card">
                 <div class="card-header">
                   <div class="fw-semibold">Recent Engagements</div>
                   <div class="text-muted small">Last 10</div>
                 </div>
-
+        
                 <div class="card-body bg-white">
-                  {% set show_n = 5 %}
-                  {% set total_n = recent_engagements|length %}
-
-                  {% if recent_engagements and total_n > 0 %}
+                  {% if recent_engagements %}
                     <div class="list-group list-group-flush">
-                      {% for e in recent_engagements[:show_n] %}
+                      {% for e in recent_engagements[:5] %}
                         <div class="list-group-item px-0">
-                          <div class="d-flex justify-content-between">
-                            <div>
-                              <a href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements" class="text-decoration-none">
-                                <strong>{{ e["contact_name"] or "Unnamed Contact" }}</strong>
-                              </a>
-                              <div class="text-muted small">{{ e["engagement_type"] or "engagement" }}</div>
-                            </div>
-                            <div class="text-muted small">{{ e["occurred_at"] }}</div>
-                          </div>
-
-                          {% set detail = e["outcome"] or e["summary_clean"] %}
-                          {% if detail %}
-                            {% set collapse_id = "reDetail" ~ e["id"] %}
-                            {% set preview_len = 120 %}
-                            {% if detail|length > preview_len %}
-                              <div class="small mt-1">
-                                {{ detail[:preview_len] }}...
-                                <a href="#{{ collapse_id }}"
-                                   class="ms-1 text-decoration-none js-toggle-text"
-                                   data-bs-toggle="collapse"
-                                   role="button"
-                                   aria-expanded="false"
-                                   aria-controls="{{ collapse_id }}"
-                                   data-more="See more"
-                                   data-less="See less">
-                                  See more
-                                </a>
-                              </div>
-
-                              <div class="collapse mt-1" id="{{ collapse_id }}">
-                                <div class="small">{{ detail }}</div>
-                                <a href="#{{ collapse_id }}"
-                                   class="text-decoration-none js-toggle-text"
-                                   data-bs-toggle="collapse"
-                                   role="button"
-                                   aria-expanded="true"
-                                   aria-controls="{{ collapse_id }}"
-                                   data-more="See more"
-                                   data-less="See less">
-                                  See less
-                                </a>
-                              </div>
-                            {% else %}
-                              <div class="small mt-1">{{ detail }}</div>
-                            {% endif %}
+                          <strong>{{ e["contact_name"] }}</strong>
+                          {% if e["pipeline_stage"] == "Past Client / Relationship" %}
+                            <span class="past-client-dot ms-2">P</span>
                           {% endif %}
+                          <div class="text-muted small">
+                            {{ e["engagement_type"] }} · {{ e["occurred_at"] }}
+                          </div>
                         </div>
                       {% endfor %}
-
-                      {% if total_n > show_n %}
-                        <div class="collapse" id="recentEngagementsMore">
-                          {% for e in recent_engagements[show_n:] %}
-                            <div class="list-group-item px-0">
-                              <div class="d-flex justify-content-between">
-                                <div>
-                                  <a href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements" class="text-decoration-none">
-                                    <strong>{{ e["contact_name"] or "Unnamed Contact" }}</strong>
-                                  </a>
-                                  <div class="text-muted small">{{ e["engagement_type"] or "engagement" }}</div>
-                                </div>
-                                <div class="text-muted small">{{ e["occurred_at"] }}</div>
-                              </div>
-
-                              {% if e["outcome"] %}
-                                <div class="small mt-1">{{ e["outcome"] }}</div>
-                              {% elif e["summary_clean"] %}
-                                <div class="small mt-1">{{ e["summary_clean"] }}</div>
-                              {% endif %}
-                            </div>
-                          {% endfor %}
-                        </div>
-
-                        <div class="pt-2">
-                          <button class="btn btn-sm btn-outline-secondary"
-                                  type="button"
-                                  data-bs-toggle="collapse"
-                                  data-bs-target="#recentEngagementsMore"
-                                  aria-expanded="false"
-                                  aria-controls="recentEngagementsMore"
-                                  id="recentEngagementsToggle">
-                            See more ({{ total_n - show_n }})
-                          </button>
-                        </div>
-                      {% endif %}
                     </div>
                   {% else %}
                     <p class="mb-0 text-muted">Nothing here.</p>
                   {% endif %}
                 </div>
               </div>
-            </div>
-
+              
+              <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <div class="fw-semibold">Professionals</div>
+                  <span class="text-muted small">Coming soon</span>
+                </div>
+                <div class="card-body text-muted">
+                  This section will show your top professionals and quick actions.
+                </div>
+              </div>
+        
+            </div> <!-- /RIGHT COLUMN -->
+        
           </div>
         </div>
 

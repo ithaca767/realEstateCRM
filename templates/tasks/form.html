@@ -32,7 +32,8 @@
       </div>
     </div>
   
-    <form method="post">
+    <form method="post"
+          action="{{ url_for('tasks_edit', task_id=task.id) if mode == 'edit' and task else url_for('tasks_new') }}">
       <input type="hidden" name="next" value="{{ next_url or request.args.get('next','') }}">
 
       <div class="row g-3">
@@ -194,10 +195,23 @@
             </a>
           {% else %}
             <a class="btn btn-sm btn-outline-secondary"
-               href="{{ next or url_for('tasks_list') }}">
+               href="{{ next_url or url_for('tasks_list') }}">
               Cancel
             </a>
           {% endif %}
+
+          {% if mode == "edit" and task %}
+            <form method="post"
+                  action="{{ url_for('tasks_delete', task_id=task.id) }}"
+                  onsubmit="return confirm('Delete this task? This cannot be undone.');"
+                  class="ms-auto">
+              <input type="hidden" name="next" value="{{ next_url or request.args.get('next','') }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger">
+                Delete
+              </button>
+            </form>
+          {% endif %}
+          
         </div>
       </div>
     </form>

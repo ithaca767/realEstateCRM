@@ -18,474 +18,444 @@
             Buyer Details
         </div>
         <div class="card-body bg-white">
-            <form method="post">
+          <form method="post">
+            <ul class="nav nav-tabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#bp-overview" type="button" role="tab">
+                  Overview
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#bp-subject" type="button" role="tab">
+                  Subject Properties & Offers
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#bp-pros" type="button" role="tab">
+                  Professionals
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#bp-checklist" type="button" role="tab">
+                  Buyer Checklist
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#bp-transactions" type="button" role="tab">
+                  Transactions
+                </button>
+              </li>
+            </ul>
+          
+            <div class="tab-content pt-3">
+          
+              <!-- Overview -->
+              <div class="tab-pane fade show active" id="bp-overview" role="tabpanel">
                 <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label">Contact</label>
-                        <p class="form-control-plaintext fw-bold mb-1">
-                            {{ contact_name }}
-                        </p>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Property Type</label>
-                        <select name="property_type" class="form-select">
-                            <option value="">Select...</option>
-                            <option value="Residential"
-                              {% if bp and bp['property_type'] == 'Residential' %}selected{% endif %}>
-                              Residential
-                            </option>
-                            <option value="Commercial"
-                              {% if bp and bp['property_type'] == 'Commercial' %}selected{% endif %}>
-                              Commercial
-                            </option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Timeframe</label>
-                        <input name="timeframe" class="form-control"
-                               placeholder="Next 3 months"
-                               value="{{ bp['timeframe'] if bp else '' }}">
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Pre-Approval Status</label>
-                        <input name="preapproval_status" class="form-control"
-                               placeholder="Pre-approved, needs lender, etc."
-                               value="{{ bp['preapproval_status'] if bp else '' }}">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Min Price</label>
-                        <input name="min_price" type="number" class="form-control"
-                               value="{{ bp['min_price'] if bp and bp['min_price'] is not none else '' }}">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Max Price</label>
-                        <input name="max_price" type="number" class="form-control"
-                               value="{{ bp['max_price'] if bp and bp['max_price'] is not none else '' }}">
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label">Preferred Areas</label>
-                        <input name="areas" class="form-control"
-                               placeholder="Keyport, Hazlet, Netflix zone"
-                               value="{{ bp['areas'] if bp else '' }}">
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label">Property Types</label>
-                        <input name="property_types" class="form-control"
-                               placeholder="Single family, condo, mixed-use, etc."
-                               value="{{ bp['property_types'] if bp else '' }}">
-                    </div>
-                    
-        <!--Subject Properties-->
-        <div class="card mb-3">
-          <div class="card-header">
-            Subject Properties and Offers
-          </div>
-          <div class="card-body">
-        
-            {% if subject_properties %}
-              <div class="table-responsive">
-                <table class="table table-sm align-middle">
-                  <thead>
-                    <tr>
-                      <th>Address</th>
-                      <th>City</th>
-                      <th>State</th>
-                      <th>Zip</th>
-                      <th>Offer?</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                  {% for p in subject_properties %}
-                    <tr>
-                      <td>{{ p.address_line }}</td>
-                      <td>{{ p.city }}</td>
-                      <td>{{ p.state }}</td>
-                      <td>{{ p.postal_code }}</td>
-                      <td class="text-capitalize">{{ p.offer_status }}</td>
-                      <td>
-                        <a
-                          href="{{ url_for('edit_buyer_property', property_id=p.id) }}"
-                          class="btn btn-sm btn-outline-secondary"
-                        >
-                          Edit
-                        </a>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            {% else %}
-              <p class="text-muted mb-3">No subject properties added yet.</p>
-            {% endif %}
-        
-            <hr>
-        
-            <div class="row g-2">
-              <div class="col-md-4">
-                <label class="form-label mb-1">Address <span class="text-danger">*</span></label>
-                <input type="text" name="address_line" class="form-control form-control-sm">
-              </div>
-            
-              <div class="col-md-2">
-                <label class="form-label mb-1">City</label>
-                <input type="text" name="city" class="form-control form-control-sm">
-              </div>
-            
-              <div class="col-md-2">
-                <label class="form-label mb-1">State</label>
-                <input type="text" name="state" class="form-control form-control-sm">
-              </div>
-            
-              <div class="col-md-2">
-                <label class="form-label mb-1">Zip</label>
-                <input type="text" name="postal_code" class="form-control form-control-sm">
-              </div>
-            
-              <div class="col-md-2">
-                <label class="form-label mb-1">Offer?</label>
-                <select name="offer_status" class="form-select form-select-sm">
-                  <option value="considering">Considering</option>
-                  <option value="accepted">Accepted</option>
-                  <option value="lost">Lost</option>
-                  <option value="attorney review">Attorney Review</option>
-                  <option value="under contract">Under Contract</option>
-                </select>
-              </div>
-            
-              <div class="col-12 text-end mt-2">
-                <button type="submit"
-                        class="btn btn-primary btn-sm"
-                        name="form_action"
-                        value="add_property">
-                  Add Property
-                </button>
-              </div>
-            </div>
-
-        
-          </div>
-        </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Referral Source</label>
-                        <input name="referral_source" class="form-control"
-                               placeholder="Who sent them to you?"
-                               value="{{ bp['referral_source'] if bp else '' }}">
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label">Notes</label>
-                        <textarea name="notes" class="form-control" rows="3"
-                                  placeholder="Motivation, non-negotiables, etc.">{{ bp['notes'] if bp else '' }}</textarea>
-                    </div>
-
-                    <div class="col-12 mt-3">
-                        <h6 class="fw-bold mb-2">Required Buyer Documents Checklist</h6>
-
-                        <div class="form-check">
-                            <input
-                              class="form-check-input"
-                              type="checkbox"
-                              name="cis_signed"
-                              id="cis_signed"
-                              {% if bp and bp['cis_signed'] %}checked{% endif %}
-                            >
-                            <label class="form-check-label" for="cis_signed">
-                                Consumer Information Statement signed?
-                            </label>
-                        </div>
-
-                        <div class="form-check">
-                            <input
-                              class="form-check-input"
-                              type="checkbox"
-                              name="buyer_agreement_signed"
-                              id="buyer_agreement_signed"
-                              {% if bp and bp['buyer_agreement_signed'] %}checked{% endif %}
-                            >
-                            <label class="form-check-label" for="buyer_agreement_signed">
-                                Buyer's Agency Agreement signed?
-                            </label>
-                        </div>
-
-                        <div class="form-check">
-                            <input
-                              class="form-check-input"
-                              type="checkbox"
-                              name="wire_fraud_notice_signed"
-                              id="wire_fraud_notice_signed"
-                              {% if bp and bp['wire_fraud_notice_signed'] %}checked{% endif %}
-                            >
-                            <label class="form-check-label" for="wire_fraud_notice_signed">
-                                Wire Fraud Notice signed?
-                            </label>
-                        </div>
-
-                        <div class="form-check">
-                            <input
-                              class="form-check-input"
-                              type="checkbox"
-                              name="dual_agency_consent_signed"
-                              id="dual_agency_consent_signed"
-                              {% if bp and bp['dual_agency_consent_signed'] %}checked{% endif %}
-                            >
-                            <label class="form-check-label" for="dual_agency_consent_signed">
-                                Informed Consent to Dual Agency signed?
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Transactions -->
-                    {% set status_labels = dict(transaction_statuses) %}
-                    <div class="card mt-4 card-soft">
-                      <div class="card-header d-flex justify-content-between align-items-center">
-                        <div class="fw-semibold">Transactions</div>
-                    
-                        <a
-                          class="btn btn-sm btn-primary"
-                          href="{{ url_for('new_transaction', contact_id=contact_id, next=request.path) }}"
-                        >
-                          + New Transaction
-                        </a>
-                      </div>
-                    
-                      <div class="card-body p-0">
-                        {% if transactions and transactions|length > 0 %}
-                          <div class="table-responsive">
-                            <table class="table mb-0">
-                              <thead>
-                                <tr>
-                                  <th>Address</th>
-                                  <th>Status</th>
-                                  <th class="text-end">List</th>
-                                  <th class="text-end">Offer</th>
-                                  <th>Expected Close</th>
-                                  <th class="text-end">Open</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {% for tx in transactions %}
-                                  <tr>
-                                    <td>
-                                      {% if tx['address'] %}
-                                        <a
-                                          href="{{ url_for('edit_transaction', transaction_id=tx['id'], next=request.path) }}"
-                                          class="text-decoration-none"
-                                        >
-                                          {{ tx['address'] }}
-                                        </a>
-                                      {% else %}
-                                        <span class="text-muted">-</span>
-                                      {% endif %}
-                                    </td>
-                    
-                                    <td>{{ status_labels.get(tx['status'], tx['status']) }}</td>
-                    
-                                    <td class="text-end">
-                                      {% if tx['list_price'] %}${{ "{:,.0f}".format(tx['list_price']) }}{% else %}<span class="text-muted">-</span>{% endif %}
-                                    </td>
-                    
-                                    <td class="text-end">
-                                      {% if tx['offer_price'] %}${{ "{:,.0f}".format(tx['offer_price']) }}{% else %}<span class="text-muted">-</span>{% endif %}
-                                    </td>
-                    
-                                    <td>
-                                      {% if tx['expected_close_date'] %}{{ tx['expected_close_date'] }}{% else %}<span class="text-muted">-</span>{% endif %}
-                                    </td>
-                    
-                                    <td class="text-end">
-                                      <a
-                                        class="btn btn-sm btn-outline-secondary"
-                                        href="{{ url_for('edit_transaction', transaction_id=tx['id'], next=request.path) }}"
-                                      >
-                                        View / Edit
-                                      </a>
-                                    </td>
-                                  </tr>
-                                {% endfor %}
-                              </tbody>
-                            </table>
-                          </div>
-                        {% else %}
-                          <div class="p-3 text-muted">No transactions yet.</div>
-                        {% endif %}
-                      </div>
-                    </div>
-
-                    <!-- Professionals -->
-                    <div class="col-12 mt-4">
-                        <h6 class="fw-bold mb-2">Professionals</h6>
-                    </div>
-
-                    <!-- Buyer Attorney dropdown and fields -->
-                    <div class="col-md-6">
-                        <label class="form-label">Select Buyer Attorney (optional)</label>
-                        <select id="buyer_attorney_select" class="form-select">
-                            <option value="">Choose from my list</option>
-                            {% for p in pros_attorneys %}
-                                <option
-                                    value="{{ p.id }}"
-                                    data-name="{{ p.name }}"
-                                    data-phone="{{ p.phone }}"
-                                    data-email="{{ p.email }}"
-                                >
-                                    {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
-                                </option>
-                            {% endfor %}
-                        </select>
-                        <small class="text-muted">
-                            Core, preferred and vetting attorneys. Blacklisted are hidden.
-                        </small>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Attorney Name</label>
-                        <input name="buyer_attorney_name" id="buyer_attorney_name" class="form-control"
-                               value="{{ bp['buyer_attorney_name'] if bp else '' }}">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Attorney Email</label>
-                        <input name="buyer_attorney_email" id="buyer_attorney_email" class="form-control"
-                               value="{{ bp['buyer_attorney_email'] if bp else '' }}">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Attorney Phone</label>
-                        <input name="buyer_attorney_phone" id="buyer_attorney_phone" class="form-control"
-                               value="{{ bp['buyer_attorney_phone'] if bp else '' }}">
-                    </div>
-                    <div class="col-12">
-                        <div class="form-check">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   name="buyer_attorney_referred"
-                                   id="buyer_attorney_referred"
-                                   {% if bp and bp['buyer_attorney_referred'] %}checked{% endif %}>
-                            <label class="form-check-label" for="buyer_attorney_referred">
-                                Attorney referred by me
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Buyer Lender dropdown and fields -->
-                    <div class="col-md-6">
-                        <label class="form-label">Select Lender (optional)</label>
-                        <select id="buyer_lender_select" class="form-select">
-                            <option value="">Choose from my list</option>
-                            {% for p in pros_lenders %}
-                                <option
-                                    value="{{ p.id }}"
-                                    data-name="{{ p.name }}"
-                                    data-phone="{{ p.phone }}"
-                                    data-email="{{ p.email }}"
-                                >
-                                    {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Lender Name</label>
-                        <input name="lender_name" id="buyer_lender_name" class="form-control"
-                               value="{{ bp['lender_name'] if bp else '' }}">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Lender Email</label>
-                        <input name="buyer_lender_email" id="buyer_lender_email" class="form-control"
-                               value="{{ bp['buyer_lender_email'] if bp else '' }}">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Lender Phone</label>
-                        <input name="buyer_lender_phone" id="buyer_lender_phone" class="form-control"
-                               value="{{ bp['buyer_lender_phone'] if bp else '' }}">
-                    </div>
-                    <div class="col-12">
-                        <div class="form-check">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   name="buyer_lender_referred"
-                                   id="buyer_lender_referred"
-                                   {% if bp and bp['buyer_lender_referred'] %}checked{% endif %}>
-                            <label class="form-check-label" for="buyer_lender_referred">
-                                Lender referred by me
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Buyer Inspector dropdown and fields -->
-                    <div class="col-md-6">
-                        <label class="form-label">Select Home Inspector (optional)</label>
-                        <select id="buyer_inspector_select" class="form-select">
-                            <option value="">Choose from my list</option>
-                            {% for p in pros_inspectors %}
-                                <option
-                                    value="{{ p.id }}"
-                                    data-name="{{ p.name }}"
-                                    data-phone="{{ p.phone }}"
-                                    data-email="{{ p.email }}"
-                                >
-                                    {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Home Inspector Name</label>
-                        <input name="buyer_inspector_name" id="buyer_inspector_name" class="form-control"
-                               value="{{ bp['buyer_inspector_name'] if bp else '' }}">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Home Inspector Email</label>
-                        <input name="buyer_inspector_email" id="buyer_inspector_email" class="form-control"
-                               value="{{ bp['buyer_inspector_email'] if bp else '' }}">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Home Inspector Phone</label>
-                        <input name="buyer_inspector_phone" id="buyer_inspector_phone" class="form-control"
-                               value="{{ bp['buyer_inspector_phone'] if bp else '' }}">
-                    </div>
-                    <div class="col-12">
-                        <div class="form-check">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   name="buyer_inspector_referred"
-                                   id="buyer_inspector_referred"
-                                   {% if bp and bp['buyer_inspector_referred'] %}checked{% endif %}>
-                            <label class="form-check-label" for="buyer_inspector_referred">
-                                Home inspector referred by me
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label">Other Professionals</label>
-                        <textarea name="other_professionals"
-                                  class="form-control"
-                                  rows="2"
-                                  placeholder="Title company, contractor, etc.">{{ bp['other_professionals'] if bp else '' }}</textarea>
-                    </div>
-
+          
+                  <div class="col-12">
+                    <label class="form-label">Contact</label>
+                    <p class="form-control-plaintext fw-bold mb-1">{{ contact_name }}</p>
+                  </div>
+          
+                  <div class="col-md-4">
+                    <label class="form-label">Property Type</label>
+                    <select name="property_type" class="form-select">
+                      <option value="">Select...</option>
+                      <option value="Residential" {% if bp and bp['property_type'] == 'Residential' %}selected{% endif %}>Residential</option>
+                      <option value="Commercial" {% if bp and bp['property_type'] == 'Commercial' %}selected{% endif %}>Commercial</option>
+                    </select>
+                  </div>
+          
+                  <div class="col-md-4">
+                    <label class="form-label">Timeframe</label>
+                    <input name="timeframe" class="form-control" placeholder="Next 3 months" value="{{ bp['timeframe'] if bp else '' }}">
+                  </div>
+          
+                  <div class="col-md-4">
+                    <label class="form-label">Pre-Approval Status</label>
+                    <input name="preapproval_status" class="form-control" placeholder="Pre-approved, needs lender, etc." value="{{ bp['preapproval_status'] if bp else '' }}">
+                  </div>
+          
+                  <div class="col-md-6">
+                    <label class="form-label">Min Price</label>
+                    <input name="min_price" type="number" class="form-control" value="{{ bp['min_price'] if bp and bp['min_price'] is not none else '' }}">
+                  </div>
+          
+                  <div class="col-md-6">
+                    <label class="form-label">Max Price</label>
+                    <input name="max_price" type="number" class="form-control" value="{{ bp['max_price'] if bp and bp['max_price'] is not none else '' }}">
+                  </div>
+          
+                  <div class="col-12">
+                    <label class="form-label">Preferred Areas</label>
+                    <input name="areas" class="form-control" placeholder="Keyport, Hazlet, Netflix zone" value="{{ bp['areas'] if bp else '' }}">
+                  </div>
+          
+                  <div class="col-12">
+                    <label class="form-label">Property Types</label>
+                    <input name="property_types" class="form-control" placeholder="Single family, condo, mixed-use, etc." value="{{ bp['property_types'] if bp else '' }}">
+                  </div>
+          
+                  <div class="col-md-6">
+                    <label class="form-label">Referral Source</label>
+                    <input name="referral_source" class="form-control" placeholder="Who sent them to you?" value="{{ bp['referral_source'] if bp else '' }}">
+                  </div>
+          
+                  <div class="col-12">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-control" rows="3" placeholder="Motivation, non-negotiables, etc.">{{ bp['notes'] if bp else '' }}</textarea>
+                  </div>
+          
+                  <div class="col-12">
+                    <button class="btn btn-primary" type="submit" name="form_action" value="save_profile">
+                      Save Buyer Profile
+                    </button>
+                    <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary">
+                      Back to Contact
+                    </a>
+                  </div>
+          
                 </div>
-                <button class="btn btn-primary mt-3"
-                        type="submit"
-                        name="form_action"
-                        value="save_profile">
+              </div>
+          
+              <!-- Subject Properties -->
+              <div class="tab-pane fade" id="bp-subject" role="tabpanel">
+                <div class="card mb-3">
+                  <div class="card-header">Subject Properties and Offers</div>
+                  <div class="card-body">
+          
+                    {% if subject_properties %}
+                      <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                          <thead>
+                            <tr>
+                              <th>Address</th>
+                              <th>City</th>
+                              <th>State</th>
+                              <th>Zip</th>
+                              <th>Offer?</th>
+                              <th class="text-end" style="width: 90px;">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for p in subject_properties %}
+                              <tr>
+                                <td>{{ p.address_line }}</td>
+                                <td>{{ p.city }}</td>
+                                <td>{{ p.state }}</td>
+                                <td>{{ p.postal_code }}</td>
+                                <td class="text-capitalize">{{ p.offer_status }}</td>
+                                <td class="text-end">
+                                  <a href="{{ url_for('edit_buyer_property', property_id=p.id) }}" class="btn btn-sm btn-outline-secondary">
+                                    Edit
+                                  </a>
+                                </td>
+                              </tr>
+                              {# Optional: second row for property notes later #}
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    {% else %}
+                      <p class="text-muted mb-3">No subject properties added yet.</p>
+                    {% endif %}
+          
+                    <hr>
+          
+                    <div class="row g-2">
+                      <div class="col-md-4">
+                        <label class="form-label mb-1">Address <span class="text-danger">*</span></label>
+                        <input type="text" name="address_line" class="form-control form-control-sm">
+                      </div>
+          
+                      <div class="col-md-2">
+                        <label class="form-label mb-1">City</label>
+                        <input type="text" name="city" class="form-control form-control-sm">
+                      </div>
+          
+                      <div class="col-md-2">
+                        <label class="form-label mb-1">State</label>
+                        <input type="text" name="state" class="form-control form-control-sm">
+                      </div>
+          
+                      <div class="col-md-2">
+                        <label class="form-label mb-1">Zip</label>
+                        <input type="text" name="postal_code" class="form-control form-control-sm">
+                      </div>
+          
+                      <div class="col-md-2">
+                        <label class="form-label mb-1">Offer?</label>
+                        <select name="offer_status" class="form-select form-select-sm">
+                          <option value="considering">Considering</option>
+                          <option value="accepted">Accepted</option>
+                          <option value="lost">Lost</option>
+                          <option value="attorney review">Attorney Review</option>
+                          <option value="under contract">Under Contract</option>
+                        </select>
+                      </div>
+          
+                      <div class="col-12 text-end mt-2">
+                        <button type="submit" class="btn btn-primary btn-sm" name="form_action" value="add_property">
+                          Add Property
+                        </button>
+                      </div>
+                    </div>
+          
+                  </div>
+                </div>
+              </div>
+          
+              <!-- Professionals -->
+              <div class="tab-pane fade" id="bp-pros" role="tabpanel">
+                <div class="row g-3">
+          
+                  <div class="col-12">
+                    <h6 class="fw-bold mb-2">Professionals</h6>
+                  </div>
+          
+                  <div class="col-md-6">
+                    <label class="form-label">Select Buyer Attorney (optional)</label>
+                    <select id="buyer_attorney_select" class="form-select">
+                      <option value="">Choose from my list</option>
+                      {% for p in pros_attorneys %}
+                        <option value="{{ p.id }}" data-name="{{ p.name }}" data-phone="{{ p.phone }}" data-email="{{ p.email }}">
+                          {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
+                        </option>
+                      {% endfor %}
+                    </select>
+                    <small class="text-muted">Core, preferred and vetting attorneys. Blacklisted are hidden.</small>
+                  </div>
+          
+                  <div class="col-md-4">
+                    <label class="form-label">Attorney Name</label>
+                    <input name="buyer_attorney_name" id="buyer_attorney_name" class="form-control" value="{{ bp['buyer_attorney_name'] if bp else '' }}">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Attorney Email</label>
+                    <input name="buyer_attorney_email" id="buyer_attorney_email" class="form-control" value="{{ bp['buyer_attorney_email'] if bp else '' }}">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Attorney Phone</label>
+                    <input name="buyer_attorney_phone" id="buyer_attorney_phone" class="form-control" value="{{ bp['buyer_attorney_phone'] if bp else '' }}">
+                  </div>
+                  <div class="col-12">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="buyer_attorney_referred" id="buyer_attorney_referred" {% if bp and bp['buyer_attorney_referred'] %}checked{% endif %}>
+                      <label class="form-check-label" for="buyer_attorney_referred">Attorney referred by me</label>
+                    </div>
+                  </div>
+          
+                  <div class="col-md-6">
+                    <label class="form-label">Select Lender (optional)</label>
+                    <select id="buyer_lender_select" class="form-select">
+                      <option value="">Choose from my list</option>
+                      {% for p in pros_lenders %}
+                        <option value="{{ p.id }}" data-name="{{ p.name }}" data-phone="{{ p.phone }}" data-email="{{ p.email }}">
+                          {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+          
+                  <div class="col-md-4">
+                    <label class="form-label">Lender Name</label>
+                    <input name="lender_name" id="buyer_lender_name" class="form-control" value="{{ bp['lender_name'] if bp else '' }}">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Lender Email</label>
+                    <input name="buyer_lender_email" id="buyer_lender_email" class="form-control" value="{{ bp['buyer_lender_email'] if bp else '' }}">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Lender Phone</label>
+                    <input name="buyer_lender_phone" id="buyer_lender_phone" class="form-control" value="{{ bp['buyer_lender_phone'] if bp else '' }}">
+                  </div>
+          
+                  <div class="col-12">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="buyer_lender_referred" id="buyer_lender_referred" {% if bp and bp['buyer_lender_referred'] %}checked{% endif %}>
+                      <label class="form-check-label" for="buyer_lender_referred">Lender referred by me</label>
+                    </div>
+                  </div>
+          
+                  <div class="col-md-6">
+                    <label class="form-label">Select Home Inspector (optional)</label>
+                    <select id="buyer_inspector_select" class="form-select">
+                      <option value="">Choose from my list</option>
+                      {% for p in pros_inspectors %}
+                        <option value="{{ p.id }}" data-name="{{ p.name }}" data-phone="{{ p.phone }}" data-email="{{ p.email }}">
+                          {{ p.name }}{% if p.company %} ({{ p.company }}){% endif %} [{{ p.grade }}]
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+          
+                  <div class="col-md-4">
+                    <label class="form-label">Home Inspector Name</label>
+                    <input name="buyer_inspector_name" id="buyer_inspector_name" class="form-control" value="{{ bp['buyer_inspector_name'] if bp else '' }}">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Home Inspector Email</label>
+                    <input name="buyer_inspector_email" id="buyer_inspector_email" class="form-control" value="{{ bp['buyer_inspector_email'] if bp else '' }}">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Home Inspector Phone</label>
+                    <input name="buyer_inspector_phone" id="buyer_inspector_phone" class="form-control" value="{{ bp['buyer_inspector_phone'] if bp else '' }}">
+                  </div>
+          
+                  <div class="col-12">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="buyer_inspector_referred" id="buyer_inspector_referred" {% if bp and bp['buyer_inspector_referred'] %}checked{% endif %}>
+                      <label class="form-check-label" for="buyer_inspector_referred">Home inspector referred by me</label>
+                    </div>
+                  </div>
+          
+                  <div class="col-12">
+                    <label class="form-label">Other Professionals</label>
+                    <textarea name="other_professionals" class="form-control" rows="2" placeholder="Title company, contractor, etc.">{{ bp['other_professionals'] if bp else '' }}</textarea>
+                  </div>
+          
+                  <div class="col-12">
+                    <button class="btn btn-primary" type="submit" name="form_action" value="save_profile">
+                      Save Buyer Profile
+                    </button>
+                  </div>
+          
+                </div>
+              </div>
+          
+              <!-- Buyer Checklist -->
+              <div class="tab-pane fade" id="bp-checklist" role="tabpanel">
+                <h6 class="fw-bold mb-2">Buyer Checklist</h6>
+          
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="cis_signed" id="cis_signed" {% if bp and bp['cis_signed'] %}checked{% endif %}>
+                  <label class="form-check-label" for="cis_signed">Consumer Information Statement signed?</label>
+                </div>
+          
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="buyer_agreement_signed" id="buyer_agreement_signed" {% if bp and bp['buyer_agreement_signed'] %}checked{% endif %}>
+                  <label class="form-check-label" for="buyer_agreement_signed">Buyer’s Agency Agreement signed?</label>
+                </div>
+          
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="wire_fraud_notice_signed" id="wire_fraud_notice_signed" {% if bp and bp['wire_fraud_notice_signed'] %}checked{% endif %}>
+                  <label class="form-check-label" for="wire_fraud_notice_signed">Wire Fraud Notice signed?</label>
+                </div>
+          
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="dual_agency_consent_signed" id="dual_agency_consent_signed" {% if bp and bp['dual_agency_consent_signed'] %}checked{% endif %}>
+                  <label class="form-check-label" for="dual_agency_consent_signed">Informed Consent to Dual Agency signed?</label>
+                </div>
+                          
+                <div class="form-check mt-2">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  name="preapproval_letter_received"
+                  id="preapproval_letter_received"
+                  {% if bp and bp['preapproval_letter_received'] %}checked{% endif %}
+                >
+                <label class="form-check-label" for="preapproval_letter_received">
+                  Pre-approval letter received?
+                </label>
+              </div>
+              
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  name="proof_of_funds_received"
+                  id="proof_of_funds_received"
+                  {% if bp and bp['proof_of_funds_received'] %}checked{% endif %}
+                >
+                <label class="form-check-label" for="proof_of_funds_received">
+                  Proof of funds received (if applicable)?
+                </label>
+              </div>
+              
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  name="photo_id_received"
+                  id="photo_id_received"
+                  {% if bp and bp['photo_id_received'] %}checked{% endif %}
+                >
+                <label class="form-check-label" for="photo_id_received">
+                  Photo ID received?
+                </label>
+              </div>
+
+                <div class="mt-3">
+                  <button class="btn btn-primary" type="submit" name="form_action" value="save_profile">
                     Save Buyer Profile
-                </button>
-                <a href="{{ url_for('edit_contact', contact_id=contact_id) }}" class="btn btn-secondary mt-3">
-                    Back to Contact
-                </a>
-            </form>
+                  </button>
+                </div>
+
+              </div> <!-- is this needed? -->
+          
+              <!-- Transactions -->
+              <div class="tab-pane fade" id="bp-transactions" role="tabpanel">
+                {% set status_labels = dict(transaction_statuses) %}
+                <div class="card card-soft">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <div class="fw-semibold">Transactions</div>
+                    <a class="btn btn-sm btn-primary" href="{{ url_for('new_transaction', contact_id=contact_id, next=request.path) }}">
+                      + New Transaction
+                    </a>
+                  </div>
+          
+                  <div class="card-body p-0">
+                    {% if transactions and transactions|length > 0 %}
+                      <div class="table-responsive">
+                        <table class="table mb-0">
+                          <thead>
+                            <tr>
+                              <th>Address</th>
+                              <th>Status</th>
+                              <th class="text-end">List</th>
+                              <th class="text-end">Offer</th>
+                              <th>Expected Close</th>
+                              <th class="text-end">Open</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for tx in transactions %}
+                              <tr>
+                                <td>
+                                  {% if tx['address'] %}
+                                    <a href="{{ url_for('edit_transaction', transaction_id=tx['id'], next=request.path) }}" class="text-decoration-none">
+                                      {{ tx['address'] }}
+                                    </a>
+                                  {% else %}
+                                    <span class="text-muted">-</span>
+                                  {% endif %}
+                                </td>
+                                <td>{{ status_labels.get(tx['status'], tx['status']) }}</td>
+                                <td class="text-end">{% if tx['list_price'] %}${{ "{:,.0f}".format(tx['list_price']) }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                                <td class="text-end">{% if tx['offer_price'] %}${{ "{:,.0f}".format(tx['offer_price']) }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                                <td>{% if tx['expected_close_date'] %}{{ tx['expected_close_date'] }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                                <td class="text-end">
+                                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('edit_transaction', transaction_id=tx['id'], next=request.path) }}">
+                                    View / Edit
+                                  </a>
+                                </td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    {% else %}
+                      <div class="p-3 text-muted">No transactions yet.</div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+          
+            </div>
+          </form>
+
         </div>
     </div>
 

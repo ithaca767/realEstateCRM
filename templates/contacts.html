@@ -110,10 +110,16 @@
             {% for c in contacts %}
               {% set full_name = c["name"] or ((c["first_name"] or '') ~ ' ' ~ (c["last_name"] or '')) %}
               <tr>
-                <td>{{ full_name or 'Untitled' }}</td>
+                <td>
+                  {{ full_name or 'Untitled' }}
+                
+                  {% if c['archived_at'] %}
+                    <span class="badge bg-warning text-dark ms-2">Archived</span>
+                  {% endif %}
+                </td>
                 <td>{{ c["email"] }}</td>
                 <td>{{ c['phone']|phone_display }}
-</td>
+                </td>
                 <td>
                   {{ c["lead_type"] or '' }}
                   {% if c["pipeline_stage"] %}
