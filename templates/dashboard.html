@@ -129,9 +129,9 @@
                         <thead class="table-light">
                           <tr>
                             <th>Name</th>
-                            <th>Why</th>
-                            <th>Next Follow-up</th>
-                            <th>Last Engagement</th>
+                            <th>Outreach</th>
+                            <!-- <th>Next Follow-up</th> -->
+                            <!-- <th>Last Engagement</th> -->
                             <th style="width: 140px;">Actions</th>
                           </tr>
                         </thead>
@@ -163,18 +163,18 @@
                                 {% endfor %}
                               </td>
         
-                              <td>
+                              <!-- <td>
                                 {{ c["next_follow_up"] or "—" }}
-                              </td>
+                              </td> -->
         
-                              <td>
+                              <!-- <td>
                                 {% if c["last_engagement_at"] %}
                                   <strong>{{ c["last_engagement_type"] }}</strong>
                                   <div class="text-muted small">{{ c["last_engagement_at"] }}</div>
                                 {% else %}
                                   <span class="text-muted small">No engagements yet</span>
                                 {% endif %}
-                              </td>
+                              </td> -->
         
                               <td>
                                 <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements"
