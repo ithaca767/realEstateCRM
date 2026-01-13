@@ -44,23 +44,38 @@
         </div>
 
         <div class="row mb-3">
-          <div class="col-md-4">
-            <label class="form-label">Status</label>
+          <div class="col-md-3">
+            <label class="form-label">MLS Status</label>
             <select class="form-select" name="status" required>
               {% for value, label in transaction_statuses %}
-                <option value="{{ value }}"
-                  {% if tx and tx.status == value %}selected{% endif %}>
+                <option value="{{ value }}" {% if tx and tx.status == value %}selected{% endif %}>
                   {{ label }}
                 </option>
               {% endfor %}
             </select>
           </div>
-
-          <div class="col-md-4">
+        
+          <div class="col-md-3">
+            <label class="form-label">Listing Status</label>
+            <select name="listing_status" class="form-select">
+              {% for v, label in listing_statuses %}
+                <option value="{{ v }}" {% if tx and tx.listing_status == v %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        
+          <div class="col-md-3">
+            <label class="form-label">Offer Status</label>
+            <select name="offer_status" class="form-select">
+              {% for v, label in offer_statuses %}
+                <option value="{{ v }}" {% if tx and tx.offer_status == v %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        
+          <div class="col-md-3">
             <label class="form-label">Transaction Type</label>
-
             {% set selected_tx_type = (tx.transaction_type if tx else (default_tx_type or 'sell')) %}
-
             <select class="form-select" name="transaction_type">
               <option value="buy" {% if selected_tx_type == "buy" %}selected{% endif %}>Buy</option>
               <option value="sell" {% if selected_tx_type == "sell" %}selected{% endif %}>Sell</option>

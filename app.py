@@ -666,6 +666,31 @@ TRANSACTION_STATUSES = [
     ("expired", "Expired"),
 ]
 
+LISTING_STATUSES = [
+    ("draft", "Draft"),
+    ("coming_soon", "Coming Soon"),
+    ("active", "Active"),
+    ("under_contract", "Under Contract"),
+    ("back_on_market", "Back on Market"),
+    ("withdrawn", "Withdrawn"),
+    ("expired", "Expired"),
+    ("closed", "Closed"),
+]
+
+OFFER_STATUSES = [
+    ("draft", "Draft"),
+    ("submitted", "Submitted"),
+    ("countered", "Countered"),
+    ("accepted", "Accepted"),
+    ("rejected", "Rejected"),
+    ("withdrawn", "Withdrawn"),
+    ("under_contract", "Under Contract"),
+    ("closed", "Closed"),
+]
+
+LISTING_STATUS_VALUES = {v for v, _ in LISTING_STATUSES}
+OFFER_STATUS_VALUES = {v for v, _ in OFFER_STATUSES}
+
 BASE_TEMPLATE = """
 <!doctype html>
 <html>
@@ -2861,6 +2886,9 @@ def dashboard():
     engagements_has_user = has_column("engagements", "user_id")
     buyer_has_user = has_column("buyer_profiles", "user_id")
     seller_has_user = has_column("seller_profiles", "user_id")
+    
+    # Detect contact_state (older prod/local may not have it yet)
+    contacts_has_state = has_column("contacts", "contact_state")
 
     # Total contacts count
     if contacts_has_user:
@@ -2874,6 +2902,9 @@ def dashboard():
     engagements_scope_sql = "AND e.user_id = %s" if engagements_has_user else ""
     buyer_scope_sql = "AND bp.user_id = %s" if buyer_has_user else ""
     seller_scope_sql = "AND sp.user_id = %s" if seller_has_user else ""
+    contacts_state_sql = "AND c.contact_state = 'active'" if contacts_has_state else ""
+    contact_state_only_sql = "AND c.contact_state = 'active'" if contacts_has_state else ""
+
 
     # Params helpers
     contacts_scope_params = (current_user.id,) if contacts_has_user else tuple()
@@ -2925,6 +2956,8 @@ def dashboard():
         ) le ON TRUE
 
         WHERE {contacts_scope_sql}
+          AND c.archived_at IS NULL
+          {contacts_state_sql}
           AND (
               (le.occurred_at IS NOT NULL AND le.occurred_at >= (NOW() - INTERVAL %s))
               OR c.next_follow_up IS NOT NULL
@@ -2996,7 +3029,7 @@ def dashboard():
     overdue_followups = cur.fetchall() or []
     
     cur.execute(
-        """
+        f"""
         SELECT
           e.id AS engagement_id,
           e.contact_id,
@@ -3007,6 +3040,8 @@ def dashboard():
         FROM engagements e
         JOIN contacts c ON c.id = e.contact_id
         WHERE e.user_id = %s
+          AND c.archived_at IS NULL
+          {contacts_state_sql}
           AND e.follow_up_due_at IS NOT NULL
           AND e.follow_up_due_at >= NOW()
           AND e.follow_up_due_at < (NOW() + INTERVAL '14 days')
@@ -3076,6 +3111,7 @@ def dashboard():
     
         WHERE {contacts_scope_sql}
           AND c.archived_at IS NULL
+          {contacts_state_sql}
           AND c.pipeline_stage = %s
     
         ORDER BY
@@ -3121,6 +3157,7 @@ def dashboard():
             JOIN contacts c ON c.id = e.contact_id
             WHERE {contacts_scope_sql}
               AND c.archived_at IS NULL
+              {contacts_state_sql}
             {"AND e.user_id = %s" if engagements_has_user else ""}
             ORDER BY
                 e.contact_id,
@@ -3140,45 +3177,8 @@ def dashboard():
     cur.execute(recent_sql, tuple(recent_params))
     recent_engagements = cur.fetchall()
 
-    # Follow-ups with context (single query then split into overdue/upcoming in Python) COMMENTED OUT 12-26-25
-    # followups_sql = f"""
-    #     SELECT
-    #         c.id AS contact_id,
-    #         c.name,
-    #         c.first_name,
-    #         c.last_name,
-    #         c.next_follow_up,
-    #         c.next_follow_up_time,
-# 
-    #         le.occurred_at AS last_engagement_at,
-    #         le.engagement_type AS last_engagement_type,
-    #         le.outcome AS last_engagement_outcome,
-    #         le.summary_clean AS last_engagement_summary
-# 
-    #     FROM contacts c
-# 
-    #     LEFT JOIN LATERAL (
-    #         SELECT e.occurred_at, e.engagement_type, e.outcome, e.summary_clean
-    #         FROM engagements e
-    #         WHERE e.contact_id = c.id
-    #         {engagements_scope_sql}
-    #         ORDER BY e.occurred_at DESC
-    #         LIMIT 1
-    #     ) le ON TRUE
-# 
-    #     WHERE {contacts_scope_sql}
-    #       AND c.next_follow_up IS NOT NULL
-    #     ORDER BY c.next_follow_up ASC, c.name ASC
-    # """
-    # followups_params = []
-    # followups_params += list(contacts_scope_params)
-    # followups_params += list(engagements_scope_params)
-# 
-    # cur.execute(followups_sql, tuple(followups_params))
-    # followup_rows = cur.fetchall()
-
     # Follow-ups from engagements (source of truth)
-    followups_sql = """
+    followups_sql = f"""
         SELECT
             e.id AS engagement_id,
             e.contact_id,
@@ -3205,6 +3205,8 @@ def dashboard():
         ) le ON TRUE
     
         WHERE c.user_id = %s
+          AND c.archived_at IS NULL
+          {contacts_state_sql}
           AND e.user_id = %s
           AND e.requires_follow_up = TRUE
           AND e.follow_up_completed = FALSE
@@ -6695,8 +6697,8 @@ def new_transaction(contact_id):
             status,
             transaction_type,
             address,
-            "lead",
-            "none",
+            "draft",
+            "draft",
             list_price,
             offer_price,
             expected_close_date,
@@ -6785,6 +6787,14 @@ def edit_transaction(transaction_id):
     if request.method == "POST":
         status = request.form.get("status", tx["status"])
         transaction_type = request.form.get("transaction_type", tx["transaction_type"])
+        listing_status = (request.form.get("listing_status") or tx.get("listing_status") or "draft").strip()
+        offer_status = (request.form.get("offer_status") or tx.get("offer_status") or "draft").strip()
+        
+        # Guardrails: if template sends something unexpected, do not crash
+        if listing_status not in LISTING_STATUS_VALUES:
+            listing_status = tx.get("listing_status") or "draft"
+        if offer_status not in OFFER_STATUS_VALUES:
+            offer_status = tx.get("offer_status") or "draft"        
 
         address = (request.form.get("address") or "").strip() or None
         list_price = (request.form.get("list_price") or "").strip() or None
@@ -6804,6 +6814,8 @@ def edit_transaction(transaction_id):
             SET status = %s,
                 transaction_type = %s,
                 address = %s,
+                listing_status = %s,
+                offer_status = %s,
                 list_price = %s,
                 offer_price = %s,
                 expected_close_date = %s,
@@ -6820,6 +6832,8 @@ def edit_transaction(transaction_id):
                 status,
                 transaction_type,
                 address,
+                listing_status,
+                offer_status,
                 list_price,
                 offer_price,
                 expected_close_date,
@@ -6847,6 +6861,8 @@ def edit_transaction(transaction_id):
         tx=tx,
         contact=contact,
         transaction_statuses=TRANSACTION_STATUSES,
+        listing_statuses=LISTING_STATUSES,
+        offer_statuses=OFFER_STATUSES,
         next_url=next_url,
         deadlines=deadlines,
     )
