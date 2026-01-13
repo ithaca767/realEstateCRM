@@ -6727,9 +6727,12 @@ def new_transaction(contact_id):
         mode="new",
         tx=None,
         transaction_statuses=TRANSACTION_STATUSES,
+        listing_statuses=LISTING_STATUSES,
+        offer_statuses=OFFER_STATUSES,
         next_url=next_url,
         deadlines=[],
         default_tx_type=default_tx_type,
+        
     )
 
 @app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
@@ -6738,6 +6741,7 @@ def edit_transaction(transaction_id):
     conn = get_db()
     cur = conn.cursor()
 
+    # Fetch transaction
     cur.execute(
         """
         SELECT *
@@ -6752,6 +6756,7 @@ def edit_transaction(transaction_id):
         conn.close()
         return "Transaction not found", 404
 
+    # Fetch contact
     cur.execute(
         """
         SELECT first_name, last_name, email, phone
@@ -6761,12 +6766,12 @@ def edit_transaction(transaction_id):
         (tx["contact_id"], current_user.id),
     )
     contact = cur.fetchone()
-    
+
     if not contact:
         conn.close()
         return "Contact not found", 404
 
-    # Phase 3.1: Read-only deadlines for this transaction
+    # Deadlines (read-only list here)
     cur.execute(
         """
         SELECT
@@ -6787,14 +6792,15 @@ def edit_transaction(transaction_id):
     if request.method == "POST":
         status = request.form.get("status", tx["status"])
         transaction_type = request.form.get("transaction_type", tx["transaction_type"])
+
         listing_status = (request.form.get("listing_status") or tx.get("listing_status") or "draft").strip()
         offer_status = (request.form.get("offer_status") or tx.get("offer_status") or "draft").strip()
-        
-        # Guardrails: if template sends something unexpected, do not crash
+
+        # Guardrails
         if listing_status not in LISTING_STATUS_VALUES:
             listing_status = tx.get("listing_status") or "draft"
         if offer_status not in OFFER_STATUS_VALUES:
-            offer_status = tx.get("offer_status") or "draft"        
+            offer_status = tx.get("offer_status") or "draft"
 
         address = (request.form.get("address") or "").strip() or None
         list_price = (request.form.get("list_price") or "").strip() or None
