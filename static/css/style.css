@@ -121,5 +121,14 @@ a.tx-address {
   vertical-align: text-top;
 }
 
+html:focus-within {
+  scroll-behavior: smooth;
+}
+
+#active-contacts {
+  scroll-margin-top: 80px;
+}
+
+
 
 

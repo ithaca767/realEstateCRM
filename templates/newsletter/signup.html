@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container" style="max-width: 640px;">
+  <h2 class="mb-2">{{ page_title }}</h2>
+  <p class="text-muted mb-4">Local updates, events, and community highlights. No spam.</p>
+
+  {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('newsletter_signup', public_token=public_token) }}">
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">First name</label>
+        <input class="form-control" name="first_name" autocomplete="given-name">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Last name</label>
+        <input class="form-control" name="last_name" autocomplete="family-name">
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Email</label>
+      <input class="form-control" name="email" type="email" required autocomplete="email">
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Do you live in Keyport?</label>
+      <select class="form-select" name="is_resident">
+        <option value="">Prefer not to say</option>
+        <option value="yes">Yes</option>
+        <option value="no">No, but I follow Keyport</option>
+      </select>
+    </div>
+
+    <div class="form-text mb-3">
+      By signing up, you agree to receive this newsletter by email. You can unsubscribe anytime.
+    </div>
+
+    <button class="btn btn-primary" type="submit">Sign me up</button>
+  </form>
+</div>
+
+{% endblock %}

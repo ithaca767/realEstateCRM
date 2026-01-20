@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container" style="max-width: 640px;">
+  <h2 class="mb-2">You’re in.</h2>
+  <p class="text-muted mb-4">Thanks for signing up. If you want, you can also confirm your subscription on Substack.</p>
+
+  {% if redirect_url %}
+    <a class="btn btn-primary" href="{{ redirect_url }}">Go to Substack</a>
+  {% else %}
+    <a class="btn btn-outline-secondary" href="https://substack.com/">Substack</a>
+  {% endif %}
+</div>
+
+{% endblock %}

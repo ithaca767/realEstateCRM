@@ -2852,7 +2852,19 @@ def dashboard():
 
     ACTIVE_DAYS = 30
     UPCOMING_DAYS = 14
-    ACTIVE_LIMIT = 60
+
+    # Dashboard paging (Phase 6c)
+    DASH_PAGE_SIZE = 10
+
+    def _safe_int(v, default=1):
+        try:
+            n = int(v)
+            return n if n >= 1 else default
+        except Exception:
+            return default
+
+    ac_page = _safe_int(request.args.get("ac_page"), 1)
+    ac_offset = (ac_page - 1) * DASH_PAGE_SIZE
 
     def _nf_to_date(nf):
         if not nf:
@@ -2979,7 +2991,7 @@ def dashboard():
           le.occurred_at DESC NULLS LAST,
           c.name ASC
 
-        LIMIT %s
+        LIMIT %s OFFSET %s
     """
 
     # Interval param needs to be a string like '30 days'
@@ -3002,10 +3014,20 @@ def dashboard():
     active_params += list(buyer_scope_params)
     active_params += list(seller_scope_params)
 
-    active_params += [ACTIVE_LIMIT]
+    active_params += [DASH_PAGE_SIZE + 1, ac_offset]
 
     cur.execute(active_sql, tuple(active_params))
     active_rows = cur.fetchall()
+    
+    has_more_active = len(active_rows) > DASH_PAGE_SIZE
+    has_prev_active = ac_page > 1
+    
+    # Trim to the real page size
+    active_rows = active_rows[:DASH_PAGE_SIZE]
+    
+    # Determine paging flags (simple, low-cost)
+    has_more_active = len(active_rows) == DASH_PAGE_SIZE
+    has_prev_active = ac_page > 1
 
     cur.execute(
         """
@@ -3251,6 +3273,10 @@ def dashboard():
         upcoming_days=UPCOMING_DAYS,
         active_days=ACTIVE_DAYS,
         active_page="dashboard",
+        ac_page=ac_page,
+        has_more_active=has_more_active,
+        has_prev_active=has_prev_active,
+        
     )
 
 @app.route("/contacts")
@@ -3330,6 +3356,9 @@ def contacts():
     elif tab == "past_clients":
         where_clauses.append("pipeline_stage = %s")
         params.append("Past Client / Relationship")
+    elif tab == "imported":
+        where_clauses.append("contact_state = %s")
+        params.append("imported")
     
     # Search filter
     if search:
@@ -3345,10 +3374,15 @@ def contacts():
         """)
         like_value = f"%{search}%"
         params.extend([like_value] * 6)
-        where_sql = ""
+
+    # Default: hide imported contacts unless explicitly viewing the Imported tab
+    if tab != "imported":
+        where_clauses.append("contact_state <> 'imported'")
 
     if where_clauses:
         where_sql = "WHERE " + " AND ".join(where_clauses)
+    else:
+        where_sql = ""
 
     # Count total for pagination
     count_sql = f"SELECT COUNT(*) AS total FROM contacts {where_sql}"
@@ -3374,7 +3408,8 @@ def contacts():
             lead_type,
             pipeline_stage,
             notes,
-            archived_at
+            archived_at,
+            contact_state            
         FROM contacts
         {where_sql}
         ORDER BY last_name NULLS LAST, first_name NULLS LAST, id ASC
@@ -3633,7 +3668,8 @@ def edit_contact(contact_id):
           next_follow_up,
           next_follow_up_time,
           notes,
-          archived_at
+          archived_at,
+          contact_state
         FROM contacts
         WHERE id = %s AND user_id = %s
         """,
@@ -4222,6 +4258,41 @@ def delete_contact_association(contact_id, assoc_id):
     conn.commit()
     conn.close()
     return redirect(next_url)
+
+@app.route("/contacts/<int:contact_id>/set_state", methods=["POST"])
+@login_required
+def contact_set_state(contact_id):
+    state = (request.form.get("contact_state") or "").strip()
+
+    if state not in ("active", "inactive"):
+        flash("Invalid contact state.", "warning")
+        return redirect(url_for("contacts", tab="imported"))
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE contacts
+            SET contact_state = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND user_id = %s
+              AND archived_at IS NULL
+            """,
+            (state, contact_id, current_user.id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    flash("Contact updated.", "success")
+
+    next_url = (request.form.get("next") or "").strip()
+    if next_url:
+        return redirect(next_url)
+
+    return redirect(url_for("contacts", tab="imported"))
 
 @app.route("/engagements/search")
 @login_required
@@ -7301,6 +7372,156 @@ def openhouse_export_csv(open_house_id):
         csv_data,
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename=open_house_{open_house_id}_signins.csv"}
+    )
+
+@app.route("/newsletter/signup/<public_token>", methods=["GET", "POST"])
+def newsletter_signup(public_token):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT id, created_by_user_id, title, redirect_url, is_active
+        FROM newsletter_signup_links
+        WHERE public_token = %s
+        """,
+        (public_token,)
+    )
+    link = cur.fetchone()
+
+    if not link or not link["is_active"]:
+        conn.close()
+        abort(404)
+
+    if request.method == "GET":
+        conn.close()
+        return render_template(
+            "newsletter/signup.html",
+            page_title=link["title"],
+            public_token=public_token
+        )
+
+    # POST
+    first_name = (request.form.get("first_name") or "").strip()
+    last_name = (request.form.get("last_name") or "").strip()
+    email = _normalize_email(request.form.get("email"))
+    resident_flag = (request.form.get("is_resident") or "").strip()  # "yes" or "no" or ""
+
+    if not email or "@" not in email:
+        conn.close()
+        return render_template(
+            "newsletter/signup.html",
+            page_title=link["title"],
+            public_token=public_token,
+            error="Please enter a valid email address."
+        )
+
+    # Find existing contact by email for the owner of this link
+    user_id = link["created_by_user_id"]
+
+    cur.execute(
+        """
+        SELECT id
+        FROM contacts
+        WHERE user_id = %s AND lower(email) = %s
+        """,
+        (user_id, email)
+    )
+    existing = cur.fetchone()
+
+    now_ts = datetime.now()
+
+    if existing:
+        contact_id = existing["id"]
+        cur.execute(
+            """
+            UPDATE contacts
+            SET first_name = COALESCE(NULLIF(%s, ''), first_name),
+                last_name = COALESCE(NULLIF(%s, ''), last_name),
+                newsletter_opt_in = true,
+                newsletter_opt_in_date = COALESCE(newsletter_opt_in_date, %s),
+                newsletter_source = COALESCE(newsletter_source, 'Keyport Newsletter Signup')
+            WHERE id = %s AND user_id = %s
+            """,
+            (first_name, last_name, now_ts, contact_id, user_id)
+        )
+    else:
+        # Put resident info into notes for MVP (no schema change needed)
+        notes = None
+        if resident_flag in ("yes", "no"):
+            notes = f"Newsletter signup. Keyport resident: {resident_flag}."
+
+        cur.execute(
+            """
+            INSERT INTO contacts (user_id, first_name, last_name, email, notes, newsletter_opt_in, newsletter_opt_in_date, newsletter_source)
+            VALUES (%s, NULLIF(%s,''), NULLIF(%s,''), %s, %s, true, %s, 'Keyport Newsletter Signup')
+            RETURNING id
+            """,
+            (user_id, first_name, last_name, email, notes, now_ts)
+        )
+        row = cur.fetchone()
+        contact_id = row["id"] if row else None
+
+    # Defensive guard
+    if not contact_id:
+        conn.rollback()
+        conn.close()
+        return render_template(
+            "newsletter/signup.html",
+            page_title=link["title"],
+            public_token=public_token,
+            error="Sorry, something went wrong. Please try again."
+        )
+
+    # Optional: log engagement (only if your engagements table supports it)
+    # Adjust columns to match your schema if needed.
+    try:
+        cur.execute(
+            """
+            INSERT INTO engagements (user_id, contact_id, engagement_type, summary, occurred_at, created_at)
+            VALUES (%s, %s, 'newsletter_signup', 'Signed up for Keyport newsletter', %s, now())
+            """,
+            (user_id, contact_id, now_ts)
+        )
+    except Exception:
+        # Do not fail the signup if engagement logging is not compatible
+        conn.rollback()
+        # Re-apply the contact change if rollback happened
+        conn.close()
+        return redirect(url_for("newsletter_thanks", public_token=public_token))
+
+    conn.commit()
+    conn.close()
+
+    # Redirect to Substack subscribe page if configured
+    if link["redirect_url"]:
+        return redirect(link["redirect_url"])
+
+    return redirect(url_for("newsletter_thanks", public_token=public_token))
+
+
+@app.route("/newsletter/thanks/<public_token>")
+def newsletter_thanks(public_token):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT title, redirect_url, is_active
+        FROM newsletter_signup_links
+        WHERE public_token = %s
+        """,
+        (public_token,)
+    )
+    link = cur.fetchone()
+    conn.close()
+
+    if not link or not link["is_active"]:
+        abort(404)
+
+    return render_template(
+        "newsletter/thanks.html",
+        page_title=link["title"],
+        redirect_url=link["redirect_url"]
     )
 
 @app.route("/api/reminders/due")
