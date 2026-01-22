@@ -800,6 +800,7 @@
                         <th style="width: 170px;">When</th>
                         <th style="width: 140px;">Type</th>
                         <th>Details</th>
+                        <th style="width: 220px;">Follow-up / Tags</th>
                         <th style="width: 220px;" class="text-end">Actions</th>
                       </tr>
                     </thead>
@@ -808,37 +809,24 @@
                         <tr>
                           <td class="text-muted">{{ e["occurred_at"] }}</td>
                           <td>{{ (e["engagement_type"] or "")|replace("_"," ")|title }}</td>
+              
                           <td>
                             {% set desc_id = "engDesc_" ~ e["id"] %}
-
+              
                             <div class="eng-desc is-clamped clamp-2" id="{{ desc_id }}">
                               {% if e["outcome"] %}
                                 <div><span class="text-muted">Outcome:</span> {{ e["outcome"] }}</div>
                               {% endif %}
-
+              
                               {% if e["notes"] %}
                                 <div>{{ e["notes"] }}</div>
                               {% endif %}
-
+              
                               {% if e["summary_clean"] %}
                                 <div class="mt-2"><span class="text-muted">Summary:</span> {{ e["summary_clean"] }}</div>
                               {% endif %}
-
-                              {% if e["requires_follow_up"] %}
-                                <div class="mt-2">
-                                  <span class="badge bg-warning-subtle text-dark">Follow-up</span>
-
-                                  {% if e["follow_up_due_at"] %}
-                                    <span class="text-muted small ms-2">Due: {{ e["follow_up_due_at"] }}</span>
-                                  {% endif %}
-
-                                  {% if e["follow_up_completed"] %}
-                                    <span class="badge bg-success-subtle text-dark ms-2">Completed</span>
-                                  {% endif %}
-                                </div>
-                              {% endif %}
                             </div>
-
+              
                             {% set _details_text = ((e["outcome"] or "") ~ " " ~ (e["notes"] or "") ~ " " ~ (e["summary_clean"] or "")) %}
                             {% if _details_text|length > 140 %}
                               <a class="small text-decoration-none eng-see-more"
@@ -850,7 +838,28 @@
                               </a>
                             {% endif %}
                           </td>
-
+              
+                          <td>
+                            {% if e["requires_follow_up"] %}
+                              <div>
+                                <span class="badge bg-warning-subtle text-dark">Follow-up</span>
+              
+                                {% if e["follow_up_due_at"] %}
+                                  <div class="text-muted small mt-1">Due: {{ e["follow_up_due_at"] }}</div>
+                                {% endif %}
+              
+                                {% if e["follow_up_completed"] %}
+                                  <div class="mt-1">
+                                    <span class="badge bg-success-subtle text-dark">Completed</span>
+                                  </div>
+                                {% endif %}
+                              </div>
+                            {% endif %}
+              
+                            {# Placeholder for future “related tags” without changing behavior in v1.0 #}
+                            {# If you already have existing badges/links elsewhere, we can move them here next. #}
+                          </td>
+              
                           <td class="text-end">
                             <div class="d-inline-flex align-items-center justify-content-end">
                               <div class="btn-group btn-group-sm" role="group" aria-label="Engagement actions">
@@ -860,7 +869,7 @@
                                                     next=(url_for('edit_contact', contact_id=c['id']) ~ '#engagements')) }}">
                                   View / Edit
                                 </a>
-                          
+              
                                 <button type="button"
                                         class="btn btn-outline-danger"
                                         data-bs-toggle="modal"
