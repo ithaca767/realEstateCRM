@@ -45,7 +45,7 @@
               <th>Title</th>
               <th style="width: 14%;">Status</th>
               <th style="width: 16%;">Due</th>
-              <th style="width: 20%;" class="text-end">Actions</th>
+              <th style="width: 20%;" class="text-end actions-col">Actions</th>
             </tr>
           </thead>
 
@@ -99,18 +99,33 @@
                 </td>
 
                 <td class="text-end">
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-primary"
-                    onclick="openTaskModal('{{ url_for('tasks_modal_edit', task_id=t.id) }}', 'Edit Task')">
-                    Edit
-                  </button>
+                  <div class="d-inline-flex align-items-center justify-content-end">
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Task actions">
+                      <button
+                        type="button"
+                        class="btn btn-outline-primary"
+                        onclick="openTaskModal('{{ url_for('tasks_modal_edit', task_id=t.id) }}', 'Edit Task')">
+                        Edit
+                      </button>
                 
-                  {% if t.status != 'completed' %}
-                    <form method="post" action="{{ url_for('tasks_complete', task_id=t.id) }}" class="d-inline">
-                      <button type="submit" class="btn btn-sm btn-outline-success">Complete</button>
-                    </form>
-                  {% endif %}
+                      {% if t.status != 'completed' %}
+                        <button
+                          type="button"
+                          class="btn btn-outline-success"
+                          onclick="document.getElementById('taskCompleteForm_{{ t.id }}').submit();">
+                          Complete
+                        </button>
+                      {% endif %}
+                    </div>
+                
+                    {% if t.status != 'completed' %}
+                      <form id="taskCompleteForm_{{ t.id }}"
+                            method="post"
+                            action="{{ url_for('tasks_complete', task_id=t.id) }}"
+                            class="d-none">
+                      </form>
+                    {% endif %}
+                  </div>
                 </td>
               </tr>
             {% endfor %}

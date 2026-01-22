@@ -129,6 +129,25 @@ html:focus-within {
   scroll-margin-top: 80px;
 }
 
+/* v1.0 UI polish: keep action buttons from wrapping in table action columns */
+.actions-col {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.actions-col .btn-group,
+.actions-col .d-inline-flex {
+  flex-wrap: nowrap;
+}
+
+.actions-col .btn {
+  white-space: nowrap;
+}
+
+/* Allow POST forms inside Bootstrap btn-groups without breaking borders */
+.btn-group.task-actions > form {
+  display: contents;
+}
 
 
 
