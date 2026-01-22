@@ -25,11 +25,14 @@
 <div class="card mt-3">
   <div class="card-body">
 
+    {% set current_status = (status or 'all') %}
+    
     <div class="d-flex flex-wrap gap-2 mb-3">
-      <a class="btn btn-sm {% if not status %}btn-dark{% else %}btn-outline-dark{% endif %}"
-         href="{{ url_for('tasks_list') }}">All</a>
+      <a class="btn btn-sm {% if current_status == 'all' %}btn-dark{% else %}btn-outline-dark{% endif %}"
+         href="{{ url_for('tasks_list', status='all') }}">All</a>
+    
       {% for s in statuses %}
-        <a class="btn btn-sm {% if status == s %}btn-dark{% else %}btn-outline-dark{% endif %}"
+        <a class="btn btn-sm {% if current_status == s %}btn-dark{% else %}btn-outline-dark{% endif %}"
            href="{{ url_for('tasks_list', status=s) }}">{{ s|replace('_',' ')|title }}</a>
       {% endfor %}
     </div>

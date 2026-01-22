@@ -1,6 +1,6 @@
 from datetime import datetime
 
-def list_engagements_for_contact(conn, user_id: int, contact_id: int, limit: int = 50):
+def list_engagements_for_contact(conn, user_id, contact_id, limit=50, offset=0):
     cur = conn.cursor()
     cur.execute(
         """
@@ -10,20 +10,20 @@ def list_engagements_for_contact(conn, user_id: int, contact_id: int, limit: int
           occurred_at,
           outcome,
           notes,
-          transcript_raw,
           summary_clean,
+          transcript_raw,
           requires_follow_up,
           follow_up_due_at,
-          follow_up_completed,
-          follow_up_completed_at
+          follow_up_completed
         FROM engagements
         WHERE user_id = %s AND contact_id = %s
-        ORDER BY occurred_at DESC, id DESC
-        LIMIT %s
+        ORDER BY occurred_at DESC NULLS LAST, id DESC
+        LIMIT %s OFFSET %s
         """,
-        (user_id, contact_id, limit),
+        (user_id, contact_id, limit, offset),
     )
-    return cur.fetchall()
+    rows = cur.fetchall() or []
+    return rows
 
 def insert_engagement(
     conn,

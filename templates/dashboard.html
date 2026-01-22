@@ -52,6 +52,7 @@
       <div class="row g-3">
   
         <div class="col-md-3 col-6">
+        <a class="text-decoration-none text-reset" href="{{ url_for('dashboard') }}#followups-overdue">
           <div class="card text-center h-100 border-start border-2 border-danger">
             <div class="card-body">
               <div class="text-muted small">Overdue Follow Ups</div>
@@ -60,9 +61,11 @@
               </div>
             </div>
           </div>
+        </a>
         </div>
   
         <div class="col-md-3 col-6">
+        <a class="text-decoration-none text-reset" href="{{ url_for('dashboard') }}#followups-upcoming">
           <div class="card text-center h-100 border-start border-2 border-warning">
             <div class="card-body">
               <div class="text-muted small">
@@ -73,9 +76,11 @@
               </div>
             </div>
           </div>
+        </a>
         </div>
   
         <div class="col-md-3 col-6">
+        <a class="text-decoration-none text-reset" href="{{ url_for('contacts') }}">
           <div class="card text-center h-100 border-start border-2 border-success">
             <div class="card-body">
               <div class="text-muted small">Active Contacts</div>
@@ -84,9 +89,11 @@
               </div>
             </div>
           </div>
+        </a>
         </div>
   
         <div class="col-md-3 col-6">
+        <a class="text-decoration-none text-reset" href="{{ url_for('contacts') }}">
           <div class="card text-center h-100 border-start border-2 border-primary">
             <div class="card-body">
               <div class="text-muted small">Total Contacts</div>
@@ -95,6 +102,7 @@
               </div>
             </div>
           </div>
+        </a>
         </div>
   
       </div>
@@ -147,13 +155,18 @@
         
               <!-- Active Contacts -->
               <div class="card" id="active-contacts">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                   <div>
                     <div class="fw-semibold">Active Contacts</div>
                     <div class="text-muted small">
                       Active if engaged in last {{ active_days }} days, has a follow-up, buyer profile, or seller profile
                     </div>
                   </div>
+                
+                  {# FUTURE (post-v1.0): Add Contact modal using Task modal pattern #}
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('contacts') }}">
+                    Contacts
+                  </a>
                 </div>
               
                 <div class="card-body bg-white">
@@ -267,15 +280,22 @@
                   {% if recent_engagements %}
                     <div class="list-group list-group-flush">
                       {% for e in recent_engagements[:5] %}
-                        <div class="list-group-item px-0">
-                          <strong>{{ e["contact_name"] }}</strong>
-                          {% if e["pipeline_stage"] == "Past Client / Relationship" %}
-                            <span class="past-client-dot ms-2">P</span>
-                          {% endif %}
-                          <div class="text-muted small">
-                            {{ e["engagement_type"] }} · {{ e["occurred_at"] }}
+                        <a class="list-group-item list-group-item-action px-0"
+                           href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements">
+                          <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                              <div class="fw-semibold">
+                                {{ e["contact_name"] }}
+                                {% if e["pipeline_stage"] == "Past Client / Relationship" %}
+                                  <span class="past-client-dot ms-2">P</span>
+                                {% endif %}
+                              </div>
+                              <div class="text-muted small">
+                                {{ e["engagement_type"] }} · {{ e["occurred_at"] }}
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        </a>
                       {% endfor %}
                     </div>
                   {% else %}
@@ -301,7 +321,7 @@
 
         <!-- Follow-ups tab -->
         <div class="tab-pane fade" id="followups" role="tabpanel" aria-labelledby="followups-tab">
-
+        
           {% macro contact_display(c) %}
             {% if c.get("contact_name") %}
               {{ c["contact_name"] }}
@@ -311,7 +331,7 @@
               {{ c.get("name") or "Unnamed Contact" }}
             {% endif %}
           {% endmacro %}
-
+        
           {% macro followup_table(rows) %}
             {% if rows and rows|length > 0 %}
               <div class="table-responsive">
@@ -332,7 +352,7 @@
                             {{ contact_display(c) }}
                           </a>
                         </td>
-
+        
                         <td>
                           {% if c.get("follow_up_due_at") %}
                             {{ c["follow_up_due_at"] }}
@@ -340,14 +360,14 @@
                             <span class="text-muted">None</span>
                           {% endif %}
                         </td>
-
+        
                         <td style="min-width: 280px;">
                           {% if c.get("last_engagement_at") %}
                             <div class="small">
                               <strong>{{ c.get("last_engagement_type") or "engagement" }}</strong>
                               <span class="text-muted">({{ c["last_engagement_at"] }})</span>
                             </div>
-
+        
                             {% set detail = c.get("last_engagement_outcome") or c.get("last_engagement_summary") %}
                             {% if detail %}
                               <div class="text-muted small">{{ detail }}</div>
@@ -356,14 +376,14 @@
                             <span class="text-muted small">No engagement context yet</span>
                           {% endif %}
                         </td>
-
+        
                         <td class="text-end">
                           <div class="d-flex justify-content-end gap-2">
                             <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements"
                                class="btn btn-sm btn-outline-primary">
                               Open
                             </a>
-
+        
                             {% if c.get("engagement_id") %}
                               <form method="post" action="{{ url_for('followup_clear', engagement_id=c['engagement_id']) }}">
                                 <button type="submit" class="btn btn-sm btn-outline-success">
@@ -382,7 +402,9 @@
               <p class="mb-0 text-muted">Nothing here.</p>
             {% endif %}
           {% endmacro %}
-
+        
+          <!-- Anchor for Overdue -->
+          <a id="followups-overdue" class="d-block" style="scroll-margin-top: 90px;"></a>
           <div class="card mb-3">
             <div class="card-header bg-danger-subtle text-dark fw-semibold">
               Overdue Follow Ups
@@ -391,7 +413,9 @@
               {{ followup_table(followups_overdue) }}
             </div>
           </div>
-
+        
+          <!-- Anchor for Upcoming -->
+          <a id="followups-upcoming" class="d-block" style="scroll-margin-top: 90px;"></a>
           <div class="card">
             <div class="card-header bg-success-subtle text-dark fw-semibold">
               Upcoming (next {{ upcoming_days }} days)
@@ -400,7 +424,7 @@
               {{ followup_table(followups_upcoming) }}
             </div>
           </div>
-
+        
         </div>
 
       </div>
@@ -450,5 +474,71 @@
       });
     });
   </script>
+  <script>
+    window.addEventListener("load", function () {
+      function getTabButton(tabTarget) {
+        return document.querySelector(
+          'button[data-bs-toggle="tab"][data-bs-target="' + tabTarget + '"]'
+        );
+      }
+  
+      function showTab(tabTarget) {
+        var btn = getTabButton(tabTarget);
+        if (!btn || !window.bootstrap) return null;
+        bootstrap.Tab.getOrCreateInstance(btn).show();
+        return btn;
+      }
+  
+      function scrollToHash(hash) {
+        if (!hash || hash === "#followups" || hash === "#outreach") return;
+        var target = document.querySelector(hash);
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+  
+      function handleHash() {
+        var hash = window.location.hash || "";
+        if (!hash) return;
+  
+        // Follow-ups hashes
+        if (hash === "#followups" || hash.startsWith("#followups-")) {
+          var followupsBtn = showTab("#followups");
+          if (!followupsBtn) return;
+  
+          // After the tab is shown, scroll to the anchor
+          if (hash.startsWith("#followups-")) {
+            followupsBtn.addEventListener(
+              "shown.bs.tab",
+              function () {
+                scrollToHash(hash);
+              },
+              { once: true }
+            );
+          }
+          return;
+        }
+  
+        // Outreach tab (optional)
+        if (hash === "#outreach") {
+          showTab("#outreach");
+          return;
+        }
+      }
+  
+      // On load
+      handleHash();
+  
+      // If hash changes
+      window.addEventListener("hashchange", handleHash);
+  
+      // When user clicks a tab, persist it in the URL
+      document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(function (btn) {
+        btn.addEventListener("shown.bs.tab", function (e) {
+          var target = e.target.getAttribute("data-bs-target");
+          if (target) history.replaceState(null, "", target);
+        });
+      });
+    });
+  </script>
+  
 
 {% endblock %}

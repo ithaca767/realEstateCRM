@@ -18,7 +18,7 @@
         {% if task and task.contact_id %}
           Linked to:
           <a href="{{ url_for('edit_contact', contact_id=task.contact_id) }}">
-            {{ task.contact_name if task.contact_name else ("Contact #" ~ task.contact_id) }}
+            {{ contact_name if contact_name else (task.contact_name if task.contact_name else ("Contact #" ~ task.contact_id)) }}
           </a>
         {% elif prefill_contact_id %}
           Linked to: Contact #{{ prefill_contact_id }}

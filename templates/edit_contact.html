@@ -789,11 +789,13 @@
               </form>
 
               <hr>
+              
+              <a id="engagements-table" class="d-block" style="scroll-margin-top: 90px;"></a>
 
               {% if engagements and engagements|length > 0 %}
                 <div class="table-responsive">
                   <table class="table table-sm table-striped mb-0">
-                    <thead class="table-light">
+                    <thead class="table-light sticky-top" style="top: 0; z-index: 2;">
                       <tr>
                         <th style="width: 170px;">When</th>
                         <th style="width: 140px;">Type</th>
@@ -850,25 +852,59 @@
                           </td>
 
                           <td class="text-end">
-                            <div class="btn-group btn-group-sm" role="group" aria-label="Engagement actions">
-                              <a class="btn btn-outline-primary"
-                                 href="{{ url_for('edit_engagement', engagement_id=e['id'], next=request.full_path) }}">
-                                View / Edit
-                              </a>
-
-                              <button type="button"
-                                      class="btn btn-outline-danger"
-                                      data-bs-toggle="modal"
-                                      data-bs-target="#deleteEngagementModal"
-                                      data-delete-url="{{ url_for('remove_engagement', engagement_id=e['id']) }}">
-                                Delete
-                              </button>
+                            <div class="d-inline-flex align-items-center justify-content-end">
+                              <div class="btn-group btn-group-sm" role="group" aria-label="Engagement actions">
+                                <a class="btn btn-outline-primary"
+                                   href="{{ url_for('edit_engagement',
+                                                    engagement_id=e['id'],
+                                                    next=(url_for('edit_contact', contact_id=c['id']) ~ '#engagements')) }}">
+                                  View / Edit
+                                </a>
+                          
+                                <button type="button"
+                                        class="btn btn-outline-danger"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#deleteEngagementModal"
+                                        data-delete-url="{{ url_for('remove_engagement', engagement_id=e['id']) }}">
+                                  Delete
+                                </button>
+                              </div>
                             </div>
                           </td>
                         </tr>
                       {% endfor %}
                     </tbody>
                   </table>
+                {% if eng_total_pages and eng_total_pages > 1 %}
+                  <nav aria-label="Engagement pages" class="p-2">
+                    <ul class="pagination pagination-sm mb-0 justify-content-center">
+                
+                      <li class="page-item {% if eng_page <= 1 %}disabled{% endif %}">
+                        <a class="page-link"
+                           href="{{ url_for('edit_contact', contact_id=c['id'], eng_page=eng_page-1, tx_id=request.args.get('tx_id')) }}#engagements">
+                          Prev
+                        </a>
+                      </li>
+                
+                      {% for p in range(1, eng_total_pages + 1) %}
+                        <li class="page-item {% if p == eng_page %}active{% endif %}">
+                          <a class="page-link"
+                             href="{{ url_for('edit_contact', contact_id=c['id'], eng_page=p, tx_id=request.args.get('tx_id')) }}#engagements">
+                            {{ p }}
+                          </a>
+                        </li>
+                      {% endfor %}
+                
+                      <li class="page-item {% if eng_page >= eng_total_pages %}disabled{% endif %}">
+                        <a class="page-link"
+                           href="{{ url_for('edit_contact', contact_id=c['id'], eng_page=eng_page+1, tx_id=request.args.get('tx_id')) }}#engagements">
+                          Next
+                        </a>
+                      </li>
+                
+                    </ul>
+                  </nav>
+                {% endif %}
 
                   <div class="modal fade" id="deleteEngagementModal" tabindex="-1" aria-hidden="true">
                     <div class="modal-dialog">
@@ -1430,6 +1466,23 @@
         f.addEventListener("submit", guardIfDirty);
       });
     })();
+  </script>
+ 
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const params = new URLSearchParams(window.location.search);
+    const engPage = params.get("eng_page");
+  
+    if (!engPage) return;
+  
+    // Wait for the tab activation logic to run, then scroll the table into view.
+    setTimeout(function () {
+      const el = document.getElementById("engagements-table");
+      if (el) {
+        el.scrollIntoView({ behavior: "auto", block: "start" });
+      }
+    }, 80);
+  });
   </script>
 
   <script>

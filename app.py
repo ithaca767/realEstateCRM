@@ -3075,7 +3075,7 @@ def dashboard():
     upcoming_followups = cur.fetchall() or []
 
     # Active reasons badges
-    now_dt = datetime.now()
+    now_dt = datetime.now(NY)
     active_contacts = []
     for r in active_rows:
         row = dict(r)
@@ -3091,11 +3091,36 @@ def dashboard():
                 badges.append("Recent engagement")
 
         nf_date = _nf_to_date(row.get("next_follow_up"))
+        nf_time = (row.get("next_follow_up_time") or "").strip()  # expected "HH:MM" 24h
+        
         if nf_date:
+            # Use NY-aware "now" for follow-up timing decisions
+            now_ny = datetime.now(NY)
+        
             if nf_date < today:
                 badges.append("Follow-up overdue")
+        
             elif nf_date == today:
-                badges.append("Follow-up today")
+                # If a time is set, only mark overdue after that time has passed
+                if nf_time and ":" in nf_time:
+                    try:
+                        hh, mm = nf_time.split(":")
+                        due_dt = datetime(
+                            nf_date.year, nf_date.month, nf_date.day,
+                            int(hh), int(mm), 0,
+                            tzinfo=NY
+                        )
+                        if due_dt < now_ny:
+                            badges.append("Follow-up overdue")
+                        else:
+                            badges.append("Follow-up today")
+                    except Exception:
+                        # If time parsing fails, fall back to "today"
+                        badges.append("Follow-up today")
+                else:
+                    # No time provided, treat as due today (not overdue yet)
+                    badges.append("Follow-up today")
+        
             else:
                 badges.append("Follow-up scheduled")
 
@@ -3694,7 +3719,38 @@ def edit_contact(contact_id):
     )
     has_seller_profile = cur.fetchone() is not None
 
-    engagements = list_engagements_for_contact(conn, current_user.id, contact_id, limit=50)
+    try:
+        eng_page = int(request.args.get("eng_page", 1))
+        if eng_page < 1:
+            eng_page = 1
+    except ValueError:
+        eng_page = 1
+    
+    ENG_PAGE_SIZE = 10
+    eng_offset = (eng_page - 1) * ENG_PAGE_SIZE
+
+    # Engagements pagination (for Engagements tab)
+    cur.execute(
+        "SELECT COUNT(*) AS total FROM engagements WHERE contact_id = %s AND user_id = %s",
+        (contact_id, current_user.id),
+    )
+    row = cur.fetchone()
+    eng_total_rows = row["total"] if row and row.get("total") is not None else 0
+    eng_total_pages = max(1, ceil(eng_total_rows / ENG_PAGE_SIZE))
+    
+    # Clamp page
+    if eng_page > eng_total_pages:
+        eng_page = eng_total_pages
+        eng_offset = (eng_page - 1) * ENG_PAGE_SIZE
+    
+    # Fetch current page
+    engagements = list_engagements_for_contact(
+        conn,
+        current_user.id,
+        contact_id,
+        limit=ENG_PAGE_SIZE,
+        offset=eng_offset,
+    )
 
     # Followups for this contact (from engagements)
     cur.execute(
@@ -3918,6 +3974,10 @@ def edit_contact(contact_id):
         c=contact,
         associations=associations,
         engagements=engagements,
+        eng_page=eng_page,
+        eng_total_pages=eng_total_pages,
+        eng_total_rows=eng_total_rows,
+        eng_page_size=ENG_PAGE_SIZE,
         followups_for_contact=followups_for_contact,
         special_dates=special_dates,
         open_interactions=open_interactions,
@@ -4573,6 +4633,13 @@ def edit_engagement(engagement_id):
         flash("Engagement not found.", "danger")
         return redirect(url_for("contacts"))
 
+    # Where to go after save or cancel
+    next_param = (request.values.get("next") or "").strip()
+    
+    # Default to Engagements tab on the contact page
+    default_next = url_for("edit_contact", contact_id=e["contact_id"]) + "#engagements"
+    next_url = next_param or default_next
+
     # Return/next handling
     # next_url: a normal URL to go back to (e.g., /followups or /edit/123)
     # return_to: allows forcing the return destination (e.g., "contact")
@@ -4697,6 +4764,7 @@ def edit_engagement(engagement_id):
     return render_template(
         "edit_engagement.html",
         e=e,
+        next=next_url,
         next_url=next_url,
         return_to=return_to,
         return_tab=return_tab,
@@ -4712,7 +4780,16 @@ def edit_engagement(engagement_id):
 @app.route("/tasks")
 @login_required
 def tasks_list():
-    status = request.args.get("status")
+    raw_status = (request.args.get("status") or "").strip().lower()
+    
+    # Default behavior: /tasks shows OPEN tasks
+    if raw_status == "":
+        status = "open"
+    # Explicit "all" means no status filter
+    elif raw_status == "all":
+        status = None
+    else:
+        status = raw_status
     if status and status not in TASK_STATUSES:
         flash("Invalid task status filter.", "warning")
         return redirect(url_for("tasks_list"))
@@ -4751,7 +4828,7 @@ def tasks_list():
         return render_template(
             "tasks/list.html",
             tasks=tasks,
-            status=status,
+            status=(status or "all"),
             statuses=TASK_STATUSES,
             contact_map=contact_map,
         )
@@ -5149,6 +5226,25 @@ def tasks_edit(task_id):
         if not task:
             abort(404)
 
+        # Contact display name for UI (avoid "Contact #X")
+        contact_name = None
+        if task.get("contact_id"):
+            cur.execute(
+                """
+                SELECT
+                  COALESCE(
+                    NULLIF(TRIM(name), ''),
+                    NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                    '(Unnamed)'
+                  ) AS display_name
+                FROM contacts
+                WHERE user_id = %s AND id = %s
+                """,
+                (current_user.id, task["contact_id"]),
+            )
+            row = cur.fetchone()
+            contact_name = row["display_name"] if row else None
+
         if request.method == "POST":
             form = request.form
             data = {
@@ -5176,7 +5272,13 @@ def tasks_edit(task_id):
                 conn.rollback()
                 flash(f"Could not update task: {e}", "danger")
 
-        return render_template("tasks/form.html", mode="edit", task=task, statuses=TASK_STATUSES)
+        return render_template(
+            "tasks/form.html",
+            mode="edit",
+            task=task,
+            statuses=TASK_STATUSES,
+            contact_name=contact_name,
+        )
     finally:
         conn.close()
 
@@ -5194,6 +5296,24 @@ def tasks_modal_edit(task_id):
         engagements = []
 
         contact_id = task.get("contact_id")
+        contact_name = None
+        if contact_id:
+            cur.execute(
+                """
+                SELECT
+                  COALESCE(
+                    NULLIF(TRIM(name), ''),
+                    NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                    '(Unnamed)'
+                  ) AS display_name
+                FROM contacts
+                WHERE user_id = %s AND id = %s
+                """,
+                (current_user.id, contact_id),
+            )
+            row = cur.fetchone()
+            contact_name = row["display_name"] if row else None
+
         if contact_id:
             cur.execute(
                 """
@@ -5243,7 +5363,8 @@ def tasks_modal_edit(task_id):
             statuses=TASK_STATUSES,
             next_url=(request.args.get("next") or "").strip() or None,
             prefill_contact_id=None,
-            prefill_contact_name="",
+            prefill_contact_name=contact_name or "",
+            contact_name=contact_name,
             form_action=url_for("tasks_edit", task_id=task_id),
             transactions=transactions,
             engagements=engagements,
