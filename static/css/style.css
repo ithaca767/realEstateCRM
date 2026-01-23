@@ -149,5 +149,12 @@ html:focus-within {
   display: contents;
 }
 
+.nav-tabs .nav-link.text-muted {
+  color: #6c757d;
+}
+
+.nav-tabs .nav-link.text-muted.active {
+  color: var(--bs-nav-tabs-link-active-color);
+}
 
 

@@ -7,10 +7,10 @@
       <div>
         <h2 class="mb-0">Contacts</h2>
         <div class="text-muted">
-          {% if active_tab == "all" %}All Contacts{% endif %}
-          {% if active_tab == "buyers" %}Buyers{% endif %}
           {% if active_tab == "sellers" %}Sellers{% endif %}
+          {% if active_tab == "buyers" %}Buyers{% endif %}
           {% if active_tab == "leads" %}Active Leads{% endif %}
+          {% if active_tab == "all" %}All Contacts{% endif %}
           {% if active_tab == "past_clients" %}Past Clients{% endif %}
         </div>
       </div>
@@ -33,21 +33,15 @@
       <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
         <ul class="nav nav-tabs border-0">
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'all' %}active{% endif %}"
-               href="{{ url_for('contacts', tab='all', q=search_query, page=1) }}">
-              All
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'buyers' %}active{% endif %}"
-               href="{{ url_for('contacts', tab='buyers', q=search_query, page=1) }}">
-              Buyers
-            </a>
-          </li>
-          <li class="nav-item">
             <a class="nav-link {% if active_tab == 'sellers' %}active{% endif %}"
                href="{{ url_for('contacts', tab='sellers', q=search_query, page=1) }}">
               Sellers
+            </a>
+          </li>
+         <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'buyers' %}active{% endif %}"
+               href="{{ url_for('contacts', tab='buyers', q=search_query, page=1) }}">
+              Buyers
             </a>
           </li>
           <li class="nav-item">
@@ -63,11 +57,17 @@
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'imported' %}active{% endif %}"
+            <a class="nav-link {% if active_tab == 'all' %}active{% endif %}"
+               href="{{ url_for('contacts', tab='all', q=search_query, page=1) }}">
+              All
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'imported' %}active{% endif %} text-muted"
                href="{{ url_for('contacts', tab='imported', q=search_query, page=1) }}">
               Imported
             </a>
-          </li>          
+          </li>
         </ul>
 
         <!-- Search form -->
