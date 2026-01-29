@@ -61,6 +61,7 @@ from tasks import (
 
 from urllib.parse import urlparse, urljoin
 
+from werkzeug.security import generate_password_hash
 from werkzeug.security import check_password_hash
 
 import psycopg2
@@ -103,6 +104,9 @@ login_manager.login_view = "login"
 
 # Optional token for calendar feed protection
 ICS_TOKEN = os.environ.get("ICS_TOKEN")
+
+PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "http://127.0.0.1:5000").strip().rstrip("/")
+app.config["PUBLIC_BASE_URL"] = PUBLIC_BASE_URL
                             
 @app.context_processor
 def inject_calendar_feed_url():
@@ -155,6 +159,15 @@ class User(UserMixin):
     def is_active(self):
         return bool(self._is_active)
 
+def owner_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated:
+            abort(401)
+        if (getattr(current_user, "role", None) or "").strip().lower() != "owner":
+            abort(403)
+        return f(*args, **kwargs)
+    return wrapper
 
 def parse_12h_time_to_24h(hour_str, minute_str, ampm_str, default_hour=9, default_minute=0):
     hour_str = (hour_str or "").strip()
@@ -173,6 +186,17 @@ def parse_12h_time_to_24h(hour_str, minute_str, ampm_str, default_hour=9, defaul
         hour24 = 12 if hour12 == 12 else hour12 + 12
 
     return hour24, minute
+from utils.token_helpers import build_link
+from utils.auth_tokens_db import (
+    create_user_invite,
+    get_valid_invite_by_raw_token,
+    consume_invite,
+    revoke_invite,
+    create_password_reset,
+    get_valid_password_reset_by_raw_token,
+    consume_password_reset,
+    revoke_all_password_resets_for_user,
+)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -270,11 +294,12 @@ def parse_int_or_none(value):
     except ValueError:
         return None
 
-def get_professionals_for_dropdown(category=None):
+def get_professionals_for_dropdown(user_id: int, category=None):
     """
     Return a list of professionals for dropdowns.
     Excludes blacklist. Orders by grade priority and then by name.
     If category is given (for example 'Attorney'), filters to that category.
+    Scoped by user_id for multi-tenant safety.
     """
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
@@ -283,9 +308,10 @@ def get_professionals_for_dropdown(category=None):
         base_sql = """
             SELECT id, name, company, phone, email, category, grade
             FROM professionals
-            WHERE grade != %s
+            WHERE user_id = %s
+              AND grade != %s
         """
-        params = ['blacklist']
+        params = [user_id, 'blacklist']
 
         if category:
             base_sql += " AND category = %s"
@@ -2794,49 +2820,61 @@ def build_ics_event(title, description, start_dt, tzid="America/New_York", durat
     return "\r\n".join(lines) + "\r\n"
 
 
+def is_safe_url(target: str) -> bool:
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ("http", "https") and ref_url.netloc == test_url.netloc
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
 
     error = None
+
     if request.method == "POST":
         email = (request.form.get("username") or "").strip().lower()
         password = request.form.get("password") or ""
 
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT id, email, password_hash, first_name, last_name, role, is_active
-            FROM users
-            WHERE email = %s
-            """,
-            (email,),
-        )
-        row = cur.fetchone()
-
-        if row and row["is_active"] and check_password_hash(row["password_hash"], password):
-            login_user(User(row))
+        conn = None
+        try:
+            conn = get_db()
+            cur = conn.cursor()
 
             cur.execute(
-                "UPDATE users SET last_login_at = NOW() WHERE id = %s",
-                (row["id"],),
+                """
+                SELECT id, email, password_hash, first_name, last_name, role, is_active
+                FROM users
+                WHERE email = %s AND is_active = TRUE
+                LIMIT 1;
+                """,
+                (email,),
             )
-            conn.commit()
+            row = cur.fetchone()
 
-            cur.close()
-            conn.close()
+            if row and check_password_hash(row["password_hash"], password):
+                login_user(User(row))
 
-            next_url = request.args.get("next") or url_for("dashboard")
-            return redirect(next_url)
+                cur.execute(
+                    "UPDATE users SET last_login_at = NOW() WHERE id = %s;",
+                    (row["id"],),
+                )
+                conn.commit()
 
-        cur.close()
-        conn.close()
-        error = "Invalid username or password"
+                next_url = request.args.get("next")
+                if not next_url or not is_safe_url(next_url):
+                    next_url = url_for("dashboard")
+                return redirect(next_url)
+
+            error = "Invalid username or password"
+        finally:
+            if conn:
+                conn.close()
 
     return render_template_string(LOGIN_TEMPLATE, error=error)
-
 
 @app.route("/logout")
 @login_required
@@ -3300,9 +3338,511 @@ def dashboard():
         active_page="dashboard",
         ac_page=ac_page,
         has_more_active=has_more_active,
-        has_prev_active=has_prev_active,
-        
+        has_prev_active=has_prev_active,        
     )
+
+@app.route("/admin/invites/new", methods=["GET", "POST"])
+@login_required
+@owner_required
+def admin_new_invite():
+    if request.method == "POST":
+        invited_email = (request.form.get("invited_email") or "").strip().lower()
+        role = (request.form.get("role") or "user").strip().lower()
+        note = (request.form.get("note") or "").strip() or None
+
+        if not invited_email:
+            flash("Email is required.", "danger")
+            return render_template("auth/admin_invite_new.html", active_page="admin")
+
+        if role not in ("owner", "user"):
+            flash("Role must be owner or user.", "danger")
+            return render_template("auth/admin_invite_new.html", active_page="admin")
+
+        conn = None
+        try:
+            conn = get_db()
+            invite = create_user_invite(
+                conn,
+                invited_email=invited_email,
+                role=role,
+                invited_by_user_id=current_user.id,
+                note=note,
+            )
+            invite_link = build_link(app.config["PUBLIC_BASE_URL"], "/accept-invite", invite["raw_token"])
+            return render_template(
+                "auth/admin_invite_created.html",
+                invited_email=invite["invited_email"],
+                role=invite["role"],
+                expires_at=invite["expires_at"],
+                invite_link=invite_link,
+                active_page="admin",
+            )
+        finally:
+            if conn:
+                conn.close()
+
+    return render_template(
+        "auth/admin_invite_new.html",
+        active_page="admin",
+    )
+
+@app.route("/accept-invite", methods=["GET", "POST"])
+def accept_invite():
+    token = (request.args.get("token") or request.form.get("token") or "").strip()
+    if not token:
+        flash("Invite token is missing.", "danger")
+        return render_template("auth/accept_invite.html", token="")
+
+    conn = None
+    try:
+        conn = get_db()
+        invite = get_valid_invite_by_raw_token(conn, token)
+        if not invite:
+            flash("This invite link is invalid, expired, revoked, or already used.", "danger")
+            return render_template("auth/accept_invite.html", token=token, invite=None)
+
+        if request.method == "POST":
+            pw1 = (request.form.get("password") or "").strip()
+            pw2 = (request.form.get("password_confirm") or "").strip()
+            first_name = (request.form.get("first_name") or "").strip()
+            last_name = (request.form.get("last_name") or "").strip()
+
+            # Agent branding
+            agent_website = (request.form.get("agent_website") or "").strip() or None
+            agent_phone = (request.form.get("agent_phone") or "").strip() or None
+            title = (request.form.get("title") or "").strip() or None
+
+            # Brokerage
+            brokerage_name = (request.form.get("brokerage_name") or "").strip() or None
+
+            # Accept either single address field OR split fields
+            brokerage_address1 = (
+                (request.form.get("brokerage_address1") or "").strip()
+                or (request.form.get("brokerage_address") or "").strip()
+                or None
+            )
+            brokerage_address2 = (request.form.get("brokerage_address2") or "").strip() or None
+
+            brokerage_city = (request.form.get("brokerage_city") or "").strip() or None
+            brokerage_state = (request.form.get("brokerage_state") or "").strip() or None
+            brokerage_zip = (request.form.get("brokerage_zip") or "").strip() or None
+            brokerage_phone = (request.form.get("brokerage_phone") or "").strip() or None
+            brokerage_website = (request.form.get("brokerage_website") or "").strip() or None
+            office_license_number = (request.form.get("office_license_number") or "").strip() or None
+
+            if not pw1 or len(pw1) < 10:
+                flash("Password must be at least 10 characters.", "danger")
+                return render_template("auth/accept_invite.html", token=token, invite=invite)
+
+            if pw1 != pw2:
+                flash("Passwords do not match.", "danger")
+                return render_template("auth/accept_invite.html", token=token, invite=invite)
+
+            # If you want these required at account creation, enforce it here.
+            # (Leaving as optional except brokerage_name because your form marks it required.)
+            if not brokerage_name:
+                flash("Brokerage Name is required.", "danger")
+                return render_template("auth/accept_invite.html", token=token, invite=invite)
+
+            email = invite["invited_email"]
+            role = invite["role"]
+            password_hash = generate_password_hash(pw1, method="pbkdf2:sha256")
+
+            try:
+                with conn.cursor() as cur:
+                    # Ensure email is not already in use
+                    cur.execute("SELECT id FROM users WHERE email = %s LIMIT 1;", (email,))
+                    existing = cur.fetchone()
+                    if existing:
+                        flash("A user with this email already exists. Use password reset instead.", "danger")
+                        return redirect(url_for("request_password_reset") + f"?email={email}")
+
+                    # 1) Create user (includes new profile fields)
+                    cur.execute(
+                        """
+                        INSERT INTO users (
+                            email, password_hash,
+                            first_name, last_name,
+                            role, is_active, created_at,
+                            title, agent_phone, agent_website
+                        )
+                        VALUES (%s, %s, %s, %s, %s, TRUE, NOW(), %s, %s, %s)
+                        RETURNING id;
+                        """,
+                        (
+                            email,
+                            password_hash,
+                            first_name or None,
+                            last_name or None,
+                            role,
+                            title,
+                            agent_phone,
+                            agent_website,
+                        ),
+                    )
+                    row = cur.fetchone()
+                    if not row or "id" not in row:
+                        raise RuntimeError("User insert failed: no id returned")
+                    new_user_id = row["id"]
+
+                    # 2) Upsert brokerage row (keyed by user_id)
+                    has_any_brokerage = any(
+                        [
+                            brokerage_name,
+                            brokerage_address1,
+                            brokerage_address2,
+                            brokerage_city,
+                            brokerage_state,
+                            brokerage_zip,
+                            brokerage_phone,
+                            brokerage_website,
+                            office_license_number,
+                        ]
+                    )
+
+                    if has_any_brokerage:
+                        cur.execute(
+                            """
+                            INSERT INTO brokerages (
+                                user_id,
+                                brokerage_name,
+                                address1,
+                                address2,
+                                city,
+                                state,
+                                zip,
+                                brokerage_phone,
+                                brokerage_website,
+                                office_license_number,
+                                created_at,
+                                updated_at
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                            ON CONFLICT (user_id)
+                            DO UPDATE SET
+                                brokerage_name        = EXCLUDED.brokerage_name,
+                                address1              = EXCLUDED.address1,
+                                address2              = EXCLUDED.address2,
+                                city                  = EXCLUDED.city,
+                                state                 = EXCLUDED.state,
+                                zip                   = EXCLUDED.zip,
+                                brokerage_phone       = EXCLUDED.brokerage_phone,
+                                brokerage_website     = EXCLUDED.brokerage_website,
+                                office_license_number = EXCLUDED.office_license_number,
+                                updated_at            = NOW();
+                            """,
+                            (
+                                new_user_id,
+                                brokerage_name,
+                                brokerage_address1,
+                                brokerage_address2,
+                                brokerage_city,
+                                brokerage_state,
+                                brokerage_zip,
+                                brokerage_phone,
+                                brokerage_website,
+                                office_license_number,
+                            ),
+                        )
+
+                # 3) Consume invite (same transaction)
+                consumed = consume_invite(conn, invite["id"], used_by_user_id=new_user_id)
+                if not consumed:
+                    raise RuntimeError("Invite could not be consumed")
+
+                # Commit once after everything succeeded
+                conn.commit()
+
+            except Exception:
+                # Ensure we don't leave a half-written user if something fails
+                conn.rollback()
+                raise
+
+            flash("Account created. Please log in.", "success")
+            return redirect(url_for("login"))
+
+        # GET: show invite details and form
+        return render_template("auth/accept_invite.html", token=token, invite=invite)
+
+    finally:
+        if conn:
+            conn.close()
+
+@app.route("/admin/invites")
+@login_required
+@owner_required
+def admin_invites_list():
+    conn = None
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    invited_email,
+                    role,
+                    created_at,
+                    expires_at
+                FROM user_invites
+                WHERE used_at IS NULL
+                  AND revoked_at IS NULL
+                  AND expires_at > NOW()
+                ORDER BY created_at DESC;
+                """
+            )
+            invites = cur.fetchall()
+
+        return render_template(
+            "auth/admin_invites_list.html",
+            invites=invites,
+            active_page="admin",
+        )
+
+    finally:
+        if conn:
+            conn.close()
+            
+@app.route("/admin/invites/<uuid:invite_id>/revoke", methods=["POST"])
+@login_required
+@owner_required
+def admin_revoke_invite(invite_id):
+    conn = None
+    try:
+        conn = get_db()
+        revoked = revoke_invite(conn, invite_id)
+        if revoked:
+            flash("Invite revoked.", "success")
+        else:
+            flash("Invite could not be revoked.", "warning")
+    finally:
+        if conn:
+            conn.close()
+
+    return redirect(url_for("admin_invites_list"))
+    
+@app.route("/admin/users")
+@login_required
+@owner_required
+def admin_users_list():
+    conn = None
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    email,
+                    first_name,
+                    last_name,
+                    role,
+                    is_active,
+                    created_at,
+                    last_login_at
+                FROM users
+                ORDER BY created_at DESC;
+                """
+            )
+            users = cur.fetchall()
+
+        return render_template(
+            "auth/admin_users_list.html",
+            users=users,
+            active_page="admin",
+        )
+    finally:
+        if conn:
+            conn.close()
+
+@app.route("/admin")
+@login_required
+@owner_required
+def admin_home():
+    conn = None
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM user_invites
+                WHERE used_at IS NULL
+                  AND revoked_at IS NULL
+                  AND expires_at > NOW();
+                """
+            )
+            invites_row = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM users
+                WHERE is_active = TRUE;
+                """
+            )
+            users_row = cur.fetchone()
+
+        active_invites_count = int(invites_row["cnt"]) if invites_row else 0
+        active_users_count = int(users_row["cnt"]) if users_row else 0
+
+        return render_template(
+            "auth/admin_home.html",
+            active_invites_count=active_invites_count,
+            active_users_count=active_users_count,
+            active_page="admin",
+        )
+    finally:
+        if conn:
+            conn.close()
+            
+@app.route("/admin/users/<int:user_id>/toggle-active", methods=["POST"])
+@login_required
+@owner_required
+def admin_toggle_user_active(user_id):
+    conn = None
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, is_active FROM users WHERE id = %s LIMIT 1;", (user_id,))
+            row = cur.fetchone()
+
+        if not row:
+            flash("User not found.", "warning")
+            return redirect(url_for("admin_users_list"))
+
+        # Prevent owner from deactivating themselves (safety)
+        if user_id == current_user.id:
+            flash("You cannot deactivate your own account.", "warning")
+            return redirect(url_for("admin_users_list"))
+
+        new_state = not bool(row["is_active"])
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET is_active = %s WHERE id = %s;",
+                (new_state, user_id),
+            )
+
+        conn.commit()
+
+        flash("User status updated.", "success")
+        return redirect(url_for("admin_users_list"))
+
+    finally:
+        if conn:
+            conn.close()
+
+@app.route("/password-reset/request", methods=["GET", "POST"])
+def request_password_reset():
+    preset_email = (request.args.get("email") or "").strip().lower()
+
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        if not email:
+            flash("Email is required.", "danger")
+            return render_template("auth/password_reset_request.html", preset_email=preset_email)
+
+        conn = None
+        try:
+            conn = get_db()
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM users WHERE email = %s AND is_active = TRUE LIMIT 1;", (email,))
+                row = cur.fetchone()
+
+            # Do not reveal whether email exists (basic security hygiene)
+            if not row:
+                flash("If an account exists for that email, a reset link has been generated.", "success")
+                return render_template("auth/password_reset_sent.html", reset_link=None)
+
+            user_id = row["id"]
+            request_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+            request_user_agent = request.headers.get("User-Agent")
+
+            # Optional but recommended: revoke prior outstanding resets
+            revoke_all_password_resets_for_user(conn, user_id)
+
+            reset = create_password_reset(
+                conn,
+                user_id=user_id,
+                request_ip=request_ip,
+                request_user_agent=request_user_agent,
+            )
+            reset_link = build_link(app.config["PUBLIC_BASE_URL"], "/password-reset", reset["raw_token"])
+
+            flash("If an account exists for that email, a reset link has been generated.", "success")
+            return render_template("auth/password_reset_sent.html", reset_link=reset_link)
+
+        finally:
+            if conn:
+                conn.close()
+
+    return render_template("auth/password_reset_request.html", preset_email=preset_email)
+
+@app.route("/password-reset", methods=["GET", "POST"])
+def password_reset():
+    token = (request.args.get("token") or request.form.get("token") or "").strip()
+    if not token:
+        flash("Reset token is missing.", "danger")
+        return render_template("auth/password_reset.html", token="", valid=False, active_page=None)
+
+    conn = None
+    try:
+        conn = get_db()
+
+        reset = get_valid_password_reset_by_raw_token(conn, token)
+        if not reset:
+            flash("This reset link is invalid, expired, revoked, or already used.", "danger")
+            return render_template("auth/password_reset.html", token=token, valid=False, active_page=None)
+
+        if request.method == "POST":
+            pw1 = (request.form.get("password") or "").strip()
+            pw2 = (request.form.get("password_confirm") or "").strip()
+
+            if not pw1 or len(pw1) < 10:
+                flash("Password must be at least 10 characters.", "danger")
+                return render_template("auth/password_reset.html", token=token, valid=True, active_page=None)
+
+            if pw1 != pw2:
+                flash("Passwords do not match.", "danger")
+                return render_template("auth/password_reset.html", token=token, valid=True, active_page=None)
+
+            password_hash = generate_password_hash(pw1, method="pbkdf2:sha256")
+
+            try:
+                with conn.cursor() as cur:
+                    # 1) Update the user's password
+                    cur.execute(
+                        "UPDATE users SET password_hash = %s WHERE id = %s;",
+                        (password_hash, reset["user_id"]),
+                    )
+
+                # 2) Consume this token (must succeed)
+                consumed = consume_password_reset(conn, reset["id"])
+                if not consumed:
+                    conn.rollback()
+                    flash("Reset token could not be consumed. Please request a new reset link.", "danger")
+                    return redirect(url_for("request_password_reset"))
+
+                # 3) Revoke any other outstanding reset tokens for this user
+                revoke_all_password_resets_for_user(conn, reset["user_id"])
+
+                conn.commit()
+
+            except Exception:
+                conn.rollback()
+                app.logger.exception("Password reset failed")
+                flash("Could not reset password. Please request a new reset link.", "danger")
+                return redirect(url_for("request_password_reset"))
+
+            flash("Password updated. Please log in.", "success")
+            return redirect(url_for("login"))
+
+        return render_template("auth/password_reset.html", token=token, valid=True, active_page=None)
+
+    finally:
+        if conn:
+            conn.close()
 
 @app.route("/contacts")
 @login_required
@@ -4835,7 +5375,6 @@ def tasks_list():
     finally:
         conn.close()
 
-
 @app.route("/tasks/new", methods=["GET", "POST"])
 @login_required
 def tasks_new():
@@ -6040,9 +6579,9 @@ def buyer_profile(contact_id):
         # subject properties and other context
         subject_properties=subject_properties,
         contact_id=contact_id,
-        pros_attorneys = get_professionals_for_dropdown("Attorney"),
-        pros_lenders = get_professionals_for_dropdown("Lender"),
-        pros_inspectors = get_professionals_for_dropdown("Inspector"),
+        pros_attorneys = get_professionals_for_dropdown(current_user.id, category="Attorney"),
+        pros_lenders = get_professionals_for_dropdown(current_user.id, category="Lender"),
+        pros_inspectors = get_professionals_for_dropdown(current_user.id, category="Inspector"),
         
         #transactions
         transactions=buyer_transactions,
@@ -6138,17 +6677,17 @@ def professionals():
             cur.execute(
                 """
                 INSERT INTO professionals
-                    (name, company, phone, email, category, grade, notes)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (user_id, name, company, phone, email, category, grade, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (name, company, phone, email, category, grade, notes),
+                (current_user.id, name, company, phone, email, category, grade, notes),
             )
             conn.commit()
             flash("Professional saved.", "success")
 
         return redirect(url_for("professionals"))
 
-    professionals_list = get_professionals_for_dropdown()
+    professionals_list = get_professionals_for_dropdown(current_user.id)
     return render_template(
         "professionals.html",
         professionals=professionals_list,
@@ -6188,11 +6727,13 @@ def edit_professional(prof_id):
         flash("Professional updated.", "success")
         return redirect(url_for("professionals"))
 
-    cur.execute("SELECT * FROM professionals WHERE id = %s", (prof_id,))
+    cur.execute(
+        "SELECT * FROM professionals WHERE id = %s AND user_id = %s",
+        (prof_id, current_user.id),
+    )
     professional = cur.fetchone()
     if not professional:
-        flash("Professional not found.", "danger")
-        return redirect(url_for("professionals"))
+        abort(404)
 
     return render_template(
         "edit_professional.html",
@@ -6257,12 +6798,18 @@ def professionals_search():
 def delete_professional(prof_id):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("DELETE FROM professionals WHERE id = %s", (prof_id,))
+
+    cur.execute(
+        "DELETE FROM professionals WHERE id = %s AND user_id = %s",
+        (prof_id, current_user.id),
+    )
+
+    if cur.rowcount == 0:
+        abort(404)
+
     conn.commit()
     flash("Professional deleted.", "info")
     return redirect(url_for("professionals"))
-
-
 
 @app.route("/seller/<int:contact_id>", methods=["GET", "POST"])
 @login_required
@@ -6488,9 +7035,9 @@ def seller_profile(contact_id):
         " " if contact.get("first_name") and contact.get("last_name") else ""
     ) + (contact.get("last_name") or "")
     contact_name = contact_name.strip() or contact["name"]
-    pros_attorneys = get_professionals_for_dropdown(category="Attorney")
-    pros_lenders = get_professionals_for_dropdown(category="Lender")
-    pros_inspectors = get_professionals_for_dropdown(category="Inspector")
+    pros_attorneys = get_professionals_for_dropdown(current_user.id, category="Attorney")
+    pros_lenders = get_professionals_for_dropdown(current_user.id, category="Lender")
+    pros_inspectors = get_professionals_for_dropdown(current_user.id, category="Inspector")
 
     ensure_listing_checklist_initialized(current_user.id, contact_id)
     checklist_items, checklist_complete, checklist_total = get_listing_checklist(contact_id)
@@ -7220,14 +7767,28 @@ def delete_transaction_deadline(deadline_id):
 @login_required
 def openhouse_list():
     conn = get_db()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    cur.execute("""
-        SELECT id, address_line1, city, state, zip, start_datetime, end_datetime, public_token
+    cur.execute(
+        """
+        SELECT
+            id,
+            address_line1,
+            city,
+            state,
+            zip,
+            start_datetime,
+            end_datetime,
+            public_token
         FROM open_houses
+        WHERE created_by_user_id = %s
         ORDER BY start_datetime DESC
-    """)
+        """,
+        (current_user.id,),
+    )
     rows = cur.fetchall()
+    conn.close()
+    
     return render_template("openhouses/list.html", openhouses=rows)
 
 
@@ -7235,7 +7796,7 @@ def openhouse_list():
 @login_required
 def openhouse_new():
     conn = get_db()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     if request.method == "POST":
         address_line1 = (request.form.get("address_line1") or "").strip()
@@ -7251,63 +7812,89 @@ def openhouse_new():
 
         if not (address_line1 and city and state and zip_code and start_dt and end_dt):
             flash("Please fill out address, date/time, and required fields.", "danger")
+            conn.close()
             return render_template("openhouses/new.html")
 
         token = generate_public_token()
 
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO open_houses
               (created_by_user_id, address_line1, city, state, zip, start_datetime, end_datetime, public_token, house_photo_url, notes)
             VALUES
               (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
-        """, (1, address_line1, city, state, zip_code, start_dt, end_dt, token, house_photo_url, notes))
+            """,
+            (
+                current_user.id,
+                address_line1,
+                city,
+                state,
+                zip_code,
+                start_dt,
+                end_dt,
+                token,
+                house_photo_url,
+                notes,
+            ),
+        )
 
-        open_house_id = cur.fetchone()["id"] if isinstance(cur.fetchone, object) else None
+        row = cur.fetchone()
+        if not row or "id" not in row:
+            conn.close()
+            abort(500)
 
-        # Safer: fetch id properly depending on cursor type
+        open_house_id = row["id"]
+
         conn.commit()
 
-        # Re-fetch the inserted id the reliable way for RealDictCursor
-        cur.execute("SELECT id FROM open_houses WHERE public_token = %s", (token,))
-        open_house_id = cur.fetchone()["id"]
-
         flash("Open house created.", "success")
+        conn.close()
         return redirect(url_for("openhouse_detail", open_house_id=open_house_id))
 
+    conn.close()
     return render_template("openhouses/new.html")
-
 
 @app.route("/openhouses/<int:open_house_id>")
 @login_required
 def openhouse_detail(open_house_id):
     conn = get_db()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    cur.execute("""
-        SELECT id, address_line1, city, state, zip, start_datetime, end_datetime, public_token, house_photo_url, notes
-        FROM open_houses
-        WHERE id = %s
-    """, (open_house_id,))
-    oh = cur.fetchone()
-    if not oh:
-        abort(404)
+    try:
+        cur.execute(
+            """
+            SELECT id, address_line1, city, state, zip, start_datetime, end_datetime,
+                   public_token, house_photo_url, notes
+            FROM open_houses
+            WHERE id = %s AND created_by_user_id = %s
+            """,
+            (open_house_id, current_user.id),
+        )
+        oh = cur.fetchone()
+        if not oh:
+            abort(404)
 
-    cur.execute("""
-        SELECT id, first_name, last_name, email, phone, working_with_agent, agent_name, submitted_at
-        FROM open_house_signins
-        WHERE open_house_id = %s
-        ORDER BY submitted_at DESC
-    """, (open_house_id,))
-    signins = cur.fetchall()
+        cur.execute(
+            """
+            SELECT id, first_name, last_name, email, phone, working_with_agent, agent_name, submitted_at
+            FROM open_house_signins
+            WHERE open_house_id = %s AND user_id = %s
+            ORDER BY submitted_at DESC
+            """,
+            (open_house_id, current_user.id),
+        )
+        signins = cur.fetchall()
 
-    return render_template("openhouses/detail.html", openhouse=oh, signins=signins)
+        return render_template("openhouses/detail.html", openhouse=oh, signins=signins)
 
+    finally:
+        conn.close()
 
 @app.route("/openhouse/<token>", methods=["GET", "POST"])
 def openhouse_public_signin(token):
     conn = get_db()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     try:
         cur.execute("""
@@ -7404,20 +7991,34 @@ def openhouse_public_signin(token):
                 r = cur.fetchone()
                 contact_id = r["id"] if isinstance(r, dict) else r[0]
 
-            # If open_house_signins has user_id, add it here too.
             cur.execute("""
                 INSERT INTO open_house_signins
-                  (open_house_id, contact_id, first_name, last_name, email, phone,
+                  (open_house_id, user_id, contact_id,
+                   first_name, last_name, email, phone,
                    working_with_agent, agent_name, agent_phone, agent_brokerage,
                    looking_to_buy, looking_to_sell, timeline, notes, consent_to_contact)
                 VALUES
-                  (%s, %s, %s, %s, %s, %s,
+                  (%s, %s, %s,
+                   %s, %s, %s, %s,
                    %s, %s, %s, %s,
                    %s, %s, %s, %s, %s)
             """, (
-                open_house_id, contact_id, first_name, last_name, email, phone,
-                working_with_agent_bool, agent_name, agent_phone, agent_brokerage,
-                looking_to_buy, looking_to_sell, timeline, notes, consent_to_contact
+                open_house_id,
+                owner_user_id,   # ← THIS is the important addition
+                contact_id,
+                first_name,
+                last_name,
+                email,
+                phone,
+                working_with_agent_bool,
+                agent_name,
+                agent_phone,
+                agent_brokerage,
+                looking_to_buy,
+                looking_to_sell,
+                timeline,
+                notes,
+                consent_to_contact
             ))
 
             conn.commit()
@@ -7446,54 +8047,60 @@ def openhouse_privacy():
 @login_required
 def openhouse_export_csv(open_house_id):
     conn = get_db()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    cur.execute("SELECT id FROM open_houses WHERE id = %s", (open_house_id,))
-    if not cur.fetchone():
-        abort(404)
+    try:
+        cur.execute(
+            "SELECT id FROM open_houses WHERE id = %s AND created_by_user_id = %s",
+            (open_house_id, current_user.id),
+        )
+        if not cur.fetchone():
+            abort(404)
 
-    cur.execute("""
-        SELECT
-          submitted_at,
-          first_name, last_name, email, phone,
-          working_with_agent, agent_name, agent_phone, agent_brokerage,
-          looking_to_buy, looking_to_sell, timeline, notes, consent_to_contact
-        FROM open_house_signins
-        WHERE open_house_id = %s
-        ORDER BY submitted_at ASC
-    """, (open_house_id,))
+        cur.execute(
+            """
+            SELECT
+              submitted_at,
+              first_name, last_name, email, phone,
+              working_with_agent, agent_name, agent_phone, agent_brokerage,
+              looking_to_buy, looking_to_sell, timeline, notes, consent_to_contact
+            FROM open_house_signins
+            WHERE open_house_id = %s AND user_id = %s
+            ORDER BY submitted_at ASC
+            """,
+            (open_house_id, current_user.id),
+        )
+        rows = cur.fetchall()
 
-    rows = cur.fetchall()
+        output = io.StringIO()
+        writer = csv.writer(output)
 
-    output = io.StringIO()
-    writer = csv.writer(output)
+        writer.writerow([
+            "submitted_at",
+            "first_name", "last_name", "email", "phone",
+            "working_with_agent", "agent_name", "agent_phone", "agent_brokerage",
+            "looking_to_buy", "looking_to_sell", "timeline", "notes", "consent_to_contact"
+        ])
 
-    writer.writerow([
-        "submitted_at",
-        "first_name", "last_name", "email", "phone",
-        "working_with_agent", "agent_name", "agent_phone", "agent_brokerage",
-        "looking_to_buy", "looking_to_sell", "timeline", "notes", "consent_to_contact"
-    ])
-
-    for r in rows:
-        if isinstance(r, dict):
+        for r in rows:
             writer.writerow([
                 r["submitted_at"],
                 r["first_name"], r["last_name"], r["email"], r["phone"],
                 r["working_with_agent"], r["agent_name"], r["agent_phone"], r["agent_brokerage"],
                 r["looking_to_buy"], r["looking_to_sell"], r["timeline"], r["notes"], r["consent_to_contact"]
             ])
-        else:
-            writer.writerow(list(r))
 
-    csv_data = output.getvalue()
-    output.close()
+        csv_data = output.getvalue()
+        output.close()
 
-    return Response(
-        csv_data,
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=open_house_{open_house_id}_signins.csv"}
-    )
+        return Response(
+            csv_data,
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=open_house_{open_house_id}_signins.csv"}
+        )
+
+    finally:
+        conn.close()
 
 @app.route("/newsletter/signup/<public_token>", methods=["GET", "POST"])
 def newsletter_signup(public_token):
@@ -8009,48 +8616,46 @@ def api_add_interaction():
 
     conn = get_db()
     cur = conn.cursor()
-
-    contact_row = None
-
+    
     try:
+        contact_row = None
+    
         if contact_id:
-            cur.execute("SELECT id FROM contacts WHERE id = %s", (contact_id,))
-            contact_row = cur.fetchone()
-        if not contact_row and email:
             cur.execute(
-                "SELECT id FROM contacts WHERE lower(email) = %s LIMIT 1",
-                (email,),
+                "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+                (contact_id, current_user.id),
             )
             contact_row = cur.fetchone()
+    
+        if not contact_row and email:
+            cur.execute(
+                "SELECT id FROM contacts WHERE user_id = %s AND lower(email) = %s LIMIT 1",
+                (current_user.id, email),
+            )
+            contact_row = cur.fetchone()
+    
         if not contact_row and phone_digits:
             cur.execute(
                 """
                 SELECT id
                 FROM contacts
-                WHERE regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = %s
+                WHERE user_id = %s
+                  AND regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = %s
                 LIMIT 1
                 """,
-                (phone_digits,),
+                (current_user.id, phone_digits),
             )
             contact_row = cur.fetchone()
-    except Exception as e:
-        conn.close()
-        return jsonify({"error": f"Database error: {e}"}), 500
-
-    if not contact_row:
-        conn.close()
-        return jsonify({"error": "Contact not found"}), 404
-
-    cid = contact_row["id"]
-
-    happened_at = data.get("happened_at")
-    if not happened_at:
-        happened_at = date.today().isoformat()
-
-    time_of_day = (data.get("time_of_day") or "").strip() or None
-    notes = (data.get("notes") or "").strip()
-
-    try:
+    
+        if not contact_row:
+            return jsonify({"error": "Contact not found"}), 404
+    
+        cid = contact_row["id"]
+    
+        happened_at = data.get("happened_at") or date.today().isoformat()
+        time_of_day = (data.get("time_of_day") or "").strip() or None
+        notes = (data.get("notes") or "").strip()
+    
         cur.execute(
             """
             INSERT INTO interactions (user_id, contact_id, kind, happened_at, time_of_day, notes)
@@ -8059,12 +8664,14 @@ def api_add_interaction():
             (current_user.id, cid, kind, happened_at, time_of_day, notes),
         )
         conn.commit()
-    except Exception as e:
+    
+        return jsonify({"status": "ok", "contact_id": cid})
+    
+    except Exception:
+        return jsonify({"error": "Database error"}), 500
+    
+    finally:
         conn.close()
-        return jsonify({"error": f"Insert failed: {e}"}), 500
-
-    conn.close()
-    return jsonify({"status": "ok", "contact_id": cid})
     
 ALLOWED_DELIVERY_TYPES = {"email", "text", "either"}
 
@@ -8077,15 +8684,112 @@ def _render_template_body(raw: str, client_name: str, agent_name: str, brokerage
     return out
 
 def _get_brokerage_footer() -> str:
-    # Phase 6b: keep it simple.
-    # Later this can be moved to a settings table or config page.
-    # For now you can hardcode, or pull from an env var if you already do that pattern.
-    return (
-        "Dennis Fotopoulos\n"
-        "Broker Associate\n"
-        "Heritage House Sotheby’s International Realty\n"
-        "Holmdel, NJ"
-    )
+    """
+    Returns a multi-line footer block for templates.
+    Pulls from users + brokerages (by user_id). Falls back to safe defaults.
+    """
+    # Agent identity
+    agent_name = " ".join([p for p in [current_user.first_name, current_user.last_name] if p]).strip()
+    agent_name = agent_name or (current_user.email or "Agent")
+
+    title = (getattr(current_user, "title", None) or "").strip() or None
+    agent_phone = (getattr(current_user, "agent_phone", None) or "").strip() or None
+    agent_website = (getattr(current_user, "agent_website", None) or "").strip() or None
+    license_number = (getattr(current_user, "license_number", None) or "").strip() or None
+
+    b = None
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                  brokerage_name,
+                  address1,
+                  address2,
+                  city,
+                  state,
+                  zip,
+                  brokerage_phone,
+                  brokerage_website,
+                  office_license_number
+                FROM brokerages
+                WHERE user_id = %s
+                LIMIT 1;
+                """,
+                (current_user.id,),
+            )
+            b = cur.fetchone()
+    finally:
+        conn.close()
+
+    lines = []
+
+    # Line 1: Agent name
+    lines.append(agent_name)
+
+    # Line 2: title (optional)
+    if title:
+        lines.append(title)
+
+    # Brokerage name
+    if b and (b.get("brokerage_name") or "").strip():
+        lines.append(b["brokerage_name"].strip())
+
+    # Brokerage address line(s)
+    if b:
+        addr1 = (b.get("address1") or "").strip()
+        addr2 = (b.get("address2") or "").strip()
+        city = (b.get("city") or "").strip()
+        state = (b.get("state") or "").strip()
+        zip_code = (b.get("zip") or "").strip()
+
+        if addr1:
+            lines.append(addr1)
+        if addr2:
+            lines.append(addr2)
+
+        city_state_zip_parts = []
+        
+        if city:
+            city_state_zip_parts.append(city)
+        
+        state_zip = " ".join(p for p in [state, zip_code] if p)
+        if state_zip:
+            city_state_zip_parts.append(state_zip)
+        
+        if city_state_zip_parts:
+            lines.append(", ".join(city_state_zip_parts))
+
+    # Contact / web (agent first, per your decision)
+    if agent_phone:
+        lines.append(agent_phone)
+    if agent_website:
+        lines.append(agent_website)
+
+    # License info (optional)
+    # (We can format this differently later, but this is safe + simple.)
+    if license_number:
+        lines.append(f"License: {license_number}")
+
+    # Brokerage extras (optional)
+    if b:
+        brokerage_phone = (b.get("brokerage_phone") or "").strip()
+        brokerage_website = (b.get("brokerage_website") or "").strip()
+        office_license_number = (b.get("office_license_number") or "").strip()
+
+        if brokerage_phone:
+            lines.append(f"Office: {brokerage_phone}")
+        if brokerage_website:
+            lines.append(brokerage_website)
+        if office_license_number:
+            lines.append(f"Office License: {office_license_number}")
+
+    # Final fallback if the user has basically nothing filled out
+    if not lines:
+        return "Brokerage information not set"
+
+    return "\n".join(lines)
 
 @app.route("/templates")
 @login_required
@@ -8103,6 +8807,10 @@ def templates_index():
 
     where = []
     params = []
+
+    # Tenant boundary (always)
+    where.append("user_id = %s")
+    params.append(current_user.id)
 
     # Always hide archived templates by default
     where.append("archived_at IS NULL")
@@ -8127,56 +8835,67 @@ def templates_index():
 
     where_sql = "WHERE " + " AND ".join(where) if where else ""
 
-    conn = conn = get_db()
-    cur = conn.cursor()
+    conn = get_db()
+    try:
+        cur = conn.cursor()
 
-    cur.execute("""
-        SELECT DISTINCT category
-        FROM templates
-        WHERE archived_at IS NULL
-        ORDER BY category ASC;
-    """)
-    categories = [r["category"] for r in cur.fetchall()]
+        # Category dropdown options must also be tenant-scoped
+        cur.execute(
+            """
+            SELECT DISTINCT category
+            FROM templates
+            WHERE user_id = %s
+              AND archived_at IS NULL
+            ORDER BY category ASC;
+            """,
+            (current_user.id,),
+        )
+        categories = [r["category"] for r in (cur.fetchall() or [])]
 
-    cur.execute(
-        f"""
-        SELECT
-            id,
-            title,
-            category,
-            delivery_type,
-            is_locked,
-            created_at,
-            updated_at
-        FROM templates
-        {where_sql}
-        ORDER BY updated_at DESC, id DESC;
-        """,
-        params
-    )
-    rows = cur.fetchall()
-    conn.close()
-    
-    templates = []
-    for r in rows:
-        templates.append({
-            "id": r["id"],
-            "title": r["title"],
-            "category": r["category"],
-            "delivery_type": r["delivery_type"],
-            "is_locked": r["is_locked"],
-            "updated_at": r["updated_at"],
-        })
+        # Main list query must be tenant-scoped via where_sql
+        cur.execute(
+            f"""
+            SELECT
+                id,
+                title,
+                category,
+                delivery_type,
+                is_locked,
+                created_at,
+                updated_at
+            FROM templates
+            {where_sql}
+            ORDER BY updated_at DESC, id DESC;
+            """,
+            params,
+        )
+        rows = cur.fetchall() or []
 
-    return render_template(
-        "templates/index.html",
-        templates=templates,
-        categories=categories,
-        q=q,
-        selected_category=category,
-        selected_delivery_type=delivery_type,
-        selected_status=status
-    )
+        templates = []
+        for r in rows:
+            templates.append(
+                {
+                    "id": r["id"],
+                    "title": r["title"],
+                    "category": r["category"],
+                    "delivery_type": r["delivery_type"],
+                    "is_locked": r["is_locked"],
+                    "updated_at": r["updated_at"],
+                }
+            )
+
+        return render_template(
+            "templates/index.html",
+            templates=templates,
+            categories=categories,
+            q=q,
+            selected_category=category,
+            selected_delivery_type=delivery_type,
+            selected_status=status,
+        )
+    finally:
+        conn.close()
+
 
 @app.route("/templates/new", methods=["GET", "POST"])
 @login_required
@@ -8199,11 +8918,15 @@ def templates_new():
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO templates (title, category, delivery_type, body, notes, is_locked, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, FALSE, NOW(), NOW())
+            INSERT INTO templates (
+                user_id,
+                title, category, delivery_type, body, notes,
+                is_locked, created_at, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, FALSE, NOW(), NOW())
             RETURNING id;
             """,
-            (title, category, delivery_type, body, notes)
+            (current_user.id, title, category, delivery_type, body, notes)
         )
         new_id = cur.fetchone()["id"]
         conn.commit()
@@ -8223,9 +8946,9 @@ def templates_view(template_id):
         """
         SELECT id, title, category, delivery_type, body, notes, is_locked, created_at, updated_at
         FROM templates
-        WHERE id = %s;
+        WHERE id = %s AND user_id = %s;
         """,
-        (template_id,)
+        (template_id, current_user.id)
     )
     row = cur.fetchone()
     conn.close()
@@ -8248,26 +8971,36 @@ def templates_view(template_id):
     # Optional: populate preview with a selected contact
     contact_id = request.args.get("contact_id", type=int)
     selected_contact = None
-
+    
     client_name = "Client Name"
+    c = None  # important
+    
     if contact_id:
         conn = get_db()
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id,
-                   COALESCE(NULLIF(TRIM(first_name || ' ' || last_name), ''), email, 'Client') AS name
+            SELECT
+              id,
+              COALESCE(
+                NULLIF(TRIM(name), ''),
+                NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                email,
+                'Client'
+              ) AS display_name
             FROM contacts
-            WHERE id = %s;
+            WHERE user_id = %s
+              AND id = %s
+            LIMIT 1;
             """,
-            (contact_id,)
+            (current_user.id, contact_id),
         )
         c = cur.fetchone()
         conn.close()
-
-        if c:
-            selected_contact = {"id": c["id"], "name": c["name"]}
-            client_name = c["name"]
+    
+    if c:
+        selected_contact = {"id": c["id"], "name": c["display_name"]}
+        client_name = c["display_name"]
 
     # Agent name (match your User model: first_name/last_name/email)
     agent_name = " ".join([p for p in [current_user.first_name, current_user.last_name] if p]) or current_user.email or "Agent Name"
@@ -8296,9 +9029,9 @@ def templates_edit(template_id):
         """
         SELECT id, title, category, delivery_type, body, notes, is_locked
         FROM templates
-        WHERE id = %s;
+        WHERE id = %s AND user_id = %s;
         """,
-        (template_id,)
+        (template_id, current_user.id)
     )
     row = cur.fetchone()
 
@@ -8307,13 +9040,13 @@ def templates_edit(template_id):
         abort(404)
 
     t = {
-        "id": row[0],
-        "title": row[1],
-        "category": row[2],
-        "delivery_type": row[3],
-        "body": row[4],
-        "notes": row[5],
-        "is_locked": row[6],
+        "id": row["id"],
+        "title": row["title"],
+        "category": row["category"],
+        "delivery_type": row["delivery_type"],
+        "body": row["body"],
+        "notes": row["notes"],
+        "is_locked": row["is_locked"],
     }
 
     if t["is_locked"]:
@@ -8345,9 +9078,9 @@ def templates_edit(template_id):
                 body = %s,
                 notes = %s,
                 updated_at = NOW()
-            WHERE id = %s;
+            WHERE id = %s AND user_id = %s;
             """,
-            (title, category, delivery_type, body, notes, template_id)
+            (title, category, delivery_type, body, notes, template_id, current_user.id)
         )
         conn.commit()
         conn.close()
@@ -8363,20 +9096,23 @@ def templates_edit(template_id):
 def templates_lock(template_id):
     conn = conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT is_locked FROM templates WHERE id = %s;", (template_id,))
+    cur.execute(
+        "SELECT is_locked FROM templates WHERE id = %s AND user_id = %s;",
+        (template_id, current_user.id),
+    )
     row = cur.fetchone()
     if not row:
         conn.close()
         abort(404)
 
-    if row[0]:
+    if row["is_locked"]:
         conn.close()
         flash("Template is already locked.", "info")
         return redirect(url_for("templates_view", template_id=template_id))
 
     cur.execute(
-        "UPDATE templates SET is_locked = TRUE, updated_at = NOW() WHERE id = %s;",
-        (template_id,)
+        "UPDATE templates SET is_locked = TRUE, updated_at = NOW() WHERE id = %s AND user_id = %s;",
+        (template_id, current_user.id),
     )
     conn.commit()
     conn.close()
@@ -8393,27 +9129,35 @@ def templates_duplicate(template_id):
         """
         SELECT title, category, delivery_type, body, notes
         FROM templates
-        WHERE id = %s;
+        WHERE id = %s AND user_id = %s;
         """,
-        (template_id,)
+        (template_id, current_user.id)
     )
     row = cur.fetchone()
     if not row:
         conn.close()
         abort(404)
 
-    title, category, delivery_type, body, notes = row
+    title = row["title"]
+    category = row["category"]
+    delivery_type = row["delivery_type"]
+    body = row["body"]
+    notes = row["notes"]
     new_title = f"{title} (Copy)"
 
     cur.execute(
         """
-        INSERT INTO templates (title, category, delivery_type, body, notes, is_locked, created_at, updated_at)
-        VALUES (%s, %s, %s, %s, %s, FALSE, NOW(), NOW())
+        INSERT INTO templates (
+            user_id,
+            title, category, delivery_type, body, notes,
+            is_locked, created_at, updated_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, FALSE, NOW(), NOW())
         RETURNING id;
         """,
-        (new_title, category, delivery_type, body, notes)
+        (current_user.id, new_title, category, delivery_type, body, notes)
     )
-    new_id = cur.fetchone()[0]
+    new_id = cur.fetchone()["id"]
     conn.commit()
     conn.close()
 
@@ -8432,34 +9176,177 @@ def api_contacts_search():
     like = f"%{q}%"
 
     conn = get_db()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    # Adjust WHERE as needed to exclude archived contacts if you have archived_at
-    cur.execute(
-        """
-        SELECT id,
-               COALESCE(NULLIF(TRIM(first_name || ' ' || last_name), ''), email, 'Unnamed') AS name,
-               email
-        FROM contacts
-        WHERE (first_name ILIKE %s OR last_name ILIKE %s OR email ILIKE %s)
-        ORDER BY last_name NULLS LAST, first_name NULLS LAST
-        LIMIT %s;
-        """,
-        (like, like, like, limit)
-    )
+        cur.execute(
+            """
+            SELECT
+                id,
+                COALESCE(
+                    NULLIF(TRIM(name), ''),
+                    NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                    email,
+                    'Unnamed'
+                ) AS display_name,
+                COALESCE(email, '') AS email
+            FROM contacts
+            WHERE user_id = %s
+              AND (
+                  name ILIKE %s
+                  OR first_name ILIKE %s
+                  OR last_name ILIKE %s
+                  OR email ILIKE %s
+              )
+            ORDER BY last_name NULLS LAST, first_name NULLS LAST, id DESC
+            LIMIT %s;
+            """,
+            (current_user.id, like, like, like, like, limit),
+        )
 
-    rows = cur.fetchall()
-    conn.close()
+        rows = cur.fetchall() or []
 
-    results = []
-    for r in rows:
-        results.append({
-            "id": r["id"],
-            "name": r["name"],
-            "email": r.get("email") or ""
-        })
+        results = []
+        for r in rows:
+            results.append(
+                {
+                    "id": r["id"],
+                    "name": r["display_name"],
+                    "email": r.get("email") or "",
+                }
+            )
 
-    return jsonify(results)
+        return jsonify(results)
+
+    finally:
+        conn.close()
+
+@app.route("/account", methods=["GET", "POST"])
+@login_required
+def account():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        if request.method == "POST":
+            # Users (agent) fields (match template field names)
+            first_name = (request.form.get("first_name") or "").strip()
+            last_name = (request.form.get("last_name") or "").strip()
+            title = (request.form.get("title") or "").strip()
+            agent_phone = (request.form.get("agent_phone") or "").strip()
+            agent_website = (request.form.get("agent_website") or "").strip()
+            license_number = (request.form.get("license_number") or "").strip()
+            license_state = (request.form.get("license_state") or "").strip()
+
+            # Brokerage fields (match template field names)
+            brokerage_name = (request.form.get("brokerage_name") or "").strip()
+            address1 = (request.form.get("address1") or "").strip()
+            address2 = (request.form.get("address2") or "").strip()
+            city = (request.form.get("city") or "").strip()
+            state = (request.form.get("state") or "").strip()
+            zip_code = (request.form.get("zip") or "").strip()
+            brokerage_phone = (request.form.get("brokerage_phone") or "").strip()
+            brokerage_website = (request.form.get("brokerage_website") or "").strip()
+            office_license_number = (request.form.get("office_license_number") or "").strip()
+
+            try:
+                # Update users without overwriting with blanks
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET
+                        first_name = COALESCE(NULLIF(%s, ''), first_name),
+                        last_name = COALESCE(NULLIF(%s, ''), last_name),
+                        title = COALESCE(NULLIF(%s, ''), title),
+                        agent_phone = COALESCE(NULLIF(%s, ''), agent_phone),
+                        agent_website = COALESCE(NULLIF(%s, ''), agent_website),
+                        license_number = COALESCE(NULLIF(%s, ''), license_number),
+                        license_state = COALESCE(NULLIF(%s, ''), license_state)
+                    WHERE id = %s
+                    """,
+                    (
+                        first_name,
+                        last_name,
+                        title,
+                        agent_phone,
+                        agent_website,
+                        license_number,
+                        license_state,
+                        current_user.id,
+                    ),
+                )
+
+                # Upsert brokerages without overwriting with blanks
+                cur.execute(
+                    """
+                    INSERT INTO brokerages (
+                        user_id,
+                        brokerage_name, address1, address2, city, state, zip,
+                        brokerage_phone, brokerage_website, office_license_number,
+                        created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                    ON CONFLICT (user_id) DO UPDATE
+                    SET
+                        brokerage_name = COALESCE(NULLIF(EXCLUDED.brokerage_name, ''), brokerages.brokerage_name),
+                        address1 = COALESCE(NULLIF(EXCLUDED.address1, ''), brokerages.address1),
+                        address2 = COALESCE(NULLIF(EXCLUDED.address2, ''), brokerages.address2),
+                        city = COALESCE(NULLIF(EXCLUDED.city, ''), brokerages.city),
+                        state = COALESCE(NULLIF(EXCLUDED.state, ''), brokerages.state),
+                        zip = COALESCE(NULLIF(EXCLUDED.zip, ''), brokerages.zip),
+                        brokerage_phone = COALESCE(NULLIF(EXCLUDED.brokerage_phone, ''), brokerages.brokerage_phone),
+                        brokerage_website = COALESCE(NULLIF(EXCLUDED.brokerage_website, ''), brokerages.brokerage_website),
+                        office_license_number = COALESCE(NULLIF(EXCLUDED.office_license_number, ''), brokerages.office_license_number),
+                        updated_at = NOW()
+                    """,
+                    (
+                        current_user.id,
+                        brokerage_name, address1, address2, city, state, zip_code,
+                        brokerage_phone, brokerage_website, office_license_number,
+                    ),
+                )
+
+                conn.commit()
+                flash("Profile updated.", "success")
+                return redirect(url_for("account"))
+
+            except Exception as e:
+                conn.rollback()
+                flash(f"Error saving profile: {e}", "danger")
+
+        # GET: fetch user + brokerage
+        cur.execute(
+            """
+            SELECT id, email, first_name, last_name, title,
+                   agent_phone, agent_website, license_number, license_state
+            FROM users
+            WHERE id = %s;
+            """,
+            (current_user.id,),
+        )
+        u = cur.fetchone()
+
+        cur.execute(
+            """
+            SELECT brokerage_name, address1, address2, city, state, zip,
+                   brokerage_phone, brokerage_website, office_license_number
+            FROM brokerages
+            WHERE user_id = %s;
+            """,
+            (current_user.id,),
+        )
+        b = cur.fetchone()
+
+        return render_template(
+            "account/profile.html",
+            user=u,
+            brokerage=b or {},
+            active_page=None
+        )
+
+    finally:
+        conn.close()
+
     
 
 if __name__ == "__main__":

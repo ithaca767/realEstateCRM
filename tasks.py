@@ -33,7 +33,35 @@ def list_tasks_for_user(cur, user_id: int, status: Optional[str] = None) -> List
     if status and status not in TASK_STATUSES:
         raise ValueError("Invalid status")
 
-    if status:
+    # Special handling so expired snoozes behave like Open tasks
+    if status == "open":
+        cur.execute(
+            TASK_SELECT
+            + """
+            WHERE user_id = %s
+              AND (
+                status = 'open'
+                OR (status = 'snoozed' AND snoozed_until IS NOT NULL AND snoozed_until <= NOW())
+              )
+            ORDER BY COALESCE(due_at, due_date::timestamptz, updated_at) ASC, id ASC
+            """,
+            (user_id,),
+        )
+
+    elif status == "snoozed":
+        cur.execute(
+            TASK_SELECT
+            + """
+            WHERE user_id = %s
+              AND status = 'snoozed'
+              AND snoozed_until IS NOT NULL
+              AND snoozed_until > NOW()
+            ORDER BY snoozed_until ASC, id ASC
+            """,
+            (user_id,),
+        )
+
+    elif status:
         cur.execute(
             TASK_SELECT
             + """
@@ -42,6 +70,7 @@ def list_tasks_for_user(cur, user_id: int, status: Optional[str] = None) -> List
             """,
             (user_id, status),
         )
+
     else:
         cur.execute(
             TASK_SELECT
