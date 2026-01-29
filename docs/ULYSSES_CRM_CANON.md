@@ -12442,3 +12442,329 @@ All Phase 6c objectives were satisfied. All deferrals were explicit and intentio
 Remaining UX refinements identified during this phase are intentionally deferred to a future, UI-heavy usability upgrade phase.
 
 
+## Phase 7A — v1.0.0 Finalization & Release Summary
+
+**Status:** Complete  
+**Release:** v1.0.0 (Production)  
+**Scope Type:** Hardening, completion, and release readiness  
+**Deployment:** Live
+
+### Purpose of Phase 7A
+Phase 7A marked the final stabilization and release phase of Ulysses CRM v1.0.0.  
+The goal was to harden all previously implemented systems, eliminate architectural gaps, enforce tenant isolation, and ensure the application could be confidently deployed and used in production without feature debt or unsafe assumptions.
+
+No new conceptual features were introduced in Phase 7A. All work focused on completion, correctness, usability, and consistency.
+
+---
+
+### Core Systems Confirmed Complete in v1.0.0
+
+#### Authentication & User System
+- Fully implemented user authentication using Flask-Login
+- Secure password hashing and validation
+- Login, logout, and session management finalized
+- Last-login tracking implemented
+- Inactive-user enforcement confirmed
+
+#### Owner / Admin Controls
+- Owner-only admin access enforced via decorators
+- Invite-based user onboarding implemented
+- Secure, expiring user invite tokens
+- Invite lifecycle handling (create, revoke, consume)
+- Active user listing and activation toggling
+- Admin dashboard summary counts (users, invites)
+
+#### Tasks System (Phase 5 finalized)
+- Full task lifecycle supported:
+  - Open
+  - Snoozed
+  - Completed
+  - Canceled
+- Task relationships supported:
+  - Contacts
+  - Transactions
+  - Engagements
+  - Professionals
+- Task modal creation and editing finalized
+- Task list filtering by status finalized
+- Backend status enforcement confirmed
+- Defensive ownership checks on all task actions
+
+#### Transactions, Contacts, Professionals
+- Multi-entity relationships stabilized
+- UI consistency across list, view, and modal flows
+- Defensive deletes (no destructive cascades without intent)
+- Contact display-name resolution hardened
+- Table layout consistency enforced
+
+#### Engagements
+- Transcript handling confirmed
+- Summary / notes fallback logic finalized
+- Engagement context correctly displayed in tasks and contacts
+
+---
+
+### UI & UX Stabilization
+- Consistent page wrapper and layout structure enforced
+- Navigation finalized and stabilized
+- Modal behavior standardized across features
+- Table action-column wrapping prevented
+- Flash messaging normalized and styled
+- Background and overlay handling finalized for production
+
+---
+
+### Data Safety & Architecture
+- All user-facing queries scoped by `user_id`
+- No cross-tenant data leakage paths remain
+- Defensive guards added around critical INSERT/UPDATE paths
+- Production schema parity confirmed
+- Version display and environment indicator finalized
+
+---
+
+### Documentation & Canon
+- Canonical design and architecture documents locked
+- Phase scopes respected and closed
+- No unfinished features left dangling at v1.0.0
+- Future enhancements explicitly deferred to post-1.0 versions
+
+---
+
+### Explicit Non-Goals of Phase 7A
+The following were **intentionally excluded** from v1.0.0 and deferred:
+- AI summarization or automation features
+- IDX / MLS integrations
+- Commission engine
+- Multi-user role expansion beyond owner/user
+- Custom checklist builders
+- Advanced reporting or analytics
+
+---
+
+### Release Outcome
+Ulysses CRM v1.0.0 was successfully deployed as a stable, production-ready system with:
+- Clear ownership boundaries
+- A complete task and engagement workflow
+- Admin safety controls
+- A clean upgrade path for future patch and minor releases
+
+All subsequent work proceeds under **post-1.0 semantic versioning (v1.0.1+)** and must not retroactively alter Phase 7A scope.
+
+
+
+
+## Tenant Isolation & Open Houses Audit  
+**Completed:** January 26, 2026  
+**Next Chat Start:** January 26, 2026
+
+### Context & Primary Goal
+
+This audit focused on hardening **Ulysses CRM** for true multi-user tenant isolation, with an emphasis on preventing cross-user data leakage both now and in future phases.
+
+The immediate trigger was unexpected behavior observed in **Professionals** and **Open Houses** once multi-user work began in **Phase 7B**. The broader goal was to methodically audit both database schema and application code to ensure that every user-owned resource is correctly scoped by a `user_id` (or equivalent ownership field), and that all decisions are memorialized to avoid reliance on undocumented or “tribal” knowledge.
+
+---
+
+### Key Design Principles Reinforced
+
+- **SQL-level tenant enforcement is mandatory**  
+  Ownership must be enforced in the `WHERE` clause of every `SELECT`, `UPDATE`, `DELETE`, and `EXPORT` query.  
+  UI-only or route-level filtering is insufficient.
+
+- **Schema and code must agree**  
+  If a table includes a `user_id` or ownership column, *all* routes touching that table must consistently scope by it.
+
+- **No silent assumptions**  
+  Any hardcoded ownership values (e.g., `user_id = 1`) are unacceptable once multi-user support exists.
+
+- **Audit-first mindset**  
+  All changes are accompanied by:
+  - schema inspection
+  - grep-based code scanning
+  - written audit notes  
+  This allows future reconstruction of intent and reasoning.
+
+- **Pause over speed**  
+  Development intentionally slowed to avoid subtle multi-tenant bugs that are costly to unwind later.
+
+---
+
+### What Was Completed
+
+#### 1. Professionals (Closed)
+
+- Identified missing `user_id` handling in **Professionals**.
+- Confirmed schema includes `professionals.user_id`.
+- Updated all related functionality to scope by `current_user.id`:
+  - creation
+  - listing
+  - editing
+  - deletion
+  - dropdown helpers
+- Refactored `get_professionals_for_dropdown()` to explicitly require `user_id`.
+- Verified via grep that all call sites pass `current_user.id`.
+
+**Status:** ✅ Tenant-safe and closed.
+
+---
+
+#### 2. Open Houses (Major Work Completed)
+
+Open Houses were identified as a **high-risk area** due to the combination of public access (sign-ins) and private ownership.
+
+##### Schema Audit
+
+- Confirmed:
+  - `open_houses.created_by_user_id`
+  - `open_house_signins.user_id`
+- Verified no `NULL` or invalid `user_id` values in local data.
+- Confirmed indexing and foreign key constraints.
+
+##### Routes Updated for Tenant Isolation
+
+The following routes were explicitly updated and verified:
+
+- **Create Open House**
+  - `created_by_user_id = current_user.id`
+  - Removed hardcoded user IDs
+  - Correct handling of `RETURNING id`
+
+- **List Open Houses**
+  - `WHERE created_by_user_id = current_user.id`
+
+- **Open House Detail**
+  - `WHERE id = %s AND created_by_user_id = %s`
+
+- **Export CSV**
+  - `WHERE open_house_id = %s AND user_id = %s`
+
+- **Public Open House Sign-In**
+  - Public token resolves owning user (`owner_user_id`)
+  - Contacts are matched or created under the owner’s user account
+  - `open_house_signins.user_id = owner_user_id` enforced on insert
+
+##### Outcomes Ensured
+
+- Public visitors cannot leak data across tenants
+- Owners only see their own sign-ins
+- CSV exports cannot exfiltrate other users’ data
+
+**Status:** ✅ Functionally tenant-safe and verified locally.
+
+---
+
+#### 3. Audit Infrastructure Added
+
+To support systematic review and long-term safety, a formal audit structure was introduced:
+
+- Created `docs/audits/`
+- Added:
+  - `schema_local.sql`
+  - `schema_local_tables.txt`
+  - `2026_01_25_phase_7b_multi_user_audit.md`
+  - `2026_01_25_tenant_isolation_audit.md`
+
+- Performed scripted scans to:
+  - identify tables with `user_id`
+  - identify ownership fields such as `created_by_user_id`
+  - cross-reference schema with code usage
+
+This establishes a **repeatable audit pattern** for remaining modules.
+
+---
+
+#### 4. Tasks (Confirmed Safe)
+
+Tasks were reviewed and confirmed to already meet tenant-isolation standards:
+
+- All task mutations enforce `WHERE user_id = %s`
+- Helper functions centralize ownership enforcement
+- No raw task queries bypass tenant scope
+- Schema includes appropriate constraints and indexes
+
+**Status:** ✅ Explicitly confirmed and closed.
+
+---
+## Phase 7B — Agent Identity Foundations and My Profile  
+**Completed:** January 28, 2026  
+**Next Chat Start:** January 28, 2026
+
+### Context & Goal
+
+Phase 7B continued post-v1.0 work under patch semantics (v1.0.1+) to complete multi-user hardening and establish agent identity foundations so the system is safe for multiple users and self-configurable by each agent.
+
+The immediate implementation goal was to add a first-class, tenant-safe user profile page so identity data used by Templates and footers can be configured without code edits.
+
+---
+
+### What Was Completed
+
+#### 1. Agent and Brokerage Identity Data Model (Closed)
+
+- Extended `users` with agent identity fields:
+  - `title`
+  - `agent_phone`
+  - `agent_website`
+  - `license_number`
+  - `license_state` (added during implementation as a low-risk, forward-compatible schema extension)
+- Confirmed `brokerages` exists as a strict 1:1 table keyed by `user_id`:
+  - `brokerages.user_id` is PRIMARY KEY and NOT NULL
+  - Foreign key to `users(id)` with `ON DELETE CASCADE`
+- Confirmed footer identity rendering contract:
+  - `_get_brokerage_footer()` is the single integration point for Templates and related output
+  - Agent contact appears before brokerage contact by design
+  - Agent website is shown ahead of brokerage website by design
+  - City/state formatting uses a comma separator
+
+**Status:** ✅ Closed.
+
+---
+
+#### 2. My Profile Page (Closed)
+
+- Added a logged-in profile page for the current user:
+  - Route: `/account` (GET/POST)
+  - Template: `templates/account/profile.html`
+- Implemented tenant-safe reads and writes:
+  - Users are updated via `WHERE id = current_user.id`
+  - Brokerages are upserted via `ON CONFLICT (user_id)` and always written under `current_user.id`
+- Implemented safe update semantics to avoid accidental data loss:
+  - Uses `COALESCE(NULLIF(..., ''), existing_value)` so blank inputs do not overwrite existing values
+- Added an Account link in the navbar targeting `url_for('account')`
+- Resolved endpoint drift by removing the legacy `account_profile` endpoint and updating navbar references accordingly
+
+**Status:** ✅ Closed.
+
+---
+
+#### 3. Account Creation Consistency (Closed)
+
+- Accept-invite and My Profile now share a single, canonical field contract for identity data.
+- Phone formatting is consistent via a global, opt-in formatter:
+  - Global formatter lives in `base.html`
+  - Fields opt in by adding the `phone-input` class
+  - Implemented in both:
+    - `templates/account/profile.html`
+    - `templates/auth/accept_invite.html` (agent phone)
+
+**Status:** ✅ Closed.
+
+---
+
+### Noted Future Enhancement
+
+- Multi-state licensing should eventually be supported beyond a single `users.license_state` field.
+  - Expected approach: a structured per-user licenses model (e.g., separate licenses table) introduced in a later phase.
+
+---
+
+### Release Guidance
+
+These changes constitute a patch-level release candidate.
+
+- Recommended next patch version: **v1.0.1**
+- Ensure production parity includes any schema additions introduced locally (notably `users.license_state`) before deploying the patch.
+
+---
+
