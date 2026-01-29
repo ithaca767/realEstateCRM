@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Invite Created</h2>
+    <div class="text-muted">Copy the link below and share it with the invitee.</div>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="text-muted small">Email</div>
+        <div class="fw-semibold">{{ invited_email }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">Role</div>
+        <div class="fw-semibold">{{ role }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">Expires</div>
+        <div class="fw-semibold">{{ expires_at }}</div>
+      </div>
+    </div>
+
+    <hr class="my-3">
+
+    <label class="form-label fw-semibold">Invite Link</label>
+    <input class="form-control" value="{{ invite_link }}" readonly onclick="this.select();">
+    <div class="text-muted small mt-2">Single-use and time-limited.</div>
+  </div>
+</div>
+
+{% endblock %}

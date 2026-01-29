@@ -81,6 +81,9 @@
                   {% if t.status == "open" %}{% set badge_class = "bg-primary" %}{% endif %}
                   {% if t.status == "completed" %}{% set badge_class = "bg-success" %}{% endif %}
                   {% if t.status == "snoozed" %}{% set badge_class = "bg-warning text-dark" %}{% endif %}
+                  {% if t.status == "snoozed" and t.snoozed_until %}
+                    <div class="text-muted small">Until {{ t.snoozed_until }}</div>
+                  {% endif %}
                   {% if t.status == "canceled" %}{% set badge_class = "bg-secondary" %}{% endif %}
 
                   <span class="badge {{ badge_class }}">
@@ -108,7 +111,7 @@
                         Edit
                       </button>
                 
-                      {% if t.status != 'completed' %}
+                      {% if t.status != 'completed' and t.status != 'canceled' %}
                         <button
                           type="button"
                           class="btn btn-outline-success"
@@ -116,9 +119,49 @@
                           Complete
                         </button>
                       {% endif %}
+                
+                      <div class="btn-group btn-group-sm" role="group">
+                        <button type="button"
+                                class="btn btn-outline-secondary dropdown-toggle"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false">
+                          More
+                        </button>
+                
+                        <ul class="dropdown-menu dropdown-menu-end">
+                
+                          {% if t.status in ['open', 'snoozed'] %}
+                            <li>
+                              <button type="button" class="dropdown-item" onclick="openSnoozeModal({{ t.id }})">
+                                Snooze...
+                              </button>
+                            </li>
+                          {% endif %}
+                
+                          {% if t.status in ['open', 'snoozed'] %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                              <form method="post"
+                                    action="{{ url_for('tasks_cancel', task_id=t.id) }}"
+                                    onsubmit="return confirm('Cancel this task? This cannot be undone.');">
+                                <button type="submit" class="dropdown-item text-danger">Cancel Task</button>
+                              </form>
+                            </li>
+                          {% endif %}
+                
+                          {% if t.status in ['completed', 'canceled'] %}
+                            <li>
+                              <form method="post" action="{{ url_for('tasks_reopen', task_id=t.id) }}">
+                                <button type="submit" class="dropdown-item">Reopen</button>
+                              </form>
+                            </li>
+                          {% endif %}
+                
+                        </ul>
+                      </div>
                     </div>
                 
-                    {% if t.status != 'completed' %}
+                    {% if t.status != 'completed' and t.status != 'canceled' %}
                       <form id="taskCompleteForm_{{ t.id }}"
                             method="post"
                             action="{{ url_for('tasks_complete', task_id=t.id) }}"
@@ -139,4 +182,65 @@
 
   </div>
 </div>
+<div class="modal fade" id="snoozeModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" id="snoozeForm" action="">
+        <div class="modal-header">
+          <h5 class="modal-title">Snooze Task</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <label class="form-label" for="snoozed_until">Snoozed until</label>
+          <input class="form-control" type="datetime-local" id="snoozed_until" name="snoozed_until" required>
+          <div class="form-text">Choose a date and time to snooze until.</div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Snooze</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %} {# closes content #}
+
+{% block extra_scripts %}
+<script>
+  function openSnoozeModal(taskId) {
+    // Close task modal if open
+    const taskModalEl = document.getElementById("taskModal");
+    if (taskModalEl) {
+      const taskModal = bootstrap.Modal.getInstance(taskModalEl);
+      if (taskModal) {
+        taskModal.hide();
+      }
+    }
+
+    const form = document.getElementById("snoozeForm");
+    if (!form) return;
+    form.action = "/tasks/" + taskId + "/snooze";
+
+    const input = document.getElementById("snoozed_until");
+    if (input) {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(9, 0, 0, 0);
+
+      const pad = (n) => String(n).padStart(2, "0");
+      input.value =
+        d.getFullYear() + "-" +
+        pad(d.getMonth() + 1) + "-" +
+        pad(d.getDate()) + "T" +
+        pad(d.getHours()) + ":" +
+        pad(d.getMinutes());
+    }
+
+    const modalEl = document.getElementById("snoozeModal");
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  }
+</script>
 {% endblock %}

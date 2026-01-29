@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Active Invites</h2>
+    <div class="text-muted">Unclaimed, unexpired invitations.</div>
+  </div>
+
+  <a href="{{ url_for('admin_new_invite') }}" class="btn btn-sm btn-primary">
+    New Invite
+  </a>
+</div>
+
+<div class="card mt-3">
+  <div class="card-body p-0">
+    {% if invites %}
+      <table class="table mb-0">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Created</th>
+            <th>Expires</th>
+            <th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for invite in invites %}
+            <tr>
+              <td>{{ invite.invited_email }}</td>
+              <td class="text-capitalize">{{ invite.role }}</td>
+              <td>{{ invite.created_at.strftime("%Y-%m-%d") }}</td>
+              <td>{{ invite.expires_at.strftime("%Y-%m-%d") }}</td>
+              <td class="text-end">
+                <form method="post"
+                      action="{{ url_for('admin_revoke_invite', invite_id=invite.id) }}"
+                      onsubmit="return confirm('Revoke this invite?');"
+                      class="d-inline">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">
+                    Revoke
+                  </button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="p-3 text-muted">
+        No active invites.
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

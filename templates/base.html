@@ -14,12 +14,6 @@
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 
     <style>
-      body {
-        background: url("/static/backgrounds/house-bg.jpg");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-      }
       body.openhouse-public {
         background: #ffffff !important;
       }
@@ -58,7 +52,7 @@
     {% block extra_head %}{% endblock %}
 </head>
 
-<body class="{% block body_class %}{% endblock %}">
+<body class="app-bg {% block body_class %}{% endblock %}">
 
 {% set hide_nav = hide_nav|default(false) %}
 
@@ -123,11 +117,24 @@
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('templates_index') }}">Templates</a>
         </li>
-
+        
+      {% if current_user.is_authenticated and current_user.role == "owner" %}
+        <li class="nav-item">
+          <a class="nav-link {% if active_page == 'admin' %}fw-semibold{% endif %}"
+             href="{{ url_for('admin_home') }}">
+            Admin
+          </a>
+        </li>
+      {% endif %}
+        
         <li class="nav-item">
           <a class="nav-link" href="{{ calendar_feed_url }}" target="_blank">Calendar Feed</a>
         </li>
-
+        {% if current_user.is_authenticated %}
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('account') }}">Account</a>
+          </li>
+        {% endif %}
         {% if current_user.is_authenticated %}
           <li class="nav-item ms-auto">
             <a class="nav-link text-danger" href="{{ url_for('logout') }}">Logout</a>
@@ -138,6 +145,12 @@
     </div>
   </div>
 </nav>
+{% endif %}
+
+{% if APP_ENV != "PROD" %}
+  <div class="env-banner text-center py-1 small fw-semibold">
+    ⚠️ LOCAL DEVELOPMENT ENVIRONMENT — NOT PRODUCTION
+  </div>
 {% endif %}
 
 {% block flashes %}
@@ -206,9 +219,6 @@
 
 <script src="{{ url_for('static', filename='js/task_form.js') }}"></script>
 
-{# Global scripts that must exist on every page #}
-{% block global_scripts %}{% endblock %}
-
 <script>
   async function openTaskModal(url, title) {
     const titleEl = document.getElementById("taskModalTitle");
@@ -248,8 +258,68 @@
     }
   }
 </script>
+<script>
+  function formatPhoneUS(value) {
+    const digits = (value || "").replace(/\D/g, "");
+    if (digits.length === 10) {
+      return "(" + digits.slice(0, 3) + ") " + digits.slice(3, 6) + "-" + digits.slice(6);
+    }
+    return value;
+  }
 
-{# Page-specific scripts (existing hook, keep it) #}
+  document.addEventListener("blur", function (e) {
+    const el = e.target;
+    if (!el) return;
+    if (el.classList && el.classList.contains("phone-input")) {
+      el.value = formatPhoneUS(el.value);
+    }
+  }, true);
+</script>
+
+{# Global scripts that must exist on every page #}
+{% block global_scripts %}
+<script>
+  async function openTaskModal(url, title) {
+    const titleEl = document.getElementById("taskModalTitle");
+    const bodyEl = document.getElementById("taskModalBody");
+    const modalEl = document.getElementById("taskModal");
+
+    if (!titleEl || !bodyEl || !modalEl) return;
+
+    titleEl.textContent = title || "Task";
+    bodyEl.innerHTML = `<div class="text-muted">Loading...</div>`;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+
+    try {
+      const resp = await fetch(url, { credentials: "include" });
+
+      if (!resp.ok) {
+        bodyEl.innerHTML =
+          `<div class="alert alert-danger mb-0">
+             Could not load the task form (${resp.status}).
+           </div>`;
+        return;
+      }
+
+      const html = await resp.text();
+      bodyEl.innerHTML = html;
+
+      if (window.initTaskFormEnhancements) {
+        window.initTaskFormEnhancements();
+      }
+    } catch (err) {
+      bodyEl.innerHTML =
+        `<div class="alert alert-danger mb-0">
+           Could not load the task form.
+         </div>`;
+    }
+  }
+</script>
+{% endblock %}
+
+{# Page-specific scripts (leave empty by default) #}
 {% block extra_scripts %}{% endblock %}
 
 </body>

@@ -1,7 +1,42 @@
 /* Global CRM styles */
 
 body {
-    background-color: #6eb8f9;
+  background-color: #6eb8f9;
+}
+
+body.app-bg {
+  position: relative;
+  min-height: 100vh;
+  background: url("/static/backgrounds/house-bg.jpg") no-repeat center center fixed;
+  background-size: cover;
+}
+
+/* Overlay ABOVE the image but BELOW all content */
+body.app-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(210, 220, 235, 0.62);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Keep app content above overlay */
+.navbar,
+.container,
+.container-fluid,
+.content-panel,
+footer {
+  position: relative;
+  z-index: 1;
+}
+
+/* Do NOT create stacking contexts for layout wrappers */
+.container,
+.container-fluid,
+.content-panel {
+  position: relative;
+  z-index: auto;
 }
 
 /* Card tweaks */
@@ -155,6 +190,14 @@ html:focus-within {
 
 .nav-tabs .nav-link.text-muted.active {
   color: var(--bs-nav-tabs-link-active-color);
+}
+
+.env-banner {
+  position: relative;
+  z-index: 2; /* above overlay, same layer as navbar */
+  background: #fff3cd;
+  color: #664d03;
+  border-bottom: 1px solid #ffe69c;
 }
 
 

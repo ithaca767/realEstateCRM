@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Users</h2>
+    <div class="text-muted">Owner-only view of accounts and access status.</div>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-body p-0">
+    {% if users %}
+      <table class="table mb-0">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Last Login</th>
+            <th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr>
+              <td>{{ u.email }}</td>
+              <td>
+                {% set full_name = (u.first_name or '') ~ ' ' ~ (u.last_name or '') %}
+                {{ full_name.strip() if full_name.strip() else '-' }}
+              </td>
+              <td class="text-capitalize">{{ u.role }}</td>
+              <td>
+                {% if u.is_active %}
+                  <span class="badge text-bg-success">Active</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">Inactive</span>
+                {% endif %}
+              </td>
+              <td>{{ u.created_at.strftime("%Y-%m-%d") if u.created_at else '-' }}</td>
+              <td>{{ u.last_login_at.strftime("%Y-%m-%d") if u.last_login_at else '-' }}</td>
+              <td class="text-end">
+                {% if u.id != current_user.id %}
+                  <form method="post"
+                        action="{{ url_for('admin_toggle_user_active', user_id=u.id) }}"
+                        class="d-inline"
+                        onsubmit="return confirm('Change this user\\'s active status?');">
+                    {% if u.is_active %}
+                      <button class="btn btn-sm btn-outline-danger" type="submit">Deactivate</button>
+                    {% else %}
+                      <button class="btn btn-sm btn-outline-primary" type="submit">Activate</button>
+                    {% endif %}
+                  </form>
+                {% else %}
+                  <span class="text-muted small">Current user</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="p-3 text-muted">No users found.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
