@@ -276,6 +276,29 @@
   }, true);
 </script>
 
+<script>
+  function normalizeUrl(value) {
+    const v = (value || "").trim();
+    if (!v) return "";
+    // If already has a scheme (http, https, etc), keep it
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(v)) return v;
+    return "https://" + v;
+  }
+
+  document.addEventListener("blur", function (e) {
+    const el = e.target;
+    if (!el) return;
+
+    if (el.classList && el.classList.contains("phone-input")) {
+      el.value = formatPhoneUS(el.value);
+    }
+
+    if (el.classList && el.classList.contains("url-input")) {
+      el.value = normalizeUrl(el.value);
+    }
+  }, true);
+</script>
+
 {# Global scripts that must exist on every page #}
 {% block global_scripts %}
 <script>

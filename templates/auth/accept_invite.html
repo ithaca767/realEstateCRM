@@ -50,12 +50,16 @@
           <!-- Agent branding -->
           <div class="col-md-6">
             <label class="form-label">Agent Website</label>
-            <input class="form-control" name="agent_website" type="url" placeholder="https://">
+            <input class="form-control url-input"
+                   name="agent_website"
+                   inputmode="url"
+                   autocomplete="url"
+                   placeholder="https://">
           </div>
       
           <div class="col-md-6">
-            <label class="form-label phone-input">Agent Phone</label>
-            <input class="form-control" name="agent_phone" type="text">
+            <label class="form-label">Agent Phone</label>
+            <input class="form-control phone-input" name="agent_phone" type="text">
           </div>
       
           <hr class="my-3">

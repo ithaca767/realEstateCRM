@@ -169,6 +169,15 @@ def owner_required(f):
         return f(*args, **kwargs)
     return wrapper
 
+def normalize_url(value):
+    v = (value or "").strip()
+    if not v:
+        return None
+    # If it already has a scheme (http://, https://, etc.), keep it
+    if "://" in v:
+        return v
+    return f"https://{v}"
+
 def parse_12h_time_to_24h(hour_str, minute_str, ampm_str, default_hour=9, default_minute=0):
     hour_str = (hour_str or "").strip()
     minute_str = (minute_str or "").strip()
@@ -3417,7 +3426,7 @@ def accept_invite():
             last_name = (request.form.get("last_name") or "").strip()
 
             # Agent branding
-            agent_website = (request.form.get("agent_website") or "").strip() or None
+            agent_website = normalize_url(request.form.get("agent_website"))
             agent_phone = (request.form.get("agent_phone") or "").strip() or None
             title = (request.form.get("title") or "").strip() or None
 
@@ -3436,7 +3445,7 @@ def accept_invite():
             brokerage_state = (request.form.get("brokerage_state") or "").strip() or None
             brokerage_zip = (request.form.get("brokerage_zip") or "").strip() or None
             brokerage_phone = (request.form.get("brokerage_phone") or "").strip() or None
-            brokerage_website = (request.form.get("brokerage_website") or "").strip() or None
+            brokerage_website = normalize_url(request.form.get("brokerage_website"))
             office_license_number = (request.form.get("office_license_number") or "").strip() or None
 
             if not pw1 or len(pw1) < 10:
