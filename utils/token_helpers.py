@@ -57,13 +57,14 @@ def is_expired(expires_at: Optional[datetime]) -> bool:
     return utcnow() >= expires_at
 
 
-def build_link(base_url: str, path: str, raw_token: str) -> str:
-    """
-    Convenience for producing a copy/paste link since we are not doing email delivery.
-    """
-    base = (base_url or "").rstrip("/")
+def build_link(base_url: str, path: str, token: str, param_name: str = "token") -> str:
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        raise RuntimeError("PUBLIC_BASE_URL is not set. Refusing to build link.")
+
     p = (path or "").strip()
     if not p.startswith("/"):
         p = "/" + p
-    token = (raw_token or "").strip()
-    return f"{base}{p}?token={token}"
+
+    # Do not infer scheme, do not use request.host, do not use url_for(_external=True)
+    return f"{base}{p}?{param_name}={token}"

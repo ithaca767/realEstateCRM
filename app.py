@@ -105,7 +105,7 @@ login_manager.login_view = "login"
 # Optional token for calendar feed protection
 ICS_TOKEN = os.environ.get("ICS_TOKEN")
 
-PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "http://127.0.0.1:5000").strip().rstrip("/")
+PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
 app.config["PUBLIC_BASE_URL"] = PUBLIC_BASE_URL
                             
 @app.context_processor
@@ -3358,6 +3358,12 @@ def admin_new_invite():
             flash("Role must be owner or user.", "danger")
             return render_template("auth/admin_invite_new.html", active_page="admin")
 
+        # Fail loudly if misconfigured in production
+        if not app.config.get("PUBLIC_BASE_URL"):
+            raise RuntimeError(
+                "PUBLIC_BASE_URL is not set. Set it to https://ulyssescrmpro.com in production."
+            )
+
         conn = None
         try:
             conn = get_db()
@@ -3368,6 +3374,7 @@ def admin_new_invite():
                 invited_by_user_id=current_user.id,
                 note=note,
             )
+
             invite_link = build_link(app.config["PUBLIC_BASE_URL"], "/accept-invite", invite["raw_token"])
             return render_template(
                 "auth/admin_invite_created.html",
@@ -3377,14 +3384,16 @@ def admin_new_invite():
                 invite_link=invite_link,
                 active_page="admin",
             )
+
+        except Exception as e:
+            flash(f"Error creating invite: {e}", "danger")
+            return render_template("auth/admin_invite_new.html", active_page="admin")
+
         finally:
             if conn:
                 conn.close()
 
-    return render_template(
-        "auth/admin_invite_new.html",
-        active_page="admin",
-    )
+    return render_template("auth/admin_invite_new.html", active_page="admin")
 
 @app.route("/accept-invite", methods=["GET", "POST"])
 def accept_invite():
@@ -3768,7 +3777,7 @@ def request_password_reset():
                 request_ip=request_ip,
                 request_user_agent=request_user_agent,
             )
-            reset_link = build_link(app.config["PUBLIC_BASE_URL"], "/password-reset", reset["raw_token"])
+            reset_link  = build_link(app.config["PUBLIC_BASE_URL"], "/password-reset", reset["raw_token"], param_name="token")
 
             flash("If an account exists for that email, a reset link has been generated.", "success")
             return render_template("auth/password_reset_sent.html", reset_link=reset_link)
