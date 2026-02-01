@@ -5214,22 +5214,22 @@ def edit_engagement(engagement_id):
         transcript_raw = (request.form.get("transcript_raw") or "").strip() or None
         summary_clean = (request.form.get("summary_clean") or "").strip() or None
 
-        # Occurred_at parsing (from datetime-local input)
+        # Occurred_at parsing (datetime-local input is naive local time)
         occurred_raw = (request.form.get("occurred_at") or "").strip()
         
         if occurred_raw:
             try:
                 occurred_at = datetime.fromisoformat(occurred_raw)
-                if occurred_at.tzinfo is None:
-                    occurred_at = occurred_at.replace(tzinfo=NY)
+                # Keep naive wall-clock time (NY). Do not attach tzinfo.
+                if occurred_at.tzinfo is not None:
+                    occurred_at = occurred_at.replace(tzinfo=None)
             except ValueError:
                 flash("Invalid engagement date/time.", "warning")
                 occurred_at = e["occurred_at"]
         else:
-            # Preserve existing value if nothing submitted
             occurred_at = e["occurred_at"]
         
-        # Follow-up parsing (datetime-local: follow_up_due_at = "2026-01-01T14:30")
+        # Follow-up parsing (datetime-local is naive local time)
         requires_follow_up = (request.form.get("requires_follow_up") == "on")
         follow_up_completed = (request.form.get("follow_up_completed") == "on")
         
@@ -5241,22 +5241,21 @@ def edit_engagement(engagement_id):
         
             if fu_raw:
                 try:
-                    fu_dt = datetime.fromisoformat(fu_raw)  # naive local time from HTML (NY)
-                    if fu_dt.tzinfo is None:
-                        fu_dt = fu_dt.replace(tzinfo=NY)
+                    fu_dt = datetime.fromisoformat(fu_raw)
+                    if fu_dt.tzinfo is not None:
+                        fu_dt = fu_dt.replace(tzinfo=None)
                     follow_up_due_at = fu_dt
                 except ValueError:
                     flash("Invalid follow-up date/time.", "warning")
                     requires_follow_up = False
                     follow_up_due_at = None
-        
             else:
-                # checkbox checked but no datetime supplied
                 requires_follow_up = False
                 follow_up_due_at = None
         
             if follow_up_completed:
-                follow_up_completed_at = datetime.now(NY)
+                # store naive NY wall-clock now
+                follow_up_completed_at = datetime.now(NY).replace(tzinfo=None)
         else:
             follow_up_due_at = None
             follow_up_completed = False
