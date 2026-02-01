@@ -219,7 +219,7 @@
 
 <script src="{{ url_for('static', filename='js/task_form.js') }}"></script>
 
-<script>
+<!-- <script>
   async function openTaskModal(url, title) {
     const titleEl = document.getElementById("taskModalTitle");
     const bodyEl = document.getElementById("taskModalBody");
@@ -257,7 +257,7 @@
          </div>`;
     }
   }
-</script>
+</script> -->
 <script>
   function formatPhoneUS(value) {
     const digits = (value || "").replace(/\D/g, "");
@@ -301,6 +301,7 @@
 
 {# Global scripts that must exist on every page #}
 {% block global_scripts %}
+{% block global_scripts %}
 <script>
   async function openTaskModal(url, title) {
     const titleEl = document.getElementById("taskModalTitle");
@@ -316,7 +317,10 @@
     modal.show();
 
     try {
-      const resp = await fetch(url, { credentials: "include" });
+      const resp = await fetch(url, {
+        credentials: "include",
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      });
 
       if (!resp.ok) {
         bodyEl.innerHTML =
@@ -328,6 +332,33 @@
 
       const html = await resp.text();
       bodyEl.innerHTML = html;
+
+      // Fail-closed guard: if editing, never allow posting to /tasks/new
+      try {
+        const m = url.match(/\/tasks\/modal\/(\d+)\/edit/);
+        const taskId = m ? m[1] : null;
+
+        if (taskId) {
+          const form = bodyEl.querySelector("form");
+          const expectedAction = `/tasks/${taskId}/edit`;
+          const action = (form && form.getAttribute("action")) ? form.getAttribute("action") : "";
+
+          if (!form || !action.includes(expectedAction)) {
+            const submitBtn = bodyEl.querySelector('button[type="submit"], input[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+
+            const warn = document.createElement("div");
+            warn.className = "alert alert-danger mt-3 mb-0";
+            warn.textContent = "Edit form did not load correctly. Close this modal and try again.";
+            bodyEl.appendChild(warn);
+
+            console.error("Task modal edit guard triggered", { url, expectedAction, action });
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Task modal guard error:", e);
+      }
 
       if (window.initTaskFormEnhancements) {
         window.initTaskFormEnhancements();
