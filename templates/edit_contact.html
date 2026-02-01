@@ -652,7 +652,9 @@
                 </div>
               {% endif %}
 
-              <form method="post" action="{{ url_for('add_engagement', contact_id=c['id']) }}">
+              <form method="post" 
+                    action="{{ url_for('add_engagement', contact_id=c['id']) }}"
+                    data-engagement-create="1">
                 <div class="row g-3 align-items-end">
 
                   <div class="col-md-3">
@@ -782,11 +784,26 @@
                   </div>
 
                   <div class="col-12">
-                    <button class="btn btn-outline-primary mt-2" type="submit">Save Engagement</button>
+                    <button class="btn btn-outline-primary mt-2" type="submit" id="engagementCreateSubmit">Save Engagement</button>
                   </div>
 
                 </div>
               </form>
+              
+<script>
+  (function () {
+    const form = document.querySelector('form[data-engagement-create="1"]');
+    if (!form) return;
+
+    form.addEventListener('submit', function () {
+      const btn = document.getElementById('engagementCreateSubmit') || form.querySelector('button[type="submit"]');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Saving...";
+      }
+    }, { once: true });
+  })();
+</script>
 
               <hr>
               
