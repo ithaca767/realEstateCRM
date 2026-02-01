@@ -12768,3 +12768,187 @@ These changes constitute a patch-level release candidate.
 
 ---
 
+# Phase 7B Closeout & Transition Document
+
+**Project:** Ulysses CRM
+**Version Tagged:** v1.0.2
+**Date Closed:** 2026-01-31
+
+---
+
+## Purpose of This Document
+
+This document closes **Phase 7B (User Onboarding & Tenant Isolation Hardening)** and serves as a clean handoff for the *next chat / next phase*. It captures what is complete, what is locked, what assumptions now hold, and what the next conversation can safely build on without re-auditing prior work.
+
+---
+
+## Phase 7B Objectives (Recap)
+
+Phase 7B focused on safely introducing multi-user support **without compromising tenant isolation** or Canon ownership rules.
+
+Primary goals:
+
+* Invite-only onboarding (no self-registration)
+* Hard tenant isolation enforced at SQL level
+* Admins can manage users *without* seeing user data
+* Token-based invites and resets (no SMTP)
+* Prepare system for post-v1.0 extensibility
+
+All goals are now **met and verified**.
+
+---
+
+## What Is Complete and Locked
+
+### 1. User Onboarding (Invite-Only)
+
+* Admin can create invites
+* Secure, single-use, time-limited tokens
+* Accept-invite flow creates:
+
+  * user account
+  * profile fields
+  * brokerage record (user-owned)
+* Invite consumption is atomic and transactional
+* Password reset flow mirrors invite flow
+
+**Status:** CLOSED ✅
+
+---
+
+### 2. Tenant Isolation (Hard Enforcement)
+
+**Canonical tenant key:** `user_id`
+
+Approved alternate keys:
+
+* `created_by_user_id` (Open Houses)
+* derived owner via token (public routes)
+
+All affected areas audited and fixed:
+
+* Contacts
+* Engagements
+* Tasks
+* Transactions
+* Professionals
+* Open Houses + Sign-ins
+* Templates
+
+Negative tests performed:
+
+* Cross-user ID guessing returns 404
+* Exports scoped by tenant
+* Public routes derive owner safely
+
+**Status:** CLOSED ✅
+
+---
+
+### 3. Templates Tenant Isolation
+
+* `templates.user_id` added
+* Backfilled safely
+* Indexed by tenant + category + timestamps
+* Foreign key enforced (prod-safe follow-up migration)
+
+**Status:** CLOSED ✅
+
+---
+
+### 4. Phone & URL Normalization (UI Standard)
+
+**Phone:**
+
+* Opt-in via `phone-input` class
+* Auto-format on blur: `(555) 555-5555`
+
+**URLs:**
+
+* Accept `example.com`, `www.example.com`, or full URLs
+* No forced `https://` on input
+* Stored clean for future linking
+
+Applied to:
+
+* Profile
+* Accept Invite
+* Admin flows
+
+**Status:** CLOSED ✅
+
+---
+
+### 5. Invite / Reset Link Safety
+
+* `PUBLIC_BASE_URL` required in production
+* No fallback to localhost in prod
+* Fail-fast if misconfigured
+* Links built without request inference
+
+**Status:** CLOSED ✅
+
+---
+
+## Versioning & Releases
+
+* **v1.0.2**
+
+  * Phase 7B fully complete
+  * Tagged and pushed
+  * Production verified
+
+Versioning discipline restored:
+
+* Next work begins at **v1.0.3+**
+
+---
+
+## Canon Status
+
+Canon laws upheld:
+
+* Tenant isolation at SQL level
+* No admin data access
+* No implicit ownership
+* Local-first, prod-safe migrations
+* Explicit version tagging
+
+Phase 7B is formally **closed in Canon**.
+
+---
+
+## Known Deferrals (Intentional)
+
+* SMTP email delivery
+* 2FA
+* Teams / shared data
+* IDX integrations
+* Commission Engine
+
+All deferrals are documented and intentional.
+
+---
+
+## Safe Starting Point for Next Chat
+
+The next chat may safely assume:
+
+* Multi-user system is stable
+* Tenant isolation is enforced
+* User onboarding is production-ready
+* No further Phase 7B audits required
+
+Recommended next topics:
+
+* Phase 8 planning
+* Post-v1.0 enhancements
+* UX polish
+* Optional add-on modules
+
+---
+
+**Phase 7B: COMPLETE.**
+
+This document is the authoritative handoff for all future work.
+
