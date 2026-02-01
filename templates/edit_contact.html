@@ -1012,12 +1012,13 @@
 
                           <td class="text-end">
                             <div class="btn-group btn-group-sm" role="group" aria-label="Follow-up actions">
+                          
                               <a class="btn btn-outline-secondary"
                                  href="{{ url_for('followup_calendar_ics', engagement_id=f['id']) }}"
                                  title="Download calendar invite (.ics)">
                                 Calendar
                               </a>
-
+                          
                               <a class="btn btn-outline-primary"
                                  href="{{ url_for('edit_engagement',
                                                   engagement_id=f['id'],
@@ -1026,7 +1027,26 @@
                                                   next=url_for('edit_contact', contact_id=c['id']) ~ '#pane-followups') }}">
                                 Open
                               </a>
+                          
+                              {% if not f.get("follow_up_completed") %}
+                                <button type="submit"
+                                        class="btn btn-outline-success"
+                                        form="followupDoneForm_{{ f['id'] }}"
+                                        title="Mark follow-up done">
+                                  Done
+                                </button>
+                              {% endif %}
+                          
                             </div>
+                          
+                            {% if not f.get("follow_up_completed") %}
+                              <form id="followupDoneForm_{{ f['id'] }}"
+                                    method="post"
+                                    action="{{ url_for('engagement_followup_done', engagement_id=f['id']) }}"
+                                    class="d-none">
+                                <input type="hidden" name="next" value="{{ url_for('edit_contact', contact_id=c['id']) }}#pane-followups">
+                              </form>
+                            {% endif %}
                           </td>
                         </tr>
                       {% endfor %}
