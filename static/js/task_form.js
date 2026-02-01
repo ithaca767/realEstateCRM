@@ -213,47 +213,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.initTaskFormEnhancements();
   }
 
-  const modalEl = document.getElementById("taskModal");
-  if (!modalEl) return;
-
-  modalEl.addEventListener("show.bs.modal", async (event) => {
-    const trigger = event.relatedTarget;
-    const contactId = trigger?.getAttribute("data-contact-id") || "";
-    const nextUrl = trigger?.getAttribute("data-next") || "";
-
-    const body = modalEl.querySelector(".modal-body");
-    if (!body) return;
-
-    body.innerHTML = '<div class="text-muted">Loading...</div>';
-
-    const url =
-      "/tasks/new?modal=1" +
-      "&contact_id=" + encodeURIComponent(contactId) +
-      "&next=" + encodeURIComponent(nextUrl);
-
-    try {
-      const resp = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-
-      body.innerHTML = await resp.text();
-
-      // After injecting the form HTML, bind task form behaviors to that DOM.
-      if (window.initTaskFormEnhancements) {
-        window.initTaskFormEnhancements();
-      }
-
-      // After injecting, bind engagement "See more" toggles if any exist in this DOM.
-      if (window.bindEngagementSeeMore) {
-        window.bindEngagementSeeMore(body);
-      }
-    } catch (err) {
-      console.error(err);
-      body.innerHTML =
-        '<div class="alert alert-danger mb-0">' +
-        "Could not load the task form. Please refresh and try again." +
-        "</div>";
-    }
-  });
 });
 
 // Bootstrap modal focus warning fix: return focus to the trigger button
