@@ -28,8 +28,13 @@ window.initTaskFormEnhancements = function initTaskFormEnhancements() {
     if (contactSelectedWrap) contactSelectedWrap.style.display = "";
     contactResultsEl.style.display = "none";
     contactResultsEl.innerHTML = "";
-  }
 
+    // Optional: make it feel selected by clearing focus from input
+    // (or you can disable input; see below)
+    contactInput.blur();
+    contactInput.style.display = "none";
+
+  }
   async function refreshTaskContactScopedDropdowns() {
     const cid = (contactHiddenId.value || "").trim();
 
@@ -113,6 +118,7 @@ window.initTaskFormEnhancements = function initTaskFormEnhancements() {
     if (contactSelectedLabel) contactSelectedLabel.textContent = "";
     contactInput.value = "";
     contactInput.focus();
+    contactInput.style.display = "";
 
     refreshTaskContactScopedDropdowns();
   }
@@ -174,11 +180,15 @@ window.initTaskFormEnhancements = function initTaskFormEnhancements() {
     contactTimer = setTimeout(() => contactDoSearch(contactInput.value), 200);
   });
 
-  // If prefilled, show selected badge and populate dropdowns
-  if (contactHiddenId.value) {
+  // If prefilled, treat it like a real selection and populate dropdowns
+  (function initPrefilledContact() {
+    const cid = (contactHiddenId.value || "").trim();
+    if (!cid) return;
+
+    // Prefer the visible input value (server prefill) as label
     const label = (contactInput.value || "").trim();
-    contactShowSelected(label ? label : "Contact #" + contactHiddenId.value);
-  }
+    contactShowSelected(label ? label : ("Contact #" + cid));
+  })();
 
   refreshTaskContactScopedDropdowns();
 

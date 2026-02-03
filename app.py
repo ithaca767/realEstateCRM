@@ -4630,10 +4630,10 @@ def add_contact_association(contact_id):
     conn.close()
     return redirect(next_url)
 
-
 @app.route("/contacts/<int:contact_id>/associations/create", methods=["POST"])
 @login_required
 def create_and_associate_contact(contact_id):
+
     first_name = (request.form.get("first_name") or "").strip()
     last_name = (request.form.get("last_name") or "").strip()
     full_name = f"{first_name} {last_name}".strip()
@@ -4654,49 +4654,42 @@ def create_and_associate_contact(contact_id):
         conn.close()
         return "Contact not found", 404
 
-    # Create new contact
-    cur.execute(
-        """
-        INSERT INTO contacts (user_id, name, first_name, last_name, email, phone)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        RETURNING id
-        """,
-        (current_user.id, full_name, first_name, last_name, email, phone),
-    )
-    
-    row = cur.fetchone()
-    new_id = row["id"]
-    
-    create_contact_association(
-        conn,
-        current_user.id,
-        contact_id,
-        new_id,
-        relationship_type,
-    )
-    
-    conn.commit()
-    conn.close()
+    try:
+
+        cur.execute(
+            """
+            INSERT INTO contacts (user_id, name, first_name, last_name, email, phone)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (current_user.id, full_name, first_name, last_name, email, phone),
+        )
+
+        row = cur.fetchone()
+        if not row or not row.get("id"):
+            raise Exception("Failed to create contact")
+
+        new_id = row["id"]
+
+        create_contact_association(
+            conn,
+            current_user.id,
+            contact_id,
+            new_id,
+            relationship_type,
+        )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
     return redirect(next_url)
 
-def update_contact_association(conn, user_id, assoc_id, contact_id, relationship_type=None, notes=None):
-    relationship_type = (relationship_type or "").strip() or None
-    notes = (notes or "").strip() or None
-
-    cur = conn.cursor()
-    cur.execute(
-        """
-        UPDATE contact_associations
-        SET relationship_type = %s,
-            notes = %s,
-            updated_at = NOW()
-        WHERE user_id = %s
-          AND id = %s
-          AND (contact_id_primary = %s OR contact_id_related = %s)
-        """,
-        (relationship_type, notes, user_id, assoc_id, contact_id, contact_id),
-    )
-    return cur.rowcount > 0
 @app.route("/contacts/<int:contact_id>/associations/<int:assoc_id>/edit", methods=["POST"])
 @login_required
 def edit_contact_association(contact_id, assoc_id):

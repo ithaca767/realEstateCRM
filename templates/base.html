@@ -370,6 +370,14 @@
     }
   }
 </script>
+<script>
+  window.openNewTaskModal = function (contactId, nextUrl) {
+    const url =
+      `/tasks/new?modal=1&contact_id=${encodeURIComponent(contactId)}&next=${encodeURIComponent(nextUrl)}`;
+    return window.openTaskModal(url, "New Task");
+  };
+</script>
+
 {% endblock %}
 
 {# Page-specific scripts (leave empty by default) #}

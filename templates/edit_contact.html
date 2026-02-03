@@ -99,14 +99,24 @@
             </form>
           {% endif %}
 
-          <button type="button"
-                  class="btn btn-sm btn-primary"
-                  data-bs-toggle="modal"
-                  data-bs-target="#taskModal"
-                  data-contact-id="{{ c['id'] }}"
-                  data-next="{{ url_for('edit_contact', contact_id=c['id']) }}#engagements">
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            onclick="openTaskModal('{{ url_for('tasks_new',
+                                              modal=1,
+                                              contact_id=c['id'],
+                                              next=(url_for('edit_contact', contact_id=c['id']) ~ '#engagements')) }}', 'New Task')">
             + Task
           </button>
+
+          <!-- <button type="button"
+                  class="btn btn-sm btn-primary"
+                  onclick="openTaskModal({
+                    contactId: {{ c['id']|int }},
+                    next: {{ (url_for('edit_contact', contact_id=c['id']) ~ '#engagements')|tojson }}
+                  });">
+            + Task
+          </button> -->
         </div>
       </div>
 
@@ -561,7 +571,7 @@
 
                 <div class="modal-body">
                   <div class="mb-3">
-                    <label class="form-label">Relationship type (optional)</label>
+                    <label class="form-label">Relationship Type (optional)</label>
                     <div class="text-muted small mb-2">
                       This relationship will appear on both contacts.
                     </div>
@@ -600,12 +610,12 @@
 
                     <div class="row g-2">
                       <div class="col-md-6">
-                        <label class="form-label">First name</label>
-                        <input class="form-control" name="first_name">
+                        <label class="form-label">First Name</label>
+                        <input class="form-control" name="first_name" required>
                       </div>
                       <div class="col-md-6">
-                        <label class="form-label">Last name</label>
-                        <input class="form-control" name="last_name">
+                        <label class="form-label">Last Name</label>
+                        <input class="form-control" name="last_name" required>
                       </div>
                       <div class="col-md-6">
                         <label class="form-label">Email</label>
@@ -1283,142 +1293,196 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script>
-    (function () {
-      const currentContactId = {{ c['id']|int }};
+
+<script>
+  (function () {
+    if (window.__assocModalInit) return;
+    window.__assocModalInit = true;
   
-      const searchInput = document.getElementById("assocSearch");
-      const resultsEl = document.getElementById("assocSearchResults");
-      const relTypeEl = document.getElementById("assocRelationshipType");
-      const relTypeCreateEl = document.getElementById("assocRelationshipTypeCreate");
+    const currentContactId = {{ c['id']|int }};
   
-      const selectedLabelEl = document.getElementById("assocSelectedLabel");
-      const linkBtn = document.getElementById("assocLinkBtn");
+    const searchInput = document.getElementById("assocSearch");
+    const resultsEl = document.getElementById("assocSearchResults");
+    const relTypeEl = document.getElementById("assocRelationshipType");
+    const relTypeCreateEl = document.getElementById("assocRelationshipTypeCreate");
   
-      if (!searchInput || !resultsEl || !relTypeEl || !relTypeCreateEl) return;
+    const selectedLabelEl = document.getElementById("assocSelectedLabel");
+    const linkBtn = document.getElementById("assocLinkBtn");
+
+    // NEW: create-and-link elements
+    const createForm = document.getElementById("assocCreateForm");
+    const createBtn = document.getElementById("assocCreateSubmit");
+
+    if (!searchInput || !resultsEl || !relTypeEl || !relTypeCreateEl) return;
   
-      let selectedId = null;
-      let selectedName = "";
+    let selectedId = null;
+    let selectedName = "";
   
-      function syncRelationshipType() {
+    function syncRelationshipType() {
+      relTypeCreateEl.value = relTypeEl.value || "";
+    }
+    relTypeEl.addEventListener("input", syncRelationshipType);
+    syncRelationshipType();
+
+    // NEW: enable Create and Link when fields are filled
+    function updateCreateBtn() {
+      if (!createForm || !createBtn) return;
+
+      const first = (createForm.querySelector('input[name="first_name"]')?.value || "").trim();
+      const last  = (createForm.querySelector('input[name="last_name"]')?.value || "").trim();
+
+      // Require only first + last to allow creation
+      const hasBasics = first.length > 0 && last.length > 0;
+
+      // Respect HTML5 validity rules (email type, etc.)
+      const valid = createForm.checkValidity();
+
+      createBtn.disabled = !(hasBasics && valid);
+    }
+
+    if (createForm) {
+      // Any typing inside the form re-checks enablement
+      createForm.addEventListener("input", updateCreateBtn);
+      // If browser autofill runs, this catches it
+      createForm.addEventListener("change", updateCreateBtn);
+      // Initialize on load
+      updateCreateBtn();
+    }
+    // Prevent double-submit + show progress on Create and Link
+    if (createForm && createBtn) {
+      createForm.addEventListener("submit", (e) => {
+        // Hard latch: if we are already submitting, kill the second submit
+        if (createForm.dataset.submitting === "1") {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        createForm.dataset.submitting = "1";
+    
+        // Ensure hidden relationship_type is up to date
         relTypeCreateEl.value = relTypeEl.value || "";
-      }
-      relTypeEl.addEventListener("input", syncRelationshipType);
-      syncRelationshipType();
-  
-      function setSelected(id, name) {
-        selectedId = id;
-        selectedName = name || "";
-      
-        if (selectedLabelEl) {
-          selectedLabelEl.textContent = selectedName || "None";
-        }
-      
-        if (linkBtn) {
-          if (selectedId) {
-            linkBtn.disabled = false;
-            linkBtn.textContent = `Link ${selectedName}`;
-          } else {
-            linkBtn.disabled = true;
-            linkBtn.textContent = "Link";
-          }
-        }
-      }
-  
-      // Link button submits only when you explicitly click it
-      if (linkBtn) {
-        linkBtn.addEventListener("click", () => {
-          if (!selectedId) return;
-  
-          const relLabel = (relTypeEl.value || "").trim();
-          const relText = relLabel ? ` as "${relLabel}"` : "";
-          const ok = confirm(`Link ${selectedName}${relText}?\n\nThis relationship will appear on both contacts.`);
-          if (!ok) return;
-  
-          const form = document.createElement("form");
-          form.method = "POST";
-          form.action = `/contacts/${currentContactId}/associations/add`;
-  
-          const next = document.createElement("input");
-          next.type = "hidden";
-          next.name = "next";
-          next.value = {{ request.full_path|tojson }};
-  
-          const related = document.createElement("input");
-          related.type = "hidden";
-          related.name = "related_contact_id";
-          related.value = selectedId;
-  
-          const rel = document.createElement("input");
-          rel.type = "hidden";
-          rel.name = "relationship_type";
-          rel.value = relTypeEl.value || "";
-  
-          form.appendChild(next);
-          form.appendChild(related);
-          form.appendChild(rel);
-  
-          document.body.appendChild(form);
-          form.submit();
-        });
-      }
-  
-      let timer = null;
-  
-      async function doSearch(q) {
-        if (!q || q.trim().length < 2) {
-          resultsEl.innerHTML = "";
-          return;
-        }
-  
-        const resp = await fetch(`/contacts/search?q=${encodeURIComponent(q.trim())}`);
-        const data = await resp.json();
-  
-        resultsEl.innerHTML = "";
-  
-        if (!data || data.length === 0) {
-          const empty = document.createElement("div");
-          empty.className = "list-group-item text-muted";
-          empty.textContent = "No matches.";
-          resultsEl.appendChild(empty);
-          return;
-        }
-  
-        data.forEach(item => {
-          if (String(item.id) === String(currentContactId)) return;
-  
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "list-group-item list-group-item-action";
-  
-          const meta = [item.email, item.phone].filter(Boolean).join(" · ");
-          btn.innerHTML = `
-            <div class="fw-semibold">${item.name}</div>
-            <div class="text-muted small">${meta}</div>
-          `;
-  
-          // Click selects only (no submit)
-          btn.addEventListener("click", () => {
-            setSelected(item.id, item.name);
-  
-            // visual cue
-            resultsEl.querySelectorAll(".active").forEach(el => el.classList.remove("active"));
-            btn.classList.add("active");
-          });
-  
-          resultsEl.appendChild(btn);
-        });
-      }
-  
-      searchInput.addEventListener("input", () => {
-        clearTimeout(timer);
-        timer = setTimeout(() => doSearch(searchInput.value), 250);
+    
+        createBtn.disabled = true;
+        createBtn.textContent = "Saving Association...";
       });
+    }
+
+    function setSelected(id, name) {
+      selectedId = id;
+      selectedName = name || "";
+    
+      if (selectedLabelEl) {
+        selectedLabelEl.textContent = selectedName || "None";
+      }
+    
+      if (linkBtn) {
+        if (selectedId) {
+          linkBtn.disabled = false;
+          linkBtn.textContent = `Link ${selectedName}`;
+        } else {
+          linkBtn.disabled = true;
+          linkBtn.textContent = "Link";
+        }
+      }
+    }
   
-      // Initialize selected display
-      setSelected(null, "");
-    })();
-  </script>
+    // Link button submits only when you explicitly click it
+    if (linkBtn) {
+      linkBtn.addEventListener("click", () => {
+        if (linkBtn.dataset.submitting === "1") return;
+        if (!selectedId) return;
+     
+        const relLabel = (relTypeEl.value || "").trim();
+        const relText = relLabel ? ` as "${relLabel}"` : "";
+        const ok = confirm(`Link ${selectedName}${relText}?\n\nThis relationship will appear on both contacts.`);
+        if (!ok) return;
+  
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = `/contacts/${currentContactId}/associations/add`;
+  
+        const next = document.createElement("input");
+        next.type = "hidden";
+        next.name = "next";
+        next.value = {{ request.full_path|tojson }};
+  
+        const related = document.createElement("input");
+        related.type = "hidden";
+        related.name = "related_contact_id";
+        related.value = selectedId;
+  
+        const rel = document.createElement("input");
+        rel.type = "hidden";
+        rel.name = "relationship_type";
+        rel.value = relTypeEl.value || "";
+  
+        form.appendChild(next);
+        form.appendChild(related);
+        form.appendChild(rel);
+  
+        document.body.appendChild(form);
+      
+        linkBtn.dataset.submitting = "1";
+        linkBtn.disabled = true;
+        linkBtn.textContent = "Saving Association...";
+      
+        form.submit();
+      });
+    }
+  
+    let timer = null;
+  
+    async function doSearch(q) {
+      if (!q || q.trim().length < 2) {
+        resultsEl.innerHTML = "";
+        return;
+      }
+  
+      const resp = await fetch(`/contacts/search?q=${encodeURIComponent(q.trim())}`);
+      const data = await resp.json();
+  
+      resultsEl.innerHTML = "";
+  
+      if (!data || data.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "list-group-item text-muted";
+        empty.textContent = "No matches.";
+        resultsEl.appendChild(empty);
+        return;
+      }
+  
+      data.forEach(item => {
+        if (String(item.id) === String(currentContactId)) return;
+  
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "list-group-item list-group-item-action";
+  
+        const meta = [item.email, item.phone].filter(Boolean).join(" · ");
+        btn.innerHTML = `
+          <div class="fw-semibold">${item.name}</div>
+          <div class="text-muted small">${meta}</div>
+        `;
+  
+        btn.addEventListener("click", () => {
+          setSelected(item.id, item.name);
+          resultsEl.querySelectorAll(".active").forEach(el => el.classList.remove("active"));
+          btn.classList.add("active");
+        });
+  
+        resultsEl.appendChild(btn);
+      });
+    }
+  
+    searchInput.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => doSearch(searchInput.value), 250);
+    });
+  
+    // Initialize selected display
+    setSelected(null, "");
+  })();
+</script>
 
   <script>
     document.addEventListener("DOMContentLoaded", function () {
