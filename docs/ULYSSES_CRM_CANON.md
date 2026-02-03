@@ -12951,4 +12951,72 @@ Recommended next topics:
 **Phase 7B: COMPLETE.**
 
 This document is the authoritative handoff for all future work.
+-------------------------
+
+
+## 2026-02-03 — Associations + Task Modal Fixes (Contact Edit)
+
+### Summary
+Two user-facing issues were resolved:
+1) Creating an associated contact was accidentally inserting a new contact twice due to duplicated INSERT logic in the route.
+2) The "+ Task" modal from Edit Contact either hung on "Loading..." or failed to open due to mismatched invocation patterns and DOM/template issues. Contact prefill was also not reliably applied.
+
+A template hygiene issue (duplicate element IDs) was found to be a root cause of strange behavior inside the task modal.
+
+### Changes
+
+#### 1) Associated Contacts: Create-and-Link route cleanup
+- Route: `/contacts/<int:contact_id>/associations/create`
+- Removed the accidental duplicate contact INSERT path. The route should create exactly one contact, then create one association, then commit once.
+- Confirmed tenant safety: validates parent contact ownership via `contacts.user_id = current_user.id` before creating child contact or association.
+
+Canon Law reinforced:
+- **One DB action per intent.** No duplicate INSERT paths inside a single route.
+- **Tenant enforcement at SQL level** before performing cross-table writes.
+
+#### 2) Task Modal: Open from Edit Contact with proper prefill and return path
+- Standardized the working pattern: the Edit Contact "+ Task" button calls:
+  - `openTaskModal(url, title)` with a URL that points to `tasks_new` in modal mode and includes:
+    - `modal=1`
+    - `contact_id=<current contact>`
+    - `next=/edit/<id>#engagements` (or the appropriate anchor)
+- This guarantees:
+  - The modal loader fetches HTML successfully (no infinite Loading state).
+  - The task form is rendered with the correct prefilled contact.
+  - Post-save redirects back to the contact page anchor.
+
+Canon Law reinforced:
+- **Use a single modal source of truth.** The task modal is owned by `base.html` (one instance in DOM).
+- **Modal content should come from modal endpoints or modal mode on existing endpoints** (here: `tasks_new?modal=1`), with prefill passed via querystring.
+
+#### 3) Task form modal template hygiene: remove duplicate IDs
+- File: `templates/tasks/form_modal.html`
+- Removed a second, incorrect block that duplicated:
+  - `id="taskContactSelected"`
+  - `id="taskContactSelectedLabel"`
+  - `id="taskContactClear"`
+- Verified with:
+  - `grep -n 'id="taskContactSelected"' templates/tasks/form_modal.html` returning exactly one match.
+- This eliminated unpredictable selector behavior and inconsistent UI state in the modal.
+
+Canon Law reinforced:
+- **IDs must be unique within rendered DOM.** Duplicate IDs break querySelector/getElementById assumptions and create non-deterministic UI bugs.
+
+#### 4) Template cleanup: remove unused task modal template
+- Removed `templates/tasks/task_modal.html` after confirming the modal lives in `base.html` and is loaded via `openTaskModal()`.
+
+### Files touched
+- `app.py`
+- `static/js/task_form.js`
+- `templates/base.html`
+- `templates/edit_contact.html`
+- `templates/tasks/form_modal.html`
+- Deleted: `templates/tasks/task_modal.html`
+
+### Operational notes
+- Preferred working pattern for opening task modal:
+  - From any context, build a URL to `tasks_new` with `modal=1` and any prefill params (contact_id, next).
+  - Call `openTaskModal(url, 'New Task')`.
+- Avoid introducing alternate modal containers or duplicate modal markup across templates.
+
 
