@@ -4,23 +4,21 @@ import secrets
 import csv
 import io
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 from version import APP_VERSION
 from functools import wraps
 from datetime import date, datetime, timedelta, time, timezone
 from math import ceil
 from typing import Optional
 from zoneinfo import ZoneInfo
+
 NY = ZoneInfo("America/New_York")
 
-
-from engagements import (
-    list_engagements_for_contact,
-    insert_engagement,
-    delete_engagement,
-)
-
-from dotenv import load_dotenv
-load_dotenv()
 APP_ENV = os.getenv("APP_ENV", "LOCAL").upper()
 
 from flask import (
