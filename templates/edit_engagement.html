@@ -21,6 +21,7 @@
         <input type="hidden" name="next" value="{{ next_url or next or (url_for('edit_contact', contact_id=e['contact_id']) ~ '#engagements') }}">
         <input type="hidden" name="return_tab" value="{{ return_tab }}">
         <input type="hidden" name="return_to" value="{{ return_to }}">
+    <div id="engEditRoot" data-engagement-id="{{ e['id'] }}"></div>
 
         <div class="row g-3">
           <div class="col-md-4">
@@ -84,6 +85,52 @@
             <label class="form-label">Transcript (raw)</label>
             <textarea name="transcript_raw" class="form-control" rows="6">{{ e['transcript_raw'] or '' }}</textarea>
           </div>
+          
+          <div class="col-12">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <button type="button" class="btn btn-outline-primary btn-sm" id="engAiSummarizeExistingBtn">
+                AI Assist: Summarize this engagement
+              </button>
+              <span class="small text-muted" id="engAiExistingStatus" style="display:none;"></span>
+            </div>
+          
+            <div class="card mt-3" id="engAiExistingPreviewCard" style="display:none;">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <h6 class="mb-1">AI Preview</h6>
+                    <div class="small text-muted">Nothing is saved unless you paste it and click Save changes.</div>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCloseBtn">Close</button>
+                </div>
+          
+                <hr>
+          
+                <div class="mb-3">
+                  <div class="fw-semibold">One-Sentence Summary</div>
+                  <div class="mt-1" id="engAiExistingOne" style="white-space:pre-wrap;"></div>
+                  <div class="mt-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCopyOneBtn">Copy</button>
+                  </div>
+                </div>
+          
+                <div class="mb-3">
+                  <div class="fw-semibold">CRM Narrative Summary</div>
+                  <div class="mt-1" id="engAiExistingNarr" style="white-space:pre-wrap;"></div>
+                  <div class="mt-2 d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCopyNarrBtn">Copy</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="engAiExistingInsertNotesBtn">Insert into Notes</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="engAiExistingInsertCleanBtn">Insert into Summary (clean)</button>
+                  </div>
+                </div>
+          
+                <div class="mb-0" id="engAiExistingFollowWrap" style="display:none;">
+                  <div class="fw-semibold">Suggested Follow-Up Items</div>
+                  <ul class="mt-2 mb-0" id="engAiExistingFollowList"></ul>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div class="col-12">
             <label class="form-label">Summary (clean)</label>
@@ -104,4 +151,164 @@
   </div>
 
 </div>
+
+<script>
+  (function () {
+    const root = document.getElementById("engEditRoot");
+    if (!root) return;
+
+    const engagementId = parseInt(root.dataset.engagementId || "", 10);
+    if (!engagementId) return;
+
+    const btn = document.getElementById("engAiSummarizeExistingBtn");
+    if (!btn) return;
+
+    // Bind once
+    if (btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+
+    const statusEl = document.getElementById("engAiExistingStatus");
+    const previewCard = document.getElementById("engAiExistingPreviewCard");
+    const closeBtn = document.getElementById("engAiExistingCloseBtn");
+
+    const oneEl = document.getElementById("engAiExistingOne");
+    const narEl = document.getElementById("engAiExistingNarr");
+
+    const followWrap = document.getElementById("engAiExistingFollowWrap");
+    const followList = document.getElementById("engAiExistingFollowList");
+
+    const copyOneBtn = document.getElementById("engAiExistingCopyOneBtn");
+    const copyNarBtn = document.getElementById("engAiExistingCopyNarrBtn");
+    const insertNotesBtn = document.getElementById("engAiExistingInsertNotesBtn");
+    const insertCleanBtn = document.getElementById("engAiExistingInsertCleanBtn");
+
+    const notesField = document.querySelector('textarea[name="notes"]');
+    const summaryCleanField = document.querySelector('textarea[name="summary_clean"]');
+
+    function setStatus(msg, isError) {
+      if (!statusEl) return;
+      statusEl.style.display = "inline";
+      statusEl.textContent = msg;
+      statusEl.classList.toggle("text-danger", !!isError);
+      statusEl.classList.toggle("text-muted", !isError);
+    }
+
+    function clearStatus() {
+      if (!statusEl) return;
+      statusEl.style.display = "none";
+      statusEl.textContent = "";
+      statusEl.classList.remove("text-danger");
+      statusEl.classList.add("text-muted");
+    }
+
+    function showPreview() { if (previewCard) previewCard.style.display = "block"; }
+    function hidePreview() { if (previewCard) previewCard.style.display = "none"; }
+
+    function safeText(v) { return (v === null || v === undefined) ? "" : String(v); }
+
+    function renderFollowups(items) {
+      if (!followWrap || !followList) return;
+      followList.innerHTML = "";
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        followWrap.style.display = "none";
+        return;
+      }
+      for (const item of items) {
+        const li = document.createElement("li");
+        li.textContent = safeText(item);
+        followList.appendChild(li);
+      }
+      followWrap.style.display = "block";
+    }
+
+    async function copyToClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus("Copied.", false);
+        setTimeout(clearStatus, 1200);
+      } catch {
+        setStatus("Copy failed. You can manually select and copy.", true);
+      }
+    }
+
+    function appendIntoField(field, text) {
+      if (!field) return false;
+      const insertText = (text || "").trim();
+      if (!insertText) return false;
+
+      const current = field.value || "";
+      field.value = current.trim()
+        ? current.replace(/\s*$/, "\n\n") + insertText
+        : insertText;
+
+      field.focus();
+      return true;
+    }
+
+    async function summarizeExisting() {
+      clearStatus();
+      setStatus("Summarizing…", false);
+      btn.disabled = true;
+
+      try {
+        const resp = await fetch("/api/ai/engagements/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ engagement_id: engagementId })
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || !data.ok) {
+          const msg =
+            (data && data.error && data.error.message) ||
+            "AI summarization failed.";
+          setStatus(msg, true);
+          return;
+        }
+
+        const payload = data.data || {};
+        const one = payload.one_sentence_summary || "";
+        const narrative = payload.crm_narrative_summary || "";
+        const followups = payload.suggested_follow_up_items || [];
+
+        oneEl.textContent = safeText(one);
+        narEl.textContent = safeText(narrative);
+        renderFollowups(followups);
+
+        showPreview();
+        setStatus("Preview ready.", false);
+      } catch {
+        setStatus("Network error while summarizing.", true);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    btn.addEventListener("click", summarizeExisting);
+
+    if (closeBtn) closeBtn.addEventListener("click", hidePreview);
+    if (copyOneBtn) copyOneBtn.addEventListener("click", () => copyToClipboard(oneEl.textContent || ""));
+    if (copyNarBtn) copyNarBtn.addEventListener("click", () => copyToClipboard(narEl.textContent || ""));
+
+    if (insertNotesBtn) {
+      insertNotesBtn.addEventListener("click", () => {
+        if (!notesField) return setStatus("Could not find Notes field.", true);
+        if (appendIntoField(notesField, narEl.textContent || "")) {
+          setStatus("Inserted into Notes. Click Save changes to persist.", false);
+        }
+      });
+    }
+
+    if (insertCleanBtn) {
+      insertCleanBtn.addEventListener("click", () => {
+        if (!summaryCleanField) return setStatus("Could not find Summary (clean) field.", true);
+        if (appendIntoField(summaryCleanField, narEl.textContent || "")) {
+          setStatus("Inserted into Summary (clean). Click Save changes to persist.", false);
+        }
+      });
+    }
+  })();
+</script>
+
 {% endblock %}

@@ -17,6 +17,15 @@ from math import ceil
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from services.openai_client import call_summarize_model
+from services.ai_prompts_v110 import SYSTEM_PROMPT_V110, INSTRUCTION_PROMPT_V110
+from services.ai_parsers import parse_engagement_summary_output, AIParseError
+from services.ai_guard import ensure_ai_allowed_and_reset_if_needed, increment_ai_usage_on_success, AIGuardError
+
+from engagements import list_engagements_for_contact
+from engagements import insert_engagement
+
+
 NY = ZoneInfo("America/New_York")
 
 APP_ENV = os.getenv("APP_ENV", "LOCAL").upper()
@@ -77,6 +86,160 @@ def inject_app_globals():
         "APP_VERSION": APP_VERSION,
         "APP_ENV": APP_ENV,
     }
+    
+@app.route("/api/ai/engagements/summarize", methods=["POST"])
+@login_required
+def api_ai_engagements_summarize():
+    """
+    Summarize an engagement transcript or notes using OpenAI.
+
+    Canon rules:
+      - user-initiated
+      - no auto-save
+      - guard enforced (global + per-user + limits)
+      - returns structured output only
+    """
+    payload = request.get_json(silent=True) or {}
+
+    engagement_id = payload.get("engagement_id")
+    if engagement_id is not None:
+        try:
+            engagement_id = int(engagement_id)
+        except Exception:
+            return jsonify({
+                "ok": False,
+                "error": {
+                    "code": "invalid_request",
+                    "message": "engagement_id must be an integer."
+                }
+            }), 400
+
+    transcript_override = (payload.get("transcript") or "").strip()
+
+    # Must provide either engagement_id or transcript text
+    if engagement_id is None and not transcript_override:
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "invalid_request",
+                "message": "Provide engagement_id or transcript."
+            }
+        }), 400
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Guard: global flag, per-user opt-in, resets, limits.
+        # This SELECT uses FOR UPDATE internally, so keep this in the same transaction.
+        usage = ensure_ai_allowed_and_reset_if_needed(conn, current_user.id)
+
+        transcript_text = transcript_override
+        contact_id = None
+
+        if not transcript_text:
+            # Fetch transcript from engagement with SQL-level ownership enforcement.
+            cur.execute(
+                """
+                SELECT id, contact_id, transcript_raw, notes
+                FROM engagements
+                WHERE id = %s AND user_id = %s
+                """,
+                (engagement_id, current_user.id),
+            )
+            row = cur.fetchone()
+
+            if not row:
+                return jsonify({
+                    "ok": False,
+                    "error": {
+                        "code": "not_found",
+                        "message": "Engagement not found."
+                    }
+                }), 404
+
+            contact_id = row.get("contact_id")
+
+            transcript_text = (row.get("transcript_raw") or "").strip()
+            if not transcript_text:
+                transcript_text = (row.get("notes") or "").strip()
+
+            if not transcript_text:
+                return jsonify({
+                    "ok": False,
+                    "error": {
+                        "code": "empty_transcript",
+                        "message": "No transcript or notes found for this engagement."
+                    }
+                }), 400
+
+        # Call OpenAI
+        raw_text = call_summarize_model(
+            system_prompt=SYSTEM_PROMPT_V110,
+            instruction_prompt=INSTRUCTION_PROMPT_V110,
+            user_transcript=transcript_text,
+        )
+
+        # Parse into structured output
+        parsed = parse_engagement_summary_output(raw_text)
+
+        # Increment usage only on success (v1.1.0: count requests, no spend tracking)
+        increment_ai_usage_on_success(conn, current_user.id, add_spend_cents=0)
+
+        conn.commit()
+
+        return jsonify({
+            "ok": True,
+            "data": {
+                "engagement_id": engagement_id,
+                "contact_id": contact_id,
+                "one_sentence_summary": parsed["one_sentence_summary"],
+                "crm_narrative_summary": parsed["crm_narrative_summary"],
+                "suggested_follow_up_items": parsed["suggested_follow_up_items"],
+                "usage": {
+                    "daily_requests_used": usage.daily_requests_used + 1,
+                    "daily_request_limit": usage.daily_request_limit,
+                    "monthly_spend_cents": usage.monthly_spend_cents,
+                    "monthly_cap_cents": usage.monthly_cap_cents,
+                }
+            }
+        }), 200
+
+    except AIGuardError as e:
+        conn.rollback()
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": e.code,
+                "message": e.message
+            }
+        }), 403
+
+    except AIParseError as e:
+        conn.rollback()
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "ai_parse_error",
+                "message": str(e)
+            }
+        }), 502
+
+    except Exception:
+        conn.rollback()
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "server_error",
+                "message": "AI request failed."
+            }
+        }), 500
+
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 # --- Security & session config ---
 SECRET_KEY = os.environ.get("SECRET_KEY")
