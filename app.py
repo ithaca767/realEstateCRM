@@ -17,7 +17,6 @@ from math import ceil
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from services.openai_client import call_summarize_model
 from services.ai_prompts_v110 import SYSTEM_PROMPT_V110, INSTRUCTION_PROMPT_V110
 from services.ai_parsers import parse_engagement_summary_output, AIParseError
 from services.ai_guard import ensure_ai_allowed_and_reset_if_needed, increment_ai_usage_on_success, AIGuardError
@@ -173,12 +172,35 @@ def api_ai_engagements_summarize():
                     }
                 }), 400
 
-        # Call OpenAI
-        raw_text = call_summarize_model(
-            system_prompt=SYSTEM_PROMPT_V110,
-            instruction_prompt=INSTRUCTION_PROMPT_V110,
-            user_transcript=transcript_text,
-        )
+        # Call OpenAI (import inside route to avoid boot-time dependency)
+        try:
+            from services.openai_client import call_summarize_model, OpenAIMissingDependencyError
+        except Exception:
+            # Extremely defensive: if import fails for any reason, treat as unavailable
+            conn.rollback()
+            return jsonify({
+                "ok": False,
+                "error": {
+                    "code": "ai_unavailable",
+                    "message": "AI is unavailable on this server."
+                }
+            }), 503
+
+        try:
+            raw_text = call_summarize_model(
+                system_prompt=SYSTEM_PROMPT_V110,
+                instruction_prompt=INSTRUCTION_PROMPT_V110,
+                user_transcript=transcript_text,
+            )
+        except OpenAIMissingDependencyError:
+            conn.rollback()
+            return jsonify({
+                "ok": False,
+                "error": {
+                    "code": "ai_dependency_missing",
+                    "message": "AI is unavailable on this server."
+                }
+            }), 503
 
         # Parse into structured output
         parsed = parse_engagement_summary_output(raw_text)
@@ -240,6 +262,9 @@ def api_ai_engagements_summarize():
             conn.close()
         except Exception:
             pass
+
+from services.openai_client import call_summarize_model, OpenAIMissingDependencyError
+
 
 # --- Security & session config ---
 SECRET_KEY = os.environ.get("SECRET_KEY")

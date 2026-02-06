@@ -1,14 +1,16 @@
 import os
 from dataclasses import dataclass
 
-from openai import OpenAI
-
 
 class OpenAIUpstreamError(RuntimeError):
     pass
 
 
 class OpenAITimeoutError(RuntimeError):
+    pass
+
+
+class OpenAIMissingDependencyError(RuntimeError):
     pass
 
 
@@ -39,13 +41,27 @@ def is_ai_globally_available() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def _get_openai_client(api_key: str):
+    """
+    Lazy import to prevent app boot failure if openai isn't installed.
+    """
+    try:
+        from openai import OpenAI  # lazy import
+    except Exception as e:
+        raise OpenAIMissingDependencyError(
+            "OpenAI SDK is not installed on this server."
+        ) from e
+
+    return OpenAI(api_key=api_key)
+
+
 def call_summarize_model(*, system_prompt: str, instruction_prompt: str, user_transcript: str) -> str:
     """
     Returns raw text output; caller will parse into structured fields.
     Does not log transcript or raw response.
     """
     cfg = get_openai_config()
-    client = OpenAI(api_key=cfg.api_key)
+    client = _get_openai_client(cfg.api_key)
 
     transcript = (user_transcript or "").strip()
     if not transcript:
@@ -72,4 +88,6 @@ def call_summarize_model(*, system_prompt: str, instruction_prompt: str, user_tr
         msg = str(e).lower()
         if "timeout" in msg:
             raise OpenAITimeoutError("OpenAI request timed out") from e
+        if isinstance(e, OpenAIMissingDependencyError):
+            raise
         raise OpenAIUpstreamError("OpenAI request failed") from e
