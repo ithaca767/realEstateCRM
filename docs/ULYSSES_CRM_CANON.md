@@ -62,6 +62,63 @@ This document serves as the authoritative historical record and governance refer
 - Page wrappers, headers, spacing, counters, tables, and lists must follow established patterns.
 - New patterns require explicit justification.
 
+## AI Feature Governance
+**Effective as of 2026-02-07**
+
+AI functionality within Ulysses CRM is strictly governed to preserve user trust, data ownership, cost control, and system predictability.
+
+### AI Usage Principles
+- AI features are **explicitly user-initiated only**
+- No background, automatic, or silent AI processing is permitted
+- AI output is never auto-saved; the user must explicitly accept or discard results
+- AI is treated as an **assistive tool**, not an authoritative system actor
+
+### User-Level Controls
+AI access is controlled at the **user level**, not globally.
+
+Each user record may define:
+- ai_enabled (boolean)
+- ai_daily_request_limit (integer)
+- ai_daily_requests_used (integer)
+- ai_monthly_cap_cents (integer, optional)
+- ai_monthly_spend_cents (integer)
+- ai_last_daily_reset_at (date)
+- ai_last_monthly_reset_at (date)
+
+AI requests must be denied if:
+- ai_enabled is false
+- daily request limit is exceeded
+- monthly spend cap is exceeded (when ai_monthly_cap_cents is set)
+
+### Guard Enforcement
+All AI routes must enforce:
+- Global server flag (AI_FEATURES_AVAILABLE)
+- Per-user enablement
+- Per-user daily limits
+- Per-user monthly cost caps
+
+Failures must return a **clear, non-fatal UI message** and never crash core workflows.
+
+### Opt-In Model
+AI features are opt-in and may be introduced as:
+- Feature flags
+- Paid add-ons
+- Limited beta tools
+
+AI availability must be clearly communicated to the user at the time of invocation.
+
+### AI-Assisted Engagement Summaries
+
+Ulysses CRM may offer AI-assisted summarization of engagement transcripts or notes.
+
+Rules:
+- Summarization is user-triggered via explicit UI action
+- No summaries are auto-generated
+- Summaries are returned to the UI but not persisted unless explicitly saved
+- When the logged-in user is the speaker, summaries should prefer first-person phrasing where appropriate
+- AI summaries must be editable before saving
+
+AI summaries are intended to reduce administrative overhead while preserving agent voice and intent.
 
 
 ## How We Work
@@ -13210,5 +13267,22 @@ Canon Law reinforced:
   - Call `openTaskModal(url, 'New Task')`.
 - Avoid introducing alternate modal containers or duplicate modal markup across templates.
 
+----------------
+## Project History
+
+### 2026-02-07 — AI Enablement, Guards, and Canon Handling
+
+Key outcomes:
+- AI functionality successfully enabled in production with per-user controls
+- AI access confirmed to require both database enablement and server-level configuration
+- User-level AI governance fields validated in production schema
+- Daily and monthly AI guardrails confirmed operational
+- Requirements.txt update identified and corrected as part of AI rollout
+- Canon document handling clarified: future canon updates will be delivered as additive patches rather than full replacements
+
+Design principles reinforced:
+- No silent feature activation
+- Explicit user consent for AI
+- Canon treated as a living but controlled specification
 
 
