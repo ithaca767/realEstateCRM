@@ -1,4 +1,5 @@
 import os
+import logging
 import re
 import secrets
 import csv
@@ -247,12 +248,20 @@ def api_ai_engagements_summarize():
             }
         }), 502
 
-    except Exception:
+    except Exception as e:
         conn.rollback()
+    
+        # Safe: do not log transcript_text or raw_text.
+        logging.exception(
+            "AI summarize failed (user_id=%s, engagement_id=%s)",
+            getattr(current_user, "id", None),
+            engagement_id,
+        )
+    
         return jsonify({
             "ok": False,
             "error": {
-                "code": "server_error",
+                "code": "ai_request_failed",
                 "message": "AI request failed."
             }
         }), 500
@@ -262,9 +271,6 @@ def api_ai_engagements_summarize():
             conn.close()
         except Exception:
             pass
-
-from services.openai_client import call_summarize_model, OpenAIMissingDependencyError
-
 
 # --- Security & session config ---
 SECRET_KEY = os.environ.get("SECRET_KEY")
