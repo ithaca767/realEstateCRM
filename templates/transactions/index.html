@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Transactions - Ulysses CRM{% endblock %}
+
+{% block content %}
+<div class="content-panel">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+      <h2 class="mb-0">Transactions</h2>
+      <div class="text-muted small">List view is coming next.</div>
+    </div>
+
+    <div class="d-flex gap-2">
+      {# No "Add Transaction" yet because it requires a contact_id #}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('contacts') }}">
+        Open a contact
+      </a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="text-muted">
+        For now, transactions are created and managed inside a contact.
+      </div>
+      <ul class="text-muted mt-2 mb-0">
+        <li>Open a contact</li>
+        <li>Go to the Transactions section</li>
+        <li>Create or edit from there</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
