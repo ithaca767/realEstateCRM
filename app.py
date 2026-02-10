@@ -6221,22 +6221,24 @@ def tasks_view(task_id):
                     summary = (e.get("notes") or "").strip()
                 e["summary_display"] = summary
 
-        # Professionals: if selected show 1, else show a small global list
-        # (No contact-scoping exists yet for professionals.)
-        if task.get("professional_id"):
-            cur.execute(
-                """
-                SELECT
-                    id,
-                    name,
-                    category,
-                    company
-                FROM professionals
-                WHERE id = %s
-                """,
-                (task["professional_id"],),
-            )
-            professional = cur.fetchone()
+            # Professionals: show selected only (no global list on task view)
+            if task.get("professional_id"):
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        name,
+                        category,
+                        company
+                    FROM professionals
+                    WHERE id = %s AND user_id = %s
+                    """,
+                    (task["professional_id"], current_user.id),
+                )
+                professional = cur.fetchone()
+            
+            # Do not load a professionals list on the view page
+            professionals = []
 
         else:
             cur.execute(

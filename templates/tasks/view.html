@@ -158,28 +158,11 @@
         <div class="text-muted small">Professionals</div>
     
         {% if professional %}
-          <div class="fw-semibold">{{ professional.name or ("Professional #" ~ professional.id) }}</div>
-          <div class="text-muted small">
-            {% if professional.category %}{{ professional.category|replace("_"," ")|title }}{% endif %}
-            {% if professional.company %}{% if professional.category %} · {% endif %}{{ professional.company }}{% endif %}
-          </div>
-    
-        {% elif professionals and professionals|length > 0 %}
-          <div class="vstack gap-2">
-            {% for p in professionals %}
-              <div>
-                <div class="fw-semibold">{{ p.name or ("Professional #" ~ p.id) }}</div>
-                <div class="text-muted small">
-                  {% if p.category %}{{ p.category|replace("_"," ")|title }}{% endif %}
-                  {% if p.company %}{% if p.category %} · {% endif %}{{ p.company }}{% endif %}
-                </div>
-              </div>
-            {% endfor %}
-          </div>
-    
+          {# show the selected professional card/row here (existing) #}
         {% else %}
-          —
+          <div class="text-muted small">No professional linked to this task.</div>
         {% endif %}
+
       </div>
     
       <!-- Snoozed Until -->
