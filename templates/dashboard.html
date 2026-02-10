@@ -2,6 +2,10 @@
 
 {% block title %}Dashboard - Ulysses CRM{% endblock %}
 
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
 {% block content %}
 {# Dashboard paginator macro (Phase 6c) #}
 {% macro dash_pager(page, has_prev, has_more, anchor_id) %}
@@ -38,11 +42,12 @@
   {% endif %}
 {% endmacro %}
 
+<div class="dashboard-scope">
   <!-- Page header -->
   <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
       <h2 class="mb-0">Dashboard</h2>
-      <div class="text-muted">Today: {{ today }}</div>
+      <div class="text-muted">Today: {{ today|fmt_date }}</div>
     </div>
   </div>
 
@@ -149,173 +154,315 @@
         <!-- Outreach tab -->
         <div class="tab-pane fade show active" id="outreach" role="tabpanel" aria-labelledby="outreach-tab">
           <div class="row g-3">
-        
-            <!-- LEFT COLUMN -->
-            <div class="col-12 col-lg-8">
-        
-              <!-- Active Contacts -->
-              <div class="card" id="active-contacts">
+          
+            <!-- Card 1: Today's Snapshot -->
+            <div class="col-12 col-lg-4">
+            <!-- Today's Snapshot -->
+            <div class="card mb-3" id="todays-snapshot">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">Today’s Snapshot</div>
+                  <div class="text-muted dash-secondary">Quick hits for {{ today|fmt_date }}</div>
+                </div>
+                <div class="d-flex gap-2">
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tasks_list') }}">
+                    Tasks
+                  </a>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('tasks_new') }}">
+                    Add Task
+                  </a>
+                </div>
+              </div>
+            
+              <div class="card-body bg-white">
+            
+                <!-- Follow-ups -->
+                <div class="mb-3">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="fw-semibold">Follow-ups</div>
+                  </div>
+            
+                  {% if (snapshot_followups_overdue and snapshot_followups_overdue|length > 0) or (snapshot_followups_today and snapshot_followups_today|length > 0) %}
+                    <div class="mt-2">
+            
+                      {% for f in (snapshot_followups_overdue or []) %}
+                        <div class="dash-snap-item">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge badge-status badge-status-overdue">
+                              Overdue{% if f.overdue_days is not none %} · {{ f.overdue_days }}d{% endif %}
+                            </span>
+                            {% if f.get('contact_id') %}
+                              <a class="small text-decoration-none"
+                                 href="{{ url_for('edit_contact', contact_id=f['contact_id']) }}#engagements">
+                                See more
+                              </a>
+                            {% else %}
+                              <span class="small text-muted">See more</span>
+                            {% endif %}
+                          </div>
+            
+                          <div class="fw-semibold mt-1">
+                            <a class="text-decoration-none"
+                               href="{{ url_for('edit_contact', contact_id=f['contact_id']) }}#engagements">
+                              {{ f.contact_name or "Unnamed Contact" }}
+                            </a>
+                          </div>
+            
+                          {% if f.snippet %}
+                            <div class="text-muted small dash-clamp-2 mt-1">{{ f.snippet }}</div>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+            
+                      {% for f in (snapshot_followups_today or []) %}
+                        <div class="dash-snap-item">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge badge-status badge-status-today">Due today</span>
+                            <a class="small text-decoration-none"
+                               href="{{ url_for('edit_contact', contact_id=f['contact_id']) }}#engagements">
+                              See more
+                            </a>
+                          </div>
+            
+                          <div class="fw-semibold mt-1">
+                            <a class="text-decoration-none"
+                               href="{{ url_for('edit_contact', contact_id=f['contact_id']) }}#engagements">
+                              {{ f.contact_name or "Unnamed Contact" }}
+                            </a>
+                          </div>
+            
+                          {% if f.snippet %}
+                            <div class="text-muted small dash-clamp-2 mt-1">{{ f.snippet }}</div>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+            
+                    </div>
+                  {% else %}
+                    <div class="text-muted mt-2">Nothing due today.</div>
+                  {% endif %}
+                </div>
+            
+                <div class="dash-section-sep"></div>
+            
+                <!-- Tasks -->
+                <div>
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="fw-semibold">Tasks</div>
+                  </div>
+            
+                  {% if (snapshot_tasks_overdue and snapshot_tasks_overdue|length > 0) or (snapshot_tasks_today and snapshot_tasks_today|length > 0) %}
+                    <div class="mt-2">
+            
+                      {% for t in (snapshot_tasks_overdue or []) %}
+                        <div class="dash-snap-item">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge badge-status badge-status-overdue">
+                              Overdue{% if t.overdue_days is not none %} · {{ t.overdue_days }}d{% endif %}
+                            </span>
+                            <a class="small text-decoration-none"
+                               href="{{ url_for('tasks_view', task_id=t['task_id']) }}">
+                              See more
+                            </a>
+                          </div>
+            
+                          <div class="fw-semibold mt-1">{{ t.title or "Task" }}</div>
+            
+                          {% if t.contact_name %}
+                            <div class="text-muted small">
+                              {% if t.contact_id %}
+                                <a class="text-decoration-none"
+                                   href="{{ url_for('edit_contact', contact_id=t['contact_id']) }}#engagements">
+                                  {{ t.contact_name }}
+                                </a>
+                              {% else %}
+                                <a class="text-decoration-none"
+                                   href="{{ url_for('tasks_view', task_id=t['task_id']) }}">
+                                  {{ t.contact_name }}
+                                </a>
+                              {% endif %}
+                            </div>
+                          {% endif %}
+            
+                          {% if t.snippet %}
+                            <div class="text-muted small dash-clamp-2 mt-1">{{ t.snippet }}</div>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+            
+                      {% for t in (snapshot_tasks_today or []) %}
+                        <div class="dash-snap-item">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge badge-status badge-status-today">Due today</span>
+                            <a class="small text-decoration-none"
+                               href="{{ url_for('tasks_view', task_id=t['task_id']) }}">
+                              See more
+                            </a>
+                          </div>
+            
+                          <div class="fw-semibold mt-1">{{ t.title or "Task" }}</div>
+            
+                          {% if t.contact_name %}
+                            <div class="text-muted small">
+                              {% if t.contact_id %}
+                                <a class="text-decoration-none"
+                                   href="{{ url_for('edit_contact', contact_id=t['contact_id']) }}#engagements">
+                                  {{ t.contact_name }}
+                                </a>
+                              {% else %}
+                                {{ t.contact_name }}
+                              {% endif %}
+                            </div>
+                          {% endif %}
+            
+                          {% if t.snippet %}
+                            <div class="text-muted small dash-clamp-2 mt-1">{{ t.snippet }}</div>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+            
+                    </div>
+                  {% else %}
+                    <div class="text-muted mt-2">No tasks due today.</div>
+                  {% endif %}
+                </div>
+            
+              </div>  {# /card-body #}
+            </div>    {# /Today’s Snapshot card #}
+            </div>
+          
+            <!-- Card 2: Active Contacts (compact) -->
+            <div class="col-12 col-lg-4">
+              <div class="card h-100" id="active-contacts">
                 <div class="card-header d-flex justify-content-between align-items-center">
                   <div>
                     <div class="fw-semibold">Active Contacts</div>
-                    <div class="text-muted small">
-                      Active if engaged in last {{ active_days }} days, has a follow-up, buyer profile, or seller profile
-                    </div>
+                    <div class="text-muted small">Top {{ active_contacts|length if active_contacts else 0 }}</div>
                   </div>
-                
-                  {# FUTURE (post-v1.0): Add Contact modal using Task modal pattern #}
-                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('contacts') }}">
-                    Contacts
-                  </a>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('contacts') }}">Contacts</a>
                 </div>
-              
+          
                 <div class="card-body bg-white">
                   {% if active_contacts and active_contacts|length > 0 %}
-                    <div class="table-responsive">
-                      <table class="table table-sm table-striped mb-0 align-middle">
-                        <thead class="table-light">
-                          <tr>
-                            <th>Name</th>
-                            <th>Outreach</th>
-                            <th style="width: 140px;" class="actions-col">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {% for c in active_contacts %}
-                            <tr>
-                              <td>
-                                <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
-                                  {% if c["first_name"] or c["last_name"] %}
-                                    {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                                  {% else %}
-                                    {{ c["name"] or "Unnamed Contact" }}
-                                  {% endif %}
-                                </a>
-              
-                                <div class="text-muted small mt-1">
-                                  {% if c["has_buyer_profile"] %}
-                                    <span class="badge bg-info text-dark">Buyer</span>
-                                  {% endif %}
-                                  {% if c["has_seller_profile"] %}
-                                    <span class="badge bg-warning text-dark">Seller</span>
-                                  {% endif %}
-                                </div>
-                              </td>
-              
-                              <td>
-                                {% for b in c["active_reasons"] %}
-                                  <span class="badge bg-secondary me-1">{{ b }}</span>
-                                {% endfor %}
-                              </td>
-              
-                              <td>
-                                <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements"
-                                   class="btn btn-sm btn-outline-primary">
-                                  Open
-                                </a>
-                              </td>
-                            </tr>
-                          {% endfor %}
-                        </tbody>
-                      </table>
-                    </div>
-              
-                  {{ dash_pager(ac_page, has_prev_active, has_more_active, 'active-contacts') }}
-                  
-                  {% else %}
-                    <p class="mb-0 text-muted">Nothing here.</p>
-                  {% endif %}
-                </div>
-              </div>
-              
-              <!-- Past Clients -->
-              <div class="card mt-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                  <div class="fw-semibold">Past Clients</div>
-                  <a class="btn btn-sm btn-outline-secondary"
-                     href="{{ url_for('contacts', tab='past_clients') }}">
-                    View all
-                  </a>
-                </div>
-        
-                <div class="card-body p-0">
-                  {% if past_clients and past_clients|length > 0 %}
                     <div class="list-group list-group-flush">
-                      {% for pc in past_clients %}
-                        <a class="list-group-item list-group-item-action d-flex justify-content-between"
-                           href="{{ url_for('edit_contact', contact_id=pc['contact_id']) }}#engagements">
-                          <div>
-                            <div class="fw-semibold">
-                              {{ pc["name"] or "(Unnamed)" }}
-                            </div>
-                            <div class="text-muted small">
-                              Last engagement: {{ pc["last_engagement_at"] or "—" }}
-                            </div>
-                          </div>
-                          <div class="small text-muted">
-                            {{ pc["next_follow_up"] or "No follow-up" }}
-                          </div>
-                        </a>
-                      {% endfor %}
-                    </div>
-                  {% else %}
-                    <div class="p-3 text-muted">No past clients found.</div>
-                  {% endif %}
-                </div>
-              </div>
-        
-            </div> <!-- /LEFT COLUMN -->
-        
-            <!-- RIGHT COLUMN -->
-            <div class="col-12 col-lg-4">
-        
-              <!-- Recent Engagements -->
-              <div class="card">
-                <div class="card-header">
-                  <div class="fw-semibold">Recent Engagements</div>
-                  <div class="text-muted small">Last 10</div>
-                </div>
-        
-                <div class="card-body bg-white">
-                  {% if recent_engagements %}
-                    <div class="list-group list-group-flush">
-                      {% for e in recent_engagements[:5] %}
+                      {% for c in active_contacts[:8] %}
                         <a class="list-group-item list-group-item-action px-0"
-                           href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements">
+                           href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
                           <div class="d-flex justify-content-between align-items-start">
                             <div>
                               <div class="fw-semibold">
-                                {{ e["contact_name"] }}
-                                {% if e["pipeline_stage"] == "Past Client / Relationship" %}
-                                  <span class="past-client-dot ms-2">P</span>
+                                {% if c["first_name"] or c["last_name"] %}
+                                  {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                                {% else %}
+                                  {{ c["name"] or "Unnamed Contact" }}
                                 {% endif %}
                               </div>
-                              <div class="text-muted small">
-                                {{ e["engagement_type"] }} · {{ e["occurred_at"] }}
+          
+                              <div class="mt-1">
+                                {% if c["has_buyer_profile"] %}
+                                  <span class="badge rounded-pill bg-success-subtle text-success-emphasis">
+                                    Buyer
+                                  </span>
+                                {% endif %}
+                                {% if c["has_seller_profile"] %}
+                                  <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">
+                                    Seller
+                                  </span>
+                                {% endif %}
+                                {% for b in c["active_reasons"][:2] %}
+                                  <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">
+                                    {{ b }}
+                                  </span>
+                                {% endfor %}
                               </div>
+                            </div>
+          
+                            <span class="text-muted small">Open</span>
+                          </div>
+                        </a>
+                      {% endfor %}
+                    </div>
+          
+                    <div class="mt-2 text-end">
+                      <a class="small text-decoration-none" href="{{ url_for('contacts') }}">View all</a>
+                    </div>
+                  {% else %}
+                    <div class="text-muted">Nothing here.</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          
+            <!-- Card 3: Active Transactions (new) -->
+            <div class="col-12 col-lg-4">
+              <div class="card h-100" id="active-transactions">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <div>
+                    <div class="fw-semibold">Active Transactions</div>
+                    <div class="text-muted small">{{ active_transactions_total }} active</div>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-primary"
+                          data-bs-toggle="modal" data-bs-target="#txContactPickerModal">
+                    + Add Transaction
+                  </button>
+                </div>
+          
+                <div class="card-body bg-white">
+                  {% if active_transactions and active_transactions|length > 0 %}
+                    <div class="list-group list-group-flush">
+                      {% for t in active_transactions[:8] %}
+                        <a class="list-group-item list-group-item-action px-0"
+                           href="{{ url_for('edit_contact', contact_id=t['contact_id']) }}?tx_id={{ t['id'] }}#transactions">
+                          <div class="d-flex justify-content-between align-items-start">
+                            <div class="me-2">
+                              <div class="d-flex align-items-center gap-2 flex-wrap">
+                                {# Transaction type badge #}
+                                <span class="badge {{ tx_type_badge_class.get(t.transaction_type_key, 'bg-secondary') }}">
+                                  {{ t.transaction_type_label }}
+                                </span>
+                              
+                                {# Status badge #}
+                                <span class="badge {{ tx_badge_class.get(t.status, 'bg-secondary') }}">
+                                  {{ tx_status_label.get(t.status, t.status) }}
+                                </span>
+                              </div>
+                              
+                              <div class="text-muted small dash-clamp-2 mt-1">
+                                {{ t.get('address') or 'No address yet' }}
+                              </div>
+
+                              {% if t.get('contact_name') %}
+                                <div class="text-muted small mt-1">
+                                  {{ t['contact_name'] }}
+                                </div>
+                              {% endif %}
+                            </div>
+
+                            <div class="text-end">
+                              {% if t.get('expected_close_date') %}
+                                <div class="small text-muted">Close</div>
+                                <div class="small">{{ t['expected_close_date']|fmt_date }}</div>
+                              {% else %}
+                                <div class="small text-muted">Open</div>
+                              {% endif %}
                             </div>
                           </div>
                         </a>
                       {% endfor %}
                     </div>
+
+                    {% if active_transactions_total > (active_transactions|length) %}
+                      <div class="mt-2 text-end">
+                        <a class="small text-decoration-none" href="{{ url_for('transactions') }}">View all</a>
+                      </div>
+                    {% endif %}
                   {% else %}
-                    <p class="mb-0 text-muted">Nothing here.</p>
+                    <div class="text-muted">No active transactions yet.</div>
                   {% endif %}
                 </div>
               </div>
-              
-              <div class="card mt-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                  <div class="fw-semibold">Professionals</div>
-                  <span class="text-muted small">Coming soon</span>
-                </div>
-                <div class="card-body text-muted">
-                  This section will show your top professionals and quick actions.
-                </div>
-              </div>
-        
-            </div> <!-- /RIGHT COLUMN -->
-        
+            </div>
+          
           </div>
         </div>
 
@@ -355,7 +502,7 @@
         
                         <td>
                           {% if c.get("follow_up_due_at") %}
-                            {{ c["follow_up_due_at"] }}
+                            {{ c["follow_up_due_at"]|fmt_dt }}
                           {% else %}
                             <span class="text-muted">None</span>
                           {% endif %}
@@ -365,7 +512,7 @@
                           {% if c.get("last_engagement_at") %}
                             <div class="small">
                               <strong>{{ c.get("last_engagement_type") or "engagement" }}</strong>
-                              <span class="text-muted">({{ c["last_engagement_at"] }})</span>
+                              <span class="text-muted">({{ c["last_engagement_at"]|fmt_dt }})</span>
                             </div>
         
                             {% set detail = c.get("last_engagement_outcome") or c.get("last_engagement_summary") %}
@@ -437,6 +584,48 @@
         
         </div>
 
+      </div>
+    </div>
+  </div>
+  
+<!-- ============================= -->
+<!-- Dashboard: Add Transaction Modal -->
+<!-- ============================= -->
+  <div class="modal fade" id="txContactPickerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Select a contact</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+  
+        <div class="modal-body">
+            <label class="form-label" for="txContactSearchInput">Search contact</label>
+            <input type="text"
+                   id="txContactSearchInput"
+                   class="form-control"
+                   placeholder="Start typing a name..."
+                   autocomplete="off">
+            
+            <div class="mt-2 list-group" id="txContactSearchResults" style="max-height: 260px; overflow:auto;">
+              <!-- results injected here -->
+            </div>
+            
+            <input type="hidden" id="txContactSelectedId" value="">
+            <div class="form-text mt-2" id="txContactSelectedLabel">
+              Select a contact to continue.
+            </div>
+          <div class="form-text mt-2">
+            You will be taken to that contact’s “New Transaction” form.
+          </div>
+        </div>
+  
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="txContactPickerGo" disabled>
+            Continue
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -549,6 +738,99 @@
       });
     });
   </script>
-  
 
+  <script>
+  (function () {
+    const input = document.getElementById("txContactSearchInput");
+    const results = document.getElementById("txContactSearchResults");
+    const selectedIdEl = document.getElementById("txContactSelectedId");
+    const selectedLabel = document.getElementById("txContactSelectedLabel");
+    const go = document.getElementById("txContactPickerGo");
+  
+    if (!input || !results || !selectedIdEl || !selectedLabel || !go) return;
+  
+    // Build a small in-memory index from server-provided contacts
+    const contacts = [
+      {% for c in dashboard_contact_picker %}
+        { id: {{ c.id }}, name: {{ c.display_name|tojson }} },
+      {% endfor %}
+    ];
+  
+    function setSelected(contact) {
+      selectedIdEl.value = contact.id;
+      selectedLabel.textContent = "Selected: " + contact.name;
+      go.disabled = false;
+  
+      // Highlight selection
+      Array.from(results.querySelectorAll(".list-group-item")).forEach(el => {
+        el.classList.toggle("active", el.dataset.id === String(contact.id));
+      });
+    }
+  
+    function clearSelected() {
+      selectedIdEl.value = "";
+      selectedLabel.textContent = "Select a contact to continue.";
+      go.disabled = true;
+    }
+  
+    function render(query) {
+      const q = (query || "").trim().toLowerCase();
+      results.innerHTML = "";
+  
+      if (!q) {
+        clearSelected();
+        return;
+      }
+  
+      // Simple substring match; keep it small and fast
+      const matches = contacts
+        .filter(c => c.name.toLowerCase().includes(q))
+        .slice(0, 12);
+  
+      if (matches.length === 0) {
+        clearSelected();
+        const empty = document.createElement("div");
+        empty.className = "list-group-item text-muted";
+        empty.textContent = "No matches.";
+        results.appendChild(empty);
+        return;
+      }
+  
+      matches.forEach(c => {
+        const a = document.createElement("button");
+        a.type = "button";
+        a.className = "list-group-item list-group-item-action";
+        a.dataset.id = String(c.id);
+        a.textContent = c.name;
+        a.addEventListener("click", () => setSelected(c));
+        results.appendChild(a);
+      });
+  
+      // Do not auto-select; user clicks to confirm
+      clearSelected();
+    }
+  
+    input.addEventListener("input", (e) => render(e.target.value));
+  
+    go.addEventListener("click", function () {
+      const id = selectedIdEl.value;
+      if (!id) return;
+      const nextUrl = encodeURIComponent("{{ url_for('dashboard') }}");
+      window.location.href = `/contacts/${id}/transactions/new?next=${nextUrl}`;
+    });
+  
+    // Optional: clear on modal open so it feels fresh each time
+    const modalEl = document.getElementById("txContactPickerModal");
+    if (modalEl) {
+      modalEl.addEventListener("shown.bs.modal", () => {
+        input.value = "";
+        results.innerHTML = "";
+        clearSelected();
+        input.focus();
+      });
+    }
+  })();
+  </script>
+  
+</div>
 {% endblock %}

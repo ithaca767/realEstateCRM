@@ -42,13 +42,19 @@
       <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
         <ul class="nav nav-tabs border-0 mb-0">
           <li class="nav-item" role="presentation">
-            <button class="nav-link active"
+            <button class="nav-link active d-flex align-items-center gap-2"
                     id="tab-details"
                     data-bs-toggle="tab"
                     data-bs-target="#pane-details"
                     type="button"
                     role="tab">
-              Details
+              <span>Details</span>
+            
+              {% if c.get("next_follow_up") %}
+                <span class="badge rounded-pill bg-danger-subtle text-danger-emphasis small opacity-75">
+                  Contact follow-up
+                </span>
+              {% endif %}
             </button>
           </li>
 
@@ -1161,6 +1167,33 @@
         <!-- FOLLOW-UPS -->
         <div class="tab-pane fade" id="pane-followups" role="tabpanel" aria-labelledby="tab-followups">
 
+        {% if c.get("next_follow_up") %}
+          <div class="card mt-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <div class="fw-semibold">Contact follow-up</div>
+        
+              <form method="post"
+                    action="{{ url_for('contact_followup_clear', contact_id=c['id']) }}"
+                    class="m-0">
+                <input type="hidden" name="next" value="{{ url_for('edit_contact', contact_id=c['id']) }}#pane-followups">
+                <button type="submit" class="btn btn-sm btn-outline-secondary js-secondary-submit">
+                  Clear
+                </button>
+              </form>
+            </div>
+        
+            <div class="card-body bg-white">
+              <div class="text-muted small">Next follow-up</div>
+              <div class="fw-semibold">
+                {{ c.get("next_follow_up")|fmt_date }}
+                {% if c.get("next_follow_up_time") %}
+                  at {{ c.get("next_follow_up_time") }}
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endif %}
+
           <div class="card mt-4">
             <div class="card-header">Follow-ups for this contact</div>
             <div class="card-body bg-white">
@@ -1185,7 +1218,7 @@
                         {% set ds = f.get('_due_status') %}
                         <tr class="{% if ds == 'overdue' %}table-danger{% elif ds == 'today' %}table-warning{% endif %}">
                           <td class="text-muted">
-                            {{ f.get("follow_up_due_at_display") or f.get("follow_up_due_at") or "—" }}
+                            {{ f.get("follow_up_due_at")|fmt_dt }}
 
                             {% if ds == "overdue" %}
                               <span class="badge text-bg-danger ms-2">Overdue</span>
@@ -1435,7 +1468,10 @@
                         <div class="row g-2">
                           <div class="col-md-6">
                             <div class="text-muted small">Expected Close</div>
-                            <div class="fw-semibold">{{ ns.selected_tx['expected_close_date'] or '—' }}</div>
+                            <div class="fw-semibold">
+                              {{ ns.selected_tx['expected_close_date']|fmt_date }}
+                            </div>
+
                           </div>
 
                           <div class="col-md-6">
@@ -1443,7 +1479,7 @@
 
                             {% if next_deadlines %}
                               {% for d in next_deadlines[:2] %}
-                                <div class="fw-semibold">{{ d['name'] }}: {{ d['due_date'] }}</div>
+                                <div class="fw-semibold">{{ d['name'] }}: {{ d['due_date']|fmt_date }}</div>
                               {% endfor %}
                             {% else %}
                               <div class="text-muted">No upcoming deadlines</div>

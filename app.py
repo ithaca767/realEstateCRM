@@ -28,6 +28,10 @@ from engagements import insert_engagement
 
 NY = ZoneInfo("America/New_York")
 
+def get_user_tz():
+    # Phase 8: single timezone system-wide
+    return NY
+
 APP_ENV = os.getenv("APP_ENV", "LOCAL").upper()
 
 from flask import (
@@ -72,7 +76,7 @@ from werkzeug.security import generate_password_hash
 from werkzeug.security import check_password_hash
 
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, DictCursor
 
 app = Flask(__name__)
 
@@ -309,7 +313,7 @@ def inject_calendar_feed_url():
 
 @app.context_processor
 def inject_current_year():
-    return {"current_year": datetime.now().year}
+    return {"current_year": datetime.now(get_user_tz()).year}
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 SHORTCUT_API_KEY = os.environ.get("SHORTCUT_API_KEY")  # optional shared secret
@@ -350,6 +354,47 @@ class User(UserMixin):
 
     def is_active(self):
         return bool(self._is_active)
+
+@app.template_filter("fmt_date")
+def fmt_date(value):
+    if not value:
+        return "—"
+
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value).date().strftime("%b %-d, %Y")
+        except Exception:
+            return value
+
+    if isinstance(value, datetime):
+        return value.date().strftime("%b %-d, %Y")
+
+    if isinstance(value, date):
+        return value.strftime("%b %-d, %Y")
+
+    return str(value)
+
+
+@app.template_filter("fmt_dt")
+def fmt_dt(value):
+    if not value:
+        return "—"
+
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except Exception: 
+            return value
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=NY)
+        else:
+            value = value.astimezone(get_user_tz())
+
+        return value.strftime("%b %-d, %Y %-I:%M %p")
+
+    return str(value)
 
 def owner_required(f):
     @wraps(f)
@@ -503,7 +548,7 @@ def get_professionals_for_dropdown(user_id: int, category=None):
     Scoped by user_id for multi-tenant safety.
     """
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur = conn.cursor()
 
     try:
         base_sql = """
@@ -3118,6 +3163,15 @@ def dashboard():
     conn = get_db()
     cur = conn.cursor()
 
+    # Initialize to avoid any accidental UnboundLocalError if code moves later
+    followup_rows = []
+    followups_overdue = []
+    followups_upcoming = []
+    snapshot_followups_today = []
+    snapshot_followups_overdue = []
+    snapshot_tasks_overdue = []
+    snapshot_tasks_today = []
+
     def has_column(table_name, column_name):
         cur.execute(
             """
@@ -3137,7 +3191,7 @@ def dashboard():
     engagements_has_user = has_column("engagements", "user_id")
     buyer_has_user = has_column("buyer_profiles", "user_id")
     seller_has_user = has_column("seller_profiles", "user_id")
-    
+
     # Detect contact_state (older prod/local may not have it yet)
     contacts_has_state = has_column("contacts", "contact_state")
 
@@ -3154,8 +3208,6 @@ def dashboard():
     buyer_scope_sql = "AND bp.user_id = %s" if buyer_has_user else ""
     seller_scope_sql = "AND sp.user_id = %s" if seller_has_user else ""
     contacts_state_sql = "AND c.contact_state = 'active'" if contacts_has_state else ""
-    contact_state_only_sql = "AND c.contact_state = 'active'" if contacts_has_state else ""
-
 
     # Params helpers
     contacts_scope_params = (current_user.id,) if contacts_has_user else tuple()
@@ -3233,7 +3285,6 @@ def dashboard():
         LIMIT %s OFFSET %s
     """
 
-    # Interval param needs to be a string like '30 days'
     interval_param = f"{ACTIVE_DAYS} days"
 
     active_params = []
@@ -3249,7 +3300,6 @@ def dashboard():
 
     # interval and later EXISTS scopes
     active_params += [interval_param]
-
     active_params += list(buyer_scope_params)
     active_params += list(seller_scope_params)
 
@@ -3257,64 +3307,16 @@ def dashboard():
 
     cur.execute(active_sql, tuple(active_params))
     active_rows = cur.fetchall()
-    
-    has_more_active = len(active_rows) > DASH_PAGE_SIZE
+
+    # Simple paging flags
     has_prev_active = ac_page > 1
-    
+    has_more_active = len(active_rows) > DASH_PAGE_SIZE
+
     # Trim to the real page size
     active_rows = active_rows[:DASH_PAGE_SIZE]
-    
-    # Determine paging flags (simple, low-cost)
-    has_more_active = len(active_rows) == DASH_PAGE_SIZE
-    has_prev_active = ac_page > 1
-
-    cur.execute(
-        """
-        SELECT
-          e.id AS engagement_id,
-          e.contact_id,
-          e.engagement_type,
-          e.occurred_at,
-          e.follow_up_due_at,
-          COALESCE(NULLIF(TRIM(c.name), ''), NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), '(Unnamed)') AS contact_name
-        FROM engagements e
-        JOIN contacts c ON c.id = e.contact_id
-        WHERE e.user_id = %s
-          AND e.follow_up_due_at IS NOT NULL
-          AND e.follow_up_due_at < NOW()
-        ORDER BY e.follow_up_due_at ASC
-        LIMIT 50
-        """,
-        (current_user.id,),
-    )
-    overdue_followups = cur.fetchall() or []
-    
-    cur.execute(
-        f"""
-        SELECT
-          e.id AS engagement_id,
-          e.contact_id,
-          e.engagement_type,
-          e.occurred_at,
-          e.follow_up_due_at,
-          COALESCE(NULLIF(TRIM(c.name), ''), NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), '(Unnamed)') AS contact_name
-        FROM engagements e
-        JOIN contacts c ON c.id = e.contact_id
-        WHERE e.user_id = %s
-          AND c.archived_at IS NULL
-          {contacts_state_sql}
-          AND e.follow_up_due_at IS NOT NULL
-          AND e.follow_up_due_at >= NOW()
-          AND e.follow_up_due_at < (NOW() + INTERVAL '14 days')
-        ORDER BY e.follow_up_due_at ASC
-        LIMIT 50
-        """,
-        (current_user.id,),
-    )
-    upcoming_followups = cur.fetchall() or []
 
     # Active reasons badges
-    now_dt = datetime.now(NY)
+    now_dt = datetime.now(get_user_tz())
     active_contacts = []
     for r in active_rows:
         row = dict(r)
@@ -3331,16 +3333,13 @@ def dashboard():
 
         nf_date = _nf_to_date(row.get("next_follow_up"))
         nf_time = (row.get("next_follow_up_time") or "").strip()  # expected "HH:MM" 24h
-        
+
         if nf_date:
-            # Use NY-aware "now" for follow-up timing decisions
-            now_ny = datetime.now(NY)
-        
+            now_ny = datetime.now(get_user_tz())
+
             if nf_date < today:
                 badges.append("Follow-up overdue")
-        
             elif nf_date == today:
-                # If a time is set, only mark overdue after that time has passed
                 if nf_time and ":" in nf_time:
                     try:
                         hh, mm = nf_time.split(":")
@@ -3354,20 +3353,17 @@ def dashboard():
                         else:
                             badges.append("Follow-up today")
                     except Exception:
-                        # If time parsing fails, fall back to "today"
                         badges.append("Follow-up today")
                 else:
-                    # No time provided, treat as due today (not overdue yet)
                     badges.append("Follow-up today")
-        
             else:
                 badges.append("Follow-up scheduled")
 
         row["active_reasons"] = badges
         active_contacts.append(row)
-    
+
+    # Past Clients
     PAST_CLIENT_LIMIT = 25
-    
     past_clients_sql = f"""
         SELECT
             c.id AS contact_id,
@@ -3378,14 +3374,14 @@ def dashboard():
             c.next_follow_up_time,
             c.priority,
             c.target_area,
-    
+
             le.occurred_at AS last_engagement_at,
             le.engagement_type AS last_engagement_type,
             le.outcome AS last_engagement_outcome,
             le.summary_clean AS last_engagement_summary
-    
+
         FROM contacts c
-    
+
         LEFT JOIN LATERAL (
             SELECT e.occurred_at, e.engagement_type, e.outcome, e.summary_clean
             FROM engagements e
@@ -3394,35 +3390,30 @@ def dashboard():
             ORDER BY e.occurred_at DESC NULLS LAST, e.id DESC
             LIMIT 1
         ) le ON TRUE
-    
+
         WHERE {contacts_scope_sql}
           AND c.archived_at IS NULL
           {contacts_state_sql}
           AND c.pipeline_stage = %s
-    
+
         ORDER BY
           (CASE WHEN c.next_follow_up IS NULL THEN 1 ELSE 0 END),
           c.next_follow_up ASC NULLS LAST,
           le.occurred_at DESC NULLS LAST,
           c.name ASC
-    
+
         LIMIT %s
     """
-    
+
     past_clients_params = []
     past_clients_params += list(contacts_scope_params)
-    
-    # LATERAL engagement scope
     past_clients_params += list(engagements_scope_params)
-    
-    # pipeline stage + limit
     past_clients_params += ["Past Client / Relationship", PAST_CLIENT_LIMIT]
-    
+
     cur.execute(past_clients_sql, tuple(past_clients_params))
     past_clients = cur.fetchall() or []
 
-
-    # Recent engagements feed: last engagement for up to 10 contacts
+    # Recent engagements feed
     recent_sql = f"""
         SELECT *
         FROM (
@@ -3459,28 +3450,30 @@ def dashboard():
     recent_params += list(contacts_scope_params)
     if engagements_has_user:
         recent_params += [current_user.id]
-    
+
     cur.execute(recent_sql, tuple(recent_params))
-    recent_engagements = cur.fetchall()
+    recent_engagements = cur.fetchall() or []
 
     # Follow-ups from engagements (source of truth)
     followups_sql = f"""
         SELECT
             e.id AS engagement_id,
             e.contact_id,
-            c.name,
-            c.first_name,
-            c.last_name,
+            COALESCE(
+              NULLIF(TRIM(c.name), ''),
+              NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
+              '(Unnamed)'
+            ) AS contact_name,
             e.follow_up_due_at,
-    
+
             le.occurred_at AS last_engagement_at,
             le.engagement_type AS last_engagement_type,
             le.outcome AS last_engagement_outcome,
             le.summary_clean AS last_engagement_summary
-    
+
         FROM engagements e
         JOIN contacts c ON c.id = e.contact_id
-    
+
         LEFT JOIN LATERAL (
             SELECT e2.occurred_at, e2.engagement_type, e2.outcome, e2.summary_clean
             FROM engagements e2
@@ -3489,7 +3482,7 @@ def dashboard():
             ORDER BY e2.occurred_at DESC
             LIMIT 1
         ) le ON TRUE
-    
+
         WHERE c.user_id = %s
           AND c.archived_at IS NULL
           {contacts_state_sql}
@@ -3497,33 +3490,291 @@ def dashboard():
           AND e.requires_follow_up = TRUE
           AND e.follow_up_completed = FALSE
           AND e.follow_up_due_at IS NOT NULL
-    
+
         ORDER BY e.follow_up_due_at ASC
     """
     cur.execute(followups_sql, (current_user.id, current_user.id, current_user.id))
-    followup_rows = cur.fetchall()
+    followup_rows = cur.fetchall() or []
 
-    conn.close()
-
+    # Build follow-ups buckets
     now = datetime.now(timezone.utc)
     cutoff = now + timedelta(days=UPCOMING_DAYS)
-    
+
     followups_overdue = []
     followups_upcoming = []
-    
+
     for row in followup_rows:
         due = row.get("follow_up_due_at")
         if not due:
             continue
-    
-        # Safety: if due is naive for any reason, assume UTC to avoid comparison errors
         if due.tzinfo is None:
             due = due.replace(tzinfo=timezone.utc)
-    
+
         if due < now:
             followups_overdue.append(row)
         elif due <= cutoff:
             followups_upcoming.append(row)
+
+    # Today's Snapshot: Follow-ups due today (NY date)
+    today_ny = datetime.now(get_user_tz()).date()
+    snapshot_followups_today = []
+
+    for row in followup_rows:
+        due = row.get("follow_up_due_at")
+        if not due:
+            continue
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=timezone.utc)
+        try:
+            if due.astimezone(get_user_tz()).date() == today_ny:
+                snapshot_followups_today.append(row)
+        except Exception:
+            pass
+
+    def _clean_snippet(s, max_len=180):
+        s = (s or "").strip()
+        if not s:
+            return ""
+        s = " ".join(s.split())
+        return s[:max_len] + ("…" if len(s) > max_len else "")
+    
+    def _followup_snippet(r):
+        # Outcome first, then summary, then type
+        return _clean_snippet(r.get("last_engagement_outcome")) or _clean_snippet(r.get("last_engagement_summary")) or _clean_snippet(r.get("last_engagement_type"))
+    
+    today_ny = datetime.now(get_user_tz()).date()
+    
+    def _overdue_days_from_due(due_dt):
+        if not due_dt:
+            return None
+        if due_dt.tzinfo is None:
+            due_dt = due_dt.replace(tzinfo=timezone.utc)
+        try:
+            due_ny_date = due_dt.astimezone(get_user_tz()).date()
+            return max(0, (today_ny - due_ny_date).days)
+        except Exception:
+            return None
+    
+    # Enrich snapshot followups (overdue + today)
+    snapshot_followups_overdue_enriched = []
+    for r in (followups_overdue or [])[:8]:
+        rr = dict(r)
+        rr["snap_status"] = "overdue"
+        rr["overdue_days"] = _overdue_days_from_due(rr.get("follow_up_due_at"))
+        rr["snippet"] = _followup_snippet(rr)
+        snapshot_followups_overdue_enriched.append(rr)
+    
+    snapshot_followups_today_enriched = []
+    for r in (snapshot_followups_today or [])[:8]:
+        rr = dict(r)
+        rr["snap_status"] = "today"
+        rr["overdue_days"] = 0
+        rr["snippet"] = _followup_snippet(rr)
+        snapshot_followups_today_enriched.append(rr)
+    
+    snapshot_followups_overdue = snapshot_followups_overdue_enriched
+    snapshot_followups_today = snapshot_followups_today_enriched
+
+    # Today's Snapshot: Tasks (exact schema)
+    cur.execute(
+        """
+        SELECT
+          t.id AS task_id,
+          t.title,
+          t.status,
+          COALESCE(t.due_at, (t.due_date::timestamp AT TIME ZONE 'America/New_York')) AS due_ts,
+          t.due_at,
+          t.due_date,
+          t.snoozed_until,
+          t.contact_id,
+          t.description,
+          COALESCE(
+            NULLIF(TRIM(c.name), ''),
+            NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
+            '(Unnamed)'
+          ) AS contact_name
+        FROM tasks t
+        LEFT JOIN contacts c ON c.id = t.contact_id
+        WHERE t.user_id = %s
+          AND t.status NOT IN ('completed', 'canceled')
+          AND (
+            t.status <> 'snoozed'
+            OR t.snoozed_until IS NULL
+            OR t.snoozed_until <= NOW()
+          )
+          AND (t.due_at IS NOT NULL OR t.due_date IS NOT NULL)
+          AND DATE(timezone('America/New_York', COALESCE(t.due_at, t.due_date::timestamp))) < %s
+        ORDER BY due_ts ASC NULLS LAST
+        LIMIT 8
+        """,
+        (current_user.id, today_ny),
+    )
+    snapshot_tasks_overdue = cur.fetchall() or []
+
+    cur.execute(
+        """
+        SELECT
+          t.id AS task_id,
+          t.title,
+          t.status,
+          COALESCE(t.due_at, (t.due_date::timestamp AT TIME ZONE 'America/New_York')) AS due_ts,
+          t.due_at,
+          t.due_date,
+          t.snoozed_until,
+          t.contact_id,
+          t.description,
+          COALESCE(
+            NULLIF(TRIM(c.name), ''),
+            NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
+            '(Unnamed)'
+          ) AS contact_name
+        FROM tasks t
+        LEFT JOIN contacts c ON c.id = t.contact_id
+        WHERE t.user_id = %s
+          AND t.status NOT IN ('completed', 'canceled')
+          AND (
+            t.status <> 'snoozed'
+            OR t.snoozed_until IS NULL
+            OR t.snoozed_until <= NOW()
+          )
+          AND (t.due_at IS NOT NULL OR t.due_date IS NOT NULL)
+          AND DATE(timezone('America/New_York', COALESCE(t.due_at, t.due_date::timestamp))) = %s
+        ORDER BY due_ts ASC NULLS LAST
+        LIMIT 8
+        """,
+        (current_user.id, today_ny),
+    )
+    snapshot_tasks_today = cur.fetchall() or []
+    def _task_snippet(t):
+        # For now, use title as fallback snippet and keep it compact.
+        # If you later add t.description to the SELECT, use that first.
+        return _clean_snippet(t.get("description")) or _clean_snippet(t.get("title"))
+    
+    def _task_due_dt(t):
+        # Use due_ts which you already SELECT
+        return t.get("due_ts") or t.get("due_at")
+    
+    snapshot_tasks_overdue_enriched = []
+    for t in (snapshot_tasks_overdue or [])[:8]:
+        tt = dict(t)
+        tt["snap_status"] = "overdue"
+        tt["overdue_days"] = _overdue_days_from_due(_task_due_dt(tt))
+        tt["snippet"] = _task_snippet(tt)
+        snapshot_tasks_overdue_enriched.append(tt)
+    
+    snapshot_tasks_today_enriched = []
+    for t in (snapshot_tasks_today or [])[:8]:
+        tt = dict(t)
+        tt["snap_status"] = "today"
+        tt["overdue_days"] = 0
+        tt["snippet"] = _task_snippet(tt)
+        snapshot_tasks_today_enriched.append(tt)
+    
+    snapshot_tasks_overdue = snapshot_tasks_overdue_enriched
+    snapshot_tasks_today = snapshot_tasks_today_enriched
+
+
+    # Active Transactions (Phase 8)
+    # Define "active" as non-draft, non-terminal statuses.
+    tx_status_label = dict(TRANSACTION_STATUSES)
+    tx_badge_class = {
+        "coming_soon": "bg-info text-dark",
+        "active": "bg-primary",
+        "attorney_review": "bg-warning text-dark",
+        "pending_uc": "bg-success",
+        "temp_off_market": "bg-secondary",
+        "closed": "bg-dark",
+        "withdrawn": "bg-secondary",
+        "canceled": "bg-secondary",
+        "expired": "bg-secondary",
+        "draft": "bg-secondary",
+    }
+
+    tx_type_badge_class = {
+        "buy": "bg-success",
+        "sell": "bg-primary",
+        "lease": "bg-info text-dark",
+        "rent": "bg-warning text-dark",
+        "unknown": "bg-secondary",
+    }
+    
+    tx_open_statuses = [
+        s for (s, _label) in TRANSACTION_STATUSES
+        if s not in ("draft", "closed", "withdrawn", "canceled", "expired")
+    ]
+
+    # Total count (for card subtitle)
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM transactions t
+        WHERE t.user_id = %s
+          AND t.status = ANY(%s)
+        """,
+        (current_user.id, tx_open_statuses),
+    )
+    active_transactions_total = cur.fetchone()["cnt"]
+
+    # Dashboard: contact picker for "Add Transaction" modal (Phase 8)
+    cur.execute(
+        """
+        SELECT id,
+               COALESCE(
+                 NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                 NULLIF(name, ''),
+                 'Unnamed Contact'
+               ) AS display_name
+        FROM contacts
+        WHERE user_id = %s
+          AND contact_state != 'archived'
+        ORDER BY updated_at DESC NULLS LAST, id DESC
+        LIMIT 50
+        """,
+        (current_user.id,),
+    )
+    dashboard_contact_picker = cur.fetchall()
+
+    # Compact list (limit 8)
+    cur.execute(
+        """
+        SELECT
+            t.id,
+            t.status,
+            t.transaction_type,
+            t.address,
+            to_char(t.expected_close_date, 'YYYY-MM-DD') AS expected_close_date,
+            t.updated_at,
+            c.id AS contact_id,
+            COALESCE(
+                NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
+                NULLIF(c.name, ''),
+                'Unnamed Contact'
+            ) AS contact_name
+        FROM transactions t
+        JOIN contacts c ON c.id = t.contact_id
+        WHERE t.user_id = %s
+          AND t.status = ANY(%s)
+        ORDER BY
+            t.expected_close_date ASC NULLS LAST,
+            t.updated_at DESC NULLS LAST,
+            t.id DESC
+        LIMIT 8
+        """,
+        (current_user.id, tx_open_statuses),
+    )
+    active_transactions = cur.fetchall()
+    
+    for t in active_transactions:
+        raw_type = (t.get("transaction_type") or "").strip().lower()
+    
+        if raw_type in ("buy", "sell", "lease", "rent"):
+            t["transaction_type_key"] = raw_type
+            t["transaction_type_label"] = raw_type.title()
+        else:
+            t["transaction_type_key"] = "unknown"
+            t["transaction_type_label"] = "Unknown"
+
+    conn.close()
 
     return render_template(
         "dashboard.html",
@@ -3539,7 +3790,23 @@ def dashboard():
         active_page="dashboard",
         ac_page=ac_page,
         has_more_active=has_more_active,
-        has_prev_active=has_prev_active,        
+        has_prev_active=has_prev_active,
+        snapshot_followups_overdue=snapshot_followups_overdue,
+        snapshot_followups_today=snapshot_followups_today,
+        snapshot_tasks_overdue=snapshot_tasks_overdue,
+        snapshot_tasks_today=snapshot_tasks_today,
+        active_transactions=active_transactions,
+        active_transactions_total=active_transactions_total,
+        tx_status_label=tx_status_label,
+        tx_badge_class=tx_badge_class,
+        dashboard_contact_picker=dashboard_contact_picker,
+        tx_type_badge_class = {
+            "buy": "bg-success-subtle text-success-emphasis",
+            "sell": "bg-primary-subtle text-primary-emphasis",
+            "lease": "bg-info-subtle text-info-emphasis",
+            "rent": "bg-warning-subtle text-warning-emphasis",
+            "unknown": "bg-secondary-subtle text-secondary-emphasis",
+        }
     )
 
 @app.route("/admin/invites/new", methods=["GET", "POST"])
@@ -4547,7 +4814,7 @@ def edit_contact(contact_id):
         except Exception:
             return None
     
-    now = datetime.now(NY)
+    now = datetime.now(get_user_tz())
     today = now.date()
     
     for f in followups_for_contact:
@@ -5228,7 +5495,7 @@ def transactions_search():
                 {
                     "id": r["id"],
                     "address": r.get("address") or "",
-                    "status_label": status_labels.get(r.get("status"), (r.get("status") or "")),
+                    "status_label": status_labels.get(r.get("status") or "", r.get("status") or ""),
                     "transaction_type": r.get("transaction_type") or "",
                     "expected_close_date": (
                         r["expected_close_date"].isoformat()
@@ -5242,6 +5509,15 @@ def transactions_search():
 
     finally:
         conn.close()
+
+@app.route("/transactions")
+@login_required
+def transactions():
+    # Temporary placeholder until list UI is built
+    return render_template(
+        "transactions/index.html",
+        active_page="transactions",
+    )
 
 @app.route("/contacts/<int:contact_id>/engagements/add", methods=["POST"])
 @login_required
@@ -5551,6 +5827,7 @@ def edit_engagement(engagement_id):
 # Authoritative spec: Ulysses_CRM_Phase_5_Design_and_Scope_v2.md
 # Local-first
 # =========================================================
+
 
 @app.route("/tasks")
 @login_required
@@ -7510,6 +7787,32 @@ def followup_calendar_ics(engagement_id):
     finally:
         conn.close()
 
+@app.route("/contacts/<int:contact_id>/followup/clear", methods=["POST"])
+@login_required
+def contact_followup_clear(contact_id):
+    next_url = request.form.get("next")
+    if not is_safe_url(next_url):
+        next_url = url_for("edit_contact", contact_id=contact_id) + "#pane-followups"
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Tenant safety: scope by user_id
+    cur.execute(
+        """
+        UPDATE contacts
+        SET next_follow_up = NULL,
+            next_follow_up_time = NULL
+        WHERE id = %s AND user_id = %s
+        """,
+        (contact_id, current_user.id),
+    )
+    conn.commit()
+    conn.close()
+
+    flash("Contact follow-up cleared.", "success")
+    return redirect(next_url)
+
 @app.route("/interaction/<int:interaction_id>/complete", methods=["POST"])
 @login_required
 def complete_interaction(interaction_id):
@@ -7708,6 +8011,18 @@ def new_transaction(contact_id):
         default_tx_type=default_tx_type,
         
     )
+
+@app.route("/transactions/new", methods=["GET"])
+@login_required
+def new_transaction_no_contact():
+    # Preserve your existing next pattern
+    next_url = request.args.get("next")
+    if not is_safe_url(next_url):
+        next_url = None
+    next_url = next_url or url_for("dashboard")
+
+    flash("Select a contact first, then use + New Transaction on that contact.", "info")
+    return redirect(url_for("contacts", next=next_url))
 
 @app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
 @login_required
