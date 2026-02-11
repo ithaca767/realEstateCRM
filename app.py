@@ -3137,18 +3137,18 @@ def dashboard():
     ACTIVE_DAYS = 30
     UPCOMING_DAYS = 14
 
-    # Dashboard paging (Phase 6c)
-    DASH_PAGE_SIZE = 50
-
+    # Dashboard paging (Phase 8A tweak)
+    DASH_PAGE_SIZE = 20
+    
     def _safe_int(v, default=1):
         try:
             n = int(v)
             return n if n >= 1 else default
         except Exception:
             return default
-
-    ac_page = _safe_int(request.args.get("ac_page"), 1)
-    ac_offset = (ac_page - 1) * DASH_PAGE_SIZE
+    
+    dash_page = _safe_int(request.args.get("page"), 1)
+    dash_offset = (dash_page - 1) * DASH_PAGE_SIZE
 
     def _nf_to_date(nf):
         if not nf:
@@ -3303,14 +3303,15 @@ def dashboard():
     active_params += list(buyer_scope_params)
     active_params += list(seller_scope_params)
 
-    active_params += [DASH_PAGE_SIZE + 1, ac_offset]
+    active_params += [DASH_PAGE_SIZE + 1, dash_offset]
 
     cur.execute(active_sql, tuple(active_params))
     active_rows = cur.fetchall()
 
     # Simple paging flags
-    has_prev_active = ac_page > 1
+    has_prev_active = dash_page > 1
     has_more_active = len(active_rows) > DASH_PAGE_SIZE
+    active_rows = active_rows[:DASH_PAGE_SIZE]
 
     # Trim to the real page size
     active_rows = active_rows[:DASH_PAGE_SIZE]
@@ -3557,7 +3558,7 @@ def dashboard():
     
     # Enrich snapshot followups (overdue + today)
     snapshot_followups_overdue_enriched = []
-    for r in (followups_overdue or [])[:8]:
+    for r in (followups_overdue or []):
         rr = dict(r)
         rr["snap_status"] = "overdue"
         rr["overdue_days"] = _overdue_days_from_due(rr.get("follow_up_due_at"))
@@ -3565,7 +3566,7 @@ def dashboard():
         snapshot_followups_overdue_enriched.append(rr)
     
     snapshot_followups_today_enriched = []
-    for r in (snapshot_followups_today or [])[:8]:
+    for r in (snapshot_followups_today or []):
         rr = dict(r)
         rr["snap_status"] = "today"
         rr["overdue_days"] = 0
@@ -3605,7 +3606,7 @@ def dashboard():
           AND (t.due_at IS NOT NULL OR t.due_date IS NOT NULL)
           AND DATE(timezone('America/New_York', COALESCE(t.due_at, t.due_date::timestamp))) < %s
         ORDER BY due_ts ASC NULLS LAST
-        LIMIT 8
+        LIMIT 500
         """,
         (current_user.id, today_ny),
     )
@@ -3640,7 +3641,7 @@ def dashboard():
           AND (t.due_at IS NOT NULL OR t.due_date IS NOT NULL)
           AND DATE(timezone('America/New_York', COALESCE(t.due_at, t.due_date::timestamp))) = %s
         ORDER BY due_ts ASC NULLS LAST
-        LIMIT 8
+        LIMIT 500
         """,
         (current_user.id, today_ny),
     )
@@ -3655,7 +3656,7 @@ def dashboard():
         return t.get("due_ts") or t.get("due_at")
     
     snapshot_tasks_overdue_enriched = []
-    for t in (snapshot_tasks_overdue or [])[:8]:
+    for t in (snapshot_tasks_overdue or []):
         tt = dict(t)
         tt["snap_status"] = "overdue"
         tt["overdue_days"] = _overdue_days_from_due(_task_due_dt(tt))
@@ -3663,7 +3664,7 @@ def dashboard():
         snapshot_tasks_overdue_enriched.append(tt)
     
     snapshot_tasks_today_enriched = []
-    for t in (snapshot_tasks_today or [])[:8]:
+    for t in (snapshot_tasks_today or []):
         tt = dict(t)
         tt["snap_status"] = "today"
         tt["overdue_days"] = 0
@@ -3673,6 +3674,42 @@ def dashboard():
     snapshot_tasks_overdue = snapshot_tasks_overdue_enriched
     snapshot_tasks_today = snapshot_tasks_today_enriched
 
+    def _snap_due_dt(item):
+        d = item.get("follow_up_due_at") or item.get("due_ts") or item.get("due_at")
+        return d or datetime(1900, 1, 1, tzinfo=timezone.utc)
+    
+    snapshot_items_all = []
+    
+    for r in (snapshot_followups_overdue or []):
+        rr = dict(r)
+        rr["item_type"] = "followup"
+        snapshot_items_all.append(rr)
+    
+    for r in (snapshot_followups_today or []):
+        rr = dict(r)
+        rr["item_type"] = "followup"
+        snapshot_items_all.append(rr)
+    
+    for t in (snapshot_tasks_overdue or []):
+        tt = dict(t)
+        tt["item_type"] = "task"
+        snapshot_items_all.append(tt)
+    
+    for t in (snapshot_tasks_today or []):
+        tt = dict(t)
+        tt["item_type"] = "task"
+        snapshot_items_all.append(tt)
+    
+    snapshot_items_all.sort(key=_snap_due_dt)
+    
+    # Page it
+    slice_start = dash_offset
+    slice_end = dash_offset + (DASH_PAGE_SIZE + 1)
+    snapshot_page_rows = snapshot_items_all[slice_start:slice_end]
+    
+    has_prev_snapshot = dash_page > 1
+    has_more_snapshot = len(snapshot_page_rows) > DASH_PAGE_SIZE
+    snapshot_items = snapshot_page_rows[:DASH_PAGE_SIZE]
 
     # Active Transactions (Phase 8)
     # Define "active" as non-draft, non-terminal statuses.
@@ -3758,11 +3795,15 @@ def dashboard():
             t.expected_close_date ASC NULLS LAST,
             t.updated_at DESC NULLS LAST,
             t.id DESC
-        LIMIT 8
+        LIMIT %s OFFSET %s
         """,
-        (current_user.id, tx_open_statuses),
+        (current_user.id, tx_open_statuses, DASH_PAGE_SIZE + 1, dash_offset),
     )
-    active_transactions = cur.fetchall()
+    active_transactions = cur.fetchall() or []
+    
+    has_prev_tx = dash_page > 1
+    has_more_tx = len(active_transactions) > DASH_PAGE_SIZE
+    active_transactions = active_transactions[:DASH_PAGE_SIZE]
     
     for t in active_transactions:
         raw_type = (t.get("transaction_type") or "").strip().lower()
@@ -3788,7 +3829,6 @@ def dashboard():
         upcoming_days=UPCOMING_DAYS,
         active_days=ACTIVE_DAYS,
         active_page="dashboard",
-        ac_page=ac_page,
         has_more_active=has_more_active,
         has_prev_active=has_prev_active,
         snapshot_followups_overdue=snapshot_followups_overdue,
@@ -3800,13 +3840,22 @@ def dashboard():
         tx_status_label=tx_status_label,
         tx_badge_class=tx_badge_class,
         dashboard_contact_picker=dashboard_contact_picker,
-        tx_type_badge_class = {
+        tx_type_badge_class={
             "buy": "bg-success-subtle text-success-emphasis",
             "sell": "bg-primary-subtle text-primary-emphasis",
             "lease": "bg-info-subtle text-info-emphasis",
             "rent": "bg-warning-subtle text-warning-emphasis",
             "unknown": "bg-secondary-subtle text-secondary-emphasis",
-        }
+        },
+        dash_page=dash_page,
+        
+        has_prev_snapshot=has_prev_snapshot,
+        has_more_snapshot=has_more_snapshot,
+        snapshot_items=snapshot_items,
+                
+        has_prev_tx=has_prev_tx,
+        has_more_tx=has_more_tx,
+        
     )
 
 @app.route("/admin/invites/new", methods=["GET", "POST"])

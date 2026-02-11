@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block content %}
-{# Dashboard paginator macro (Phase 6c) #}
+{# Dashboard paginator macro (Phase 8A) - uses ?page= and preserves anchors #}
 {% macro dash_pager(page, has_prev, has_more, anchor_id) %}
   {% if has_prev or has_more %}
     {% set start_page = page - 2 if page - 2 > 1 else 1 %}
@@ -15,9 +15,10 @@
 
     <nav aria-label="Dashboard pagination" class="mt-2">
       <ul class="pagination pagination-sm justify-content-center mb-0">
+
         <li class="page-item {% if not has_prev %}disabled{% endif %}">
           <a class="page-link"
-             href="{% if has_prev %}{{ url_for('dashboard', ac_page=page-1) }}#{{ anchor_id }}{% else %}#{% endif %}">
+             href="{% if has_prev %}{{ url_for('dashboard', page=page-1) }}#{{ anchor_id }}{% else %}#{% endif %}">
             Prev
           </a>
         </li>
@@ -25,7 +26,7 @@
         {% for p in range(start_page, end_page + 1) %}
           <li class="page-item {% if p == page %}active{% endif %}">
             <a class="page-link"
-               href="{{ url_for('dashboard', ac_page=p) }}#{{ anchor_id }}">
+               href="{{ url_for('dashboard', page=p) }}#{{ anchor_id }}">
               {{ p }}
             </a>
           </li>
@@ -33,10 +34,11 @@
 
         <li class="page-item {% if not has_more %}disabled{% endif %}">
           <a class="page-link"
-             href="{% if has_more %}{{ url_for('dashboard', ac_page=page+1) }}#{{ anchor_id }}{% else %}#{% endif %}">
+             href="{% if has_more %}{{ url_for('dashboard', page=page+1) }}#{{ anchor_id }}{% else %}#{% endif %}">
             Next
           </a>
         </li>
+
       </ul>
     </nav>
   {% endif %}
@@ -175,159 +177,92 @@
               </div>
             
               <div class="card-body bg-white">
-            
-                <!-- Follow-ups -->
-                <div class="mb-3">
-                  <div class="d-flex justify-content-between align-items-center">
-                    <div class="fw-semibold">Follow-ups</div>
-                  </div>
-            
-                  {% if (snapshot_followups_overdue and snapshot_followups_overdue|length > 0) or (snapshot_followups_today and snapshot_followups_today|length > 0) %}
-                    <div class="mt-2">
-            
-                      {% for f in (snapshot_followups_overdue or []) %}
+              
+                {% if snapshot_items and snapshot_items|length > 0 %}
+                  <div class="mt-2">
+              
+                    {% for item in snapshot_items %}
+                      {% if item.item_type == "followup" %}
                         <div class="dash-snap-item">
                           <div class="d-flex justify-content-between align-items-center">
-                            <span class="badge badge-status badge-status-overdue">
-                              Overdue{% if f.overdue_days is not none %} · {{ f.overdue_days }}d{% endif %}
-                            </span>
-                            {% if f.get('contact_id') %}
+                            {% if item.is_overdue %}
+                              <span class="badge badge-status badge-status-overdue">
+                                Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
+                              </span>
+                            {% else %}
+                              <span class="badge badge-status badge-status-today">Due today</span>
+                            {% endif %}
+              
+                            {% if item.get('contact_id') %}
                               <a class="small text-decoration-none"
-                                 href="{{ url_for('edit_contact', contact_id=f['contact_id']) }}#engagements">
+                                 href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}#engagements">
                                 See more
                               </a>
                             {% else %}
                               <span class="small text-muted">See more</span>
                             {% endif %}
                           </div>
-            
+              
                           <div class="fw-semibold mt-1">
                             <a class="text-decoration-none"
-                               href="{{ url_for('edit_contact', contact_id=f['contact_id']) }}#engagements">
-                              {{ f.contact_name or "Unnamed Contact" }}
+                               href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}#engagements">
+                              {{ item.contact_name or "Unnamed Contact" }}
                             </a>
                           </div>
-            
-                          {% if f.snippet %}
-                            <div class="text-muted small dash-clamp-2 mt-1">{{ f.snippet }}</div>
+              
+                          {% if item.snippet %}
+                            <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
                           {% endif %}
                         </div>
-                      {% endfor %}
-            
-                      {% for f in (snapshot_followups_today or []) %}
+              
+                      {% elif item.item_type == "task" %}
                         <div class="dash-snap-item">
                           <div class="d-flex justify-content-between align-items-center">
-                            <span class="badge badge-status badge-status-today">Due today</span>
+                            {% if item.is_overdue %}
+                              <span class="badge badge-status badge-status-overdue">
+                                Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
+                              </span>
+                            {% else %}
+                              <span class="badge badge-status badge-status-today">Due today</span>
+                            {% endif %}
+              
                             <a class="small text-decoration-none"
-                               href="{{ url_for('edit_contact', contact_id=f['contact_id']) }}#engagements">
+                               href="{{ url_for('tasks_view', task_id=item['task_id']) }}">
                               See more
                             </a>
                           </div>
-            
-                          <div class="fw-semibold mt-1">
-                            <a class="text-decoration-none"
-                               href="{{ url_for('edit_contact', contact_id=f['contact_id']) }}#engagements">
-                              {{ f.contact_name or "Unnamed Contact" }}
-                            </a>
-                          </div>
-            
-                          {% if f.snippet %}
-                            <div class="text-muted small dash-clamp-2 mt-1">{{ f.snippet }}</div>
+              
+                          <div class="fw-semibold mt-1">{{ item.title or "Task" }}</div>
+              
+                          {% if item.contact_name %}
+                            <div class="text-muted small">
+                              {% if item.contact_id %}
+                                <a class="text-decoration-none"
+                                   href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}#engagements">
+                                  {{ item.contact_name }}
+                                </a>
+                              {% else %}
+                                {{ item.contact_name }}
+                              {% endif %}
+                            </div>
+                          {% endif %}
+              
+                          {% if item.snippet %}
+                            <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
                           {% endif %}
                         </div>
-                      {% endfor %}
-            
-                    </div>
-                  {% else %}
-                    <div class="text-muted mt-2">Nothing due today.</div>
-                  {% endif %}
-                </div>
-            
-                <div class="dash-section-sep"></div>
-            
-                <!-- Tasks -->
-                <div>
-                  <div class="d-flex justify-content-between align-items-center">
-                    <div class="fw-semibold">Tasks</div>
+                      {% endif %}
+                    {% endfor %}
+              
                   </div>
-            
-                  {% if (snapshot_tasks_overdue and snapshot_tasks_overdue|length > 0) or (snapshot_tasks_today and snapshot_tasks_today|length > 0) %}
-                    <div class="mt-2">
-            
-                      {% for t in (snapshot_tasks_overdue or []) %}
-                        <div class="dash-snap-item">
-                          <div class="d-flex justify-content-between align-items-center">
-                            <span class="badge badge-status badge-status-overdue">
-                              Overdue{% if t.overdue_days is not none %} · {{ t.overdue_days }}d{% endif %}
-                            </span>
-                            <a class="small text-decoration-none"
-                               href="{{ url_for('tasks_view', task_id=t['task_id']) }}">
-                              See more
-                            </a>
-                          </div>
-            
-                          <div class="fw-semibold mt-1">{{ t.title or "Task" }}</div>
-            
-                          {% if t.contact_name %}
-                            <div class="text-muted small">
-                              {% if t.contact_id %}
-                                <a class="text-decoration-none"
-                                   href="{{ url_for('edit_contact', contact_id=t['contact_id']) }}#engagements">
-                                  {{ t.contact_name }}
-                                </a>
-                              {% else %}
-                                <a class="text-decoration-none"
-                                   href="{{ url_for('tasks_view', task_id=t['task_id']) }}">
-                                  {{ t.contact_name }}
-                                </a>
-                              {% endif %}
-                            </div>
-                          {% endif %}
-            
-                          {% if t.snippet %}
-                            <div class="text-muted small dash-clamp-2 mt-1">{{ t.snippet }}</div>
-                          {% endif %}
-                        </div>
-                      {% endfor %}
-            
-                      {% for t in (snapshot_tasks_today or []) %}
-                        <div class="dash-snap-item">
-                          <div class="d-flex justify-content-between align-items-center">
-                            <span class="badge badge-status badge-status-today">Due today</span>
-                            <a class="small text-decoration-none"
-                               href="{{ url_for('tasks_view', task_id=t['task_id']) }}">
-                              See more
-                            </a>
-                          </div>
-            
-                          <div class="fw-semibold mt-1">{{ t.title or "Task" }}</div>
-            
-                          {% if t.contact_name %}
-                            <div class="text-muted small">
-                              {% if t.contact_id %}
-                                <a class="text-decoration-none"
-                                   href="{{ url_for('edit_contact', contact_id=t['contact_id']) }}#engagements">
-                                  {{ t.contact_name }}
-                                </a>
-                              {% else %}
-                                {{ t.contact_name }}
-                              {% endif %}
-                            </div>
-                          {% endif %}
-            
-                          {% if t.snippet %}
-                            <div class="text-muted small dash-clamp-2 mt-1">{{ t.snippet }}</div>
-                          {% endif %}
-                        </div>
-                      {% endfor %}
-            
-                    </div>
-                  {% else %}
-                    <div class="text-muted mt-2">No tasks due today.</div>
-                  {% endif %}
-                </div>
-            
-              </div>  {# /card-body #}
+              
+                  {{ dash_pager(dash_page, has_prev_snapshot, has_more_snapshot, "todays-snapshot") }}
+              
+                {% else %}
+                  <div class="text-muted mt-2">Nothing due today.</div>
+                {% endif %}
+              
+              </div>
             </div>    {# /Today’s Snapshot card #}
             </div>
           
@@ -338,54 +273,52 @@
                   <div>
                     <div class="fw-semibold">Active Contacts</div>
                     <div class="text-muted small">
-                      Showing {{ active_contacts|length if active_contacts else 0 }} (max 50)
+                      Showing {{ active_contacts|length if active_contacts else 0 }} (max 20)
                     </div>
                   </div>
                   <a class="btn btn-sm btn-outline-primary" href="{{ url_for('contacts') }}">Contacts</a>
                 </div>
             
                 {# IMPORTANT: make body a flex column so the list can fill remaining height #}
-                <div class="card-body bg-white d-flex flex-column">
+                <div class="card-body bg-white">
                   {% if active_contacts and active_contacts|length > 0 %}
-            
-                    {# IMPORTANT: flex-grow + min-height:0 makes overflow work inside a flex parent #}
-                    <div class="active-contacts-scroll flex-grow-1">
-                      <div class="list-group list-group-flush">
-                        {% for c in active_contacts %}
-                          <a class="list-group-item list-group-item-action px-0"
-                             href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
-                            <div class="d-flex justify-content-between align-items-start">
-                              <div>
-                                <div class="fw-semibold">
-                                  {% if c["first_name"] or c["last_name"] %}
-                                    {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                                  {% else %}
-                                    {{ c["name"] or "Unnamed Contact" }}
-                                  {% endif %}
-                                </div>
-            
-                                <div class="mt-1">
-                                  {% if c["has_buyer_profile"] %}
-                                    <span class="badge rounded-pill bg-success-subtle text-success-emphasis">Buyer</span>
-                                  {% endif %}
-                                  {% if c["has_seller_profile"] %}
-                                    <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">Seller</span>
-                                  {% endif %}
-                                  {% for b in c["active_reasons"][:2] %}
-                                    <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">
-                                      {{ b }}
-                                    </span>
-                                  {% endfor %}
-                                </div>
+                    <div class="list-group list-group-flush">
+                      {% for c in active_contacts %}
+                        <a class="list-group-item list-group-item-action px-0"
+                           href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
+                          <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                              <div class="fw-semibold">
+                                {% if c["first_name"] or c["last_name"] %}
+                                  {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                                {% else %}
+                                  {{ c["name"] or "Unnamed Contact" }}
+                                {% endif %}
                               </div>
-            
-                              <span class="text-muted small">Open</span>
+                
+                              <div class="mt-1">
+                                {% if c["has_buyer_profile"] %}
+                                  <span class="badge rounded-pill bg-success-subtle text-success-emphasis">Buyer</span>
+                                {% endif %}
+                                {% if c["has_seller_profile"] %}
+                                  <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">Seller</span>
+                                {% endif %}
+                                {% for b in c["active_reasons"][:2] %}
+                                  <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">
+                                    {{ b }}
+                                  </span>
+                                {% endfor %}
+                              </div>
                             </div>
-                          </a>
-                        {% endfor %}
-                      </div>
+                
+                            <span class="text-muted small">Open</span>
+                          </div>
+                        </a>
+                      {% endfor %}
                     </div>
-                        
+                
+                    {{ dash_pager(dash_page, has_prev_active, has_more_active, "active-contacts") }}
+                
                   {% else %}
                     <div class="text-muted">Nothing here.</div>
                   {% endif %}
@@ -410,7 +343,7 @@
                 <div class="card-body bg-white">
                   {% if active_transactions and active_transactions|length > 0 %}
                     <div class="list-group list-group-flush">
-                      {% for t in active_transactions[:8] %}
+                      {% for t in active_transactions %}
                         <a class="list-group-item list-group-item-action px-0"
                            href="{{ url_for('edit_contact', contact_id=t['contact_id']) }}?tx_id={{ t['id'] }}#transactions">
                           <div class="d-flex justify-content-between align-items-start">
@@ -420,24 +353,24 @@
                                 <span class="badge {{ tx_type_badge_class.get(t.transaction_type_key, 'bg-secondary') }}">
                                   {{ t.transaction_type_label }}
                                 </span>
-                              
+                
                                 {# Status badge #}
                                 <span class="badge {{ tx_badge_class.get(t.status, 'bg-secondary') }}">
                                   {{ tx_status_label.get(t.status, t.status) }}
                                 </span>
                               </div>
-                              
+                
                               <div class="text-muted small dash-clamp-2 mt-1">
                                 {{ t.get('address') or 'No address yet' }}
                               </div>
-
+                
                               {% if t.get('contact_name') %}
                                 <div class="text-muted small mt-1">
                                   {{ t['contact_name'] }}
                                 </div>
                               {% endif %}
                             </div>
-
+                
                             <div class="text-end">
                               {% if t.get('expected_close_date') %}
                                 <div class="small text-muted">Close</div>
@@ -450,12 +383,9 @@
                         </a>
                       {% endfor %}
                     </div>
-
-                    {% if active_transactions_total > (active_transactions|length) %}
-                      <div class="mt-2 text-end">
-                        <a class="small text-decoration-none" href="{{ url_for('transactions') }}">View all</a>
-                      </div>
-                    {% endif %}
+                
+                    {{ dash_pager(dash_page, has_prev_tx, has_more_tx, "active-transactions") }}
+                
                   {% else %}
                     <div class="text-muted">No active transactions yet.</div>
                   {% endif %}
