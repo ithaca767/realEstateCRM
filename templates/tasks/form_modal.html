@@ -112,14 +112,14 @@
       <label class="form-label">Professional</label>
     
       <input type="hidden" name="professional_id" id="taskProfessionalId"
-             value="{{ task.professional_id if task and task.professional_id else '' }}">
+             value="{{ (task.get('professional_id') or '') if task else '' }}">
     
       <input type="text"
              class="form-control"
              id="taskProfessionalSearch"
              placeholder="Search professionals"
              autocomplete="off"
-             value="{{ task.professional_label if task and task.professional_label else '' }}">
+             value="{% if task and task.professional_id %}{{ professional_name or '' }}{% else %}{% endif %}">
     
       <div class="list-group mt-2 w-100 shadow-sm border"
            id="taskProfessionalResults"

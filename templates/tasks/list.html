@@ -43,8 +43,8 @@
           <thead class="table-light">
             <tr>
               <th>Title</th>
-              <th style="width: 14%;">Status</th>
-              <th style="width: 16%;">Due</th>
+              <th class="d-none d-md-table-cell" style="width: 14%;">Status</th>
+              <th class="d-none d-md-table-cell" style="width: 16%;">Due</th>
               <th style="width: 20%;" class="text-end actions-col">Actions</th>
             </tr>
           </thead>
@@ -62,9 +62,59 @@
                     </button>
                   </div>
 
+                  {# Desktop description can stay simple (optional) #}
                   {% if t.description %}
-                    <div class="text-muted small">{{ t.description }}</div>
+                    <div class="d-none d-md-block text-muted small">{{ t.description }}</div>
                   {% endif %}
+                  
+                  {# Mobile stacked meta + clamped description #}
+                  <div class="d-md-none mt-2">
+                  
+                    {# Status badge (same logic as your Status column) #}
+                    {% set badge_class = "bg-secondary" %}
+                    {% if t.status == "open" %}{% set badge_class = "bg-primary" %}{% endif %}
+                    {% if t.status == "completed" %}{% set badge_class = "bg-success" %}{% endif %}
+                    {% if t.status == "snoozed" %}{% set badge_class = "bg-warning text-dark" %}{% endif %}
+                    {% if t.status == "canceled" %}{% set badge_class = "bg-secondary" %}{% endif %}
+                  
+                    <div class="small">
+                      <span class="badge {{ badge_class }}">
+                        {{ t.status|replace('_',' ')|title }}
+                      </span>
+                  
+                      <span class="text-muted ms-2">
+                        Due:
+                        {% if t.due_at %}
+                          {{ t.due_at|fmt_dt }}
+                        {% elif t.due_date %}
+                          {{ t.due_date|fmt_date }}
+                        {% else %}
+                          —
+                        {% endif %}
+                      </span>
+                    </div>
+                  
+                    {% if t.description %}
+                      {% set full = t.description|string %}
+                      {% set is_long = (full|length > 140) %}
+                  
+                      <div class="mt-2 small text-muted">
+                        <div id="taskDesc_{{ t.id }}" class="task-desc {% if is_long %}is-clamped{% endif %}">
+                          {{ full }}
+                        </div>
+                  
+                        {% if is_long %}
+                          <button type="button"
+                                  class="btn btn-link p-0 small"
+                                  data-desc-toggle="1"
+                                  data-target="taskDesc_{{ t.id }}">
+                            See more
+                          </button>
+                        {% endif %}
+                      </div>
+                    {% endif %}
+                  
+                  </div>
 
                   {% if t.contact_id %}
                     <div class="small text-muted">
@@ -76,7 +126,7 @@
                   {% endif %}
                 </td>
 
-                <td>
+                <td class="d-none d-md-table-cell">
                   {% set badge_class = "bg-secondary" %}
                   {% if t.status == "open" %}{% set badge_class = "bg-primary" %}{% endif %}
                   {% if t.status == "completed" %}{% set badge_class = "bg-success" %}{% endif %}
@@ -91,11 +141,11 @@
                   </span>
                 </td>
 
-                <td>
+                <td class="d-none d-md-table-cell">
                   {% if t.due_at %}
-                    {{ t.due_at }}
+                    {{ t.due_at|fmt_dt }}
                   {% elif t.due_date %}
-                    {{ t.due_date }}
+                    {{ t.due_date|fmt_date }}
                   {% else %}
                     <span class="text-muted">—</span>
                   {% endif %}
@@ -163,7 +213,7 @@
                 
                     {% if t.status != 'completed' and t.status != 'canceled' %}
                       <form id="taskCompleteForm_{{ t.id }}"
-                            method="post"
+                            method="post" 
                             action="{{ url_for('tasks_complete', task_id=t.id) }}"
                             class="d-none">
                       </form>
@@ -243,4 +293,32 @@
     modal.show();
   }
 </script>
+<style>
+  .task-desc.is-clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>
+
+<script>
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest('[data-desc-toggle="1"]');
+    if (!btn) return;
+
+    const id = btn.getAttribute("data-target");
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    if (el.classList.contains("is-clamped")) {
+      el.classList.remove("is-clamped");
+      btn.textContent = "See less";
+    } else {
+      el.classList.add("is-clamped");
+      btn.textContent = "See more";
+    }
+  });
+</script>
+
 {% endblock %}

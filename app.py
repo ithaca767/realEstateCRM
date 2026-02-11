@@ -3138,7 +3138,7 @@ def dashboard():
     UPCOMING_DAYS = 14
 
     # Dashboard paging (Phase 6c)
-    DASH_PAGE_SIZE = 10
+    DASH_PAGE_SIZE = 50
 
     def _safe_int(v, default=1):
         try:
@@ -5833,7 +5833,7 @@ def edit_engagement(engagement_id):
 @login_required
 def tasks_list():
     raw_status = (request.args.get("status") or "").strip().lower()
-    
+
     # Default behavior: /tasks shows OPEN tasks
     if raw_status == "":
         status = "open"
@@ -5842,6 +5842,7 @@ def tasks_list():
         status = None
     else:
         status = raw_status
+
     if status and status not in TASK_STATUSES:
         flash("Invalid task status filter.", "warning")
         return redirect(url_for("tasks_list"))
@@ -5857,8 +5858,6 @@ def tasks_list():
 
         if contact_ids:
             contact_ids = sorted(set(contact_ids))
-
-            # IMPORTANT: pass a Python list to ANY(), not a tuple
             cur.execute(
                 """
                 SELECT
@@ -5877,12 +5876,31 @@ def tasks_list():
             rows = cur.fetchall() or []
             contact_map = {r["id"]: r["display_name"] for r in rows}
 
+        # Build professional_id -> name map for UI polish (multi-tenant safe)
+        professional_map = {}
+        professional_ids = [t.get("professional_id") for t in tasks if t.get("professional_id")]
+
+        if professional_ids:
+            professional_ids = sorted(set(professional_ids))
+            cur.execute(
+                """
+                SELECT id, name
+                FROM professionals
+                WHERE user_id = %s
+                  AND id = ANY(%s::int[])
+                """,
+                (current_user.id, professional_ids),
+            )
+            rows = cur.fetchall() or []
+            professional_map = {r["id"]: r["name"] for r in rows}
+
         return render_template(
             "tasks/list.html",
             tasks=tasks,
             status=(status or "all"),
             statuses=TASK_STATUSES,
             contact_map=contact_map,
+            professional_map=professional_map,
         )
     finally:
         conn.close()
@@ -6138,6 +6156,20 @@ def tasks_view(task_id):
 
         professional = None
         professionals = []
+        # Professionals: always resolve selected professional (scoped)
+        if task.get("professional_id"):
+            cur.execute(
+                """
+                SELECT id, name, category, company
+                FROM professionals
+                WHERE id = %s AND user_id = %s
+                """,
+                (task["professional_id"], current_user.id),
+            )
+            professional = cur.fetchone()
+        
+        # Do not load a professionals list on the view page
+        professionals = []
 
         # Transactions: if selected show 1, else show recent for contact
         if task.get("transaction_id"):
@@ -6221,39 +6253,23 @@ def tasks_view(task_id):
                     summary = (e.get("notes") or "").strip()
                 e["summary_display"] = summary
 
-            # Professionals: show selected only (no global list on task view)
-            if task.get("professional_id"):
-                cur.execute(
-                    """
-                    SELECT
-                        id,
-                        name,
-                        category,
-                        company
-                    FROM professionals
-                    WHERE id = %s AND user_id = %s
-                    """,
-                    (task["professional_id"], current_user.id),
-                )
-                professional = cur.fetchone()
-            
-            # Do not load a professionals list on the view page
-            professionals = []
-
-        else:
+        # Professionals: show selected only (no global list on task view)
+        professional = None
+        professionals = []
+        
+        if task.get("professional_id"):
             cur.execute(
                 """
-                SELECT
-                    id,
-                    name,
-                    category,
-                    company
+                SELECT id, name, category, company
                 FROM professionals
-                ORDER BY name ASC, id DESC
-                LIMIT 10
-                """
+                WHERE id = %s AND user_id = %s
+                """,
+                (task["professional_id"], current_user.id),
             )
-            professionals = cur.fetchall() or []
+            professional = cur.fetchone()
+        
+        # Never load a global professionals list on the task view page
+        professionals = []
 
         return render_template(
             "tasks/view.html",
@@ -6324,6 +6340,19 @@ def tasks_edit(task_id):
             except Exception as e:
                 conn.rollback()
                 flash(f"Could not update task: {e}", "danger")
+        # Professional display name for UI (avoid "Professional #X")
+        professional_name = None
+        if task.get("professional_id"):
+            cur.execute(
+                """
+                SELECT name
+                FROM professionals
+                WHERE user_id = %s AND id = %s
+                """,
+                (current_user.id, task["professional_id"]),
+            )
+            prow = cur.fetchone()
+            professional_name = (prow["name"] if prow else None)
 
         return render_template(
             "tasks/form.html",
@@ -6331,6 +6360,8 @@ def tasks_edit(task_id):
             task=task,
             statuses=TASK_STATUSES,
             contact_name=contact_name,
+            professional_name=professional_name,
+                        
         )
     finally:
         conn.close()
@@ -6408,6 +6439,19 @@ def tasks_modal_edit(task_id):
                 if not s:
                     s = (e.get("notes") or "").strip()
                 e["summary_display"] = (s[:80] + "...") if len(s) > 80 else s
+        # Professional display name for UI (avoid "Professional #X")
+        professional_name = None
+        if task.get("professional_id"):
+            cur.execute(
+                """
+                SELECT name
+                FROM professionals
+                WHERE user_id = %s AND id = %s
+                """,
+                (current_user.id, task["professional_id"]),
+            )
+            prow = cur.fetchone()
+            professional_name = (prow["name"] if prow else None)
 
         return render_template(
             "tasks/form_modal.html",
@@ -6418,6 +6462,7 @@ def tasks_modal_edit(task_id):
             prefill_contact_id=None,
             prefill_contact_name=contact_name or "",
             contact_name=contact_name,
+            professional_name=professional_name,
             form_action=url_for("tasks_edit", task_id=task_id),
             transactions=transactions,
             engagements=engagements,
@@ -7259,51 +7304,38 @@ def edit_professional(prof_id):
 @login_required
 def professionals_search():
     q = (request.args.get("q") or "").strip()
-
-    # Match live-search behavior everywhere else
     if len(q) < 2:
         return jsonify([])
 
     like = f"%{q}%"
-
     conn = get_db()
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-
         cur.execute(
             """
-            SELECT
-                id,
-                name,
-                company,
-                category
+            SELECT id, name, company, category
             FROM professionals
-            WHERE
-                (
-                  name ILIKE %s
-                  OR COALESCE(company, '') ILIKE %s
-                  OR COALESCE(category, '') ILIKE %s
-                )
+            WHERE user_id = %s
+              AND (
+                    name ILIKE %s
+                 OR COALESCE(company, '') ILIKE %s
+                 OR COALESCE(category, '') ILIKE %s
+              )
             ORDER BY name ASC, id DESC
             LIMIT 10
             """,
-            (like, like, like),
+            (current_user.id, like, like, like),
         )
-
         rows = cur.fetchall() or []
-        out = []
-        for r in rows:
-            out.append(
-                {
-                    "id": r["id"],
-                    "display_name": r.get("name") or "",
-                    "role_label": (r.get("category") or "").title(),
-                    "company": r.get("company") or "",
-                }
-            )
-
-        return jsonify(out)
-
+        return jsonify([
+            {
+                "id": r["id"],
+                "name": r.get("name") or "",
+                "category": r.get("category") or "",
+                "company": r.get("company") or "",
+            }
+            for r in rows
+        ])
     finally:
         conn.close()
 

@@ -337,55 +337,55 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                   <div>
                     <div class="fw-semibold">Active Contacts</div>
-                    <div class="text-muted small">Top {{ active_contacts|length if active_contacts else 0 }}</div>
+                    <div class="text-muted small">
+                      Showing {{ active_contacts|length if active_contacts else 0 }} (max 50)
+                    </div>
                   </div>
                   <a class="btn btn-sm btn-outline-primary" href="{{ url_for('contacts') }}">Contacts</a>
                 </div>
-          
-                <div class="card-body bg-white">
+            
+                {# IMPORTANT: make body a flex column so the list can fill remaining height #}
+                <div class="card-body bg-white d-flex flex-column">
                   {% if active_contacts and active_contacts|length > 0 %}
-                    <div class="list-group list-group-flush">
-                      {% for c in active_contacts[:8] %}
-                        <a class="list-group-item list-group-item-action px-0"
-                           href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
-                          <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                              <div class="fw-semibold">
-                                {% if c["first_name"] or c["last_name"] %}
-                                  {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
-                                {% else %}
-                                  {{ c["name"] or "Unnamed Contact" }}
-                                {% endif %}
+            
+                    {# IMPORTANT: flex-grow + min-height:0 makes overflow work inside a flex parent #}
+                    <div class="active-contacts-scroll flex-grow-1">
+                      <div class="list-group list-group-flush">
+                        {% for c in active_contacts %}
+                          <a class="list-group-item list-group-item-action px-0"
+                             href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
+                            <div class="d-flex justify-content-between align-items-start">
+                              <div>
+                                <div class="fw-semibold">
+                                  {% if c["first_name"] or c["last_name"] %}
+                                    {{ (c["first_name"] or "") ~ (" " if c["first_name"] and c["last_name"] else "") ~ (c["last_name"] or "") }}
+                                  {% else %}
+                                    {{ c["name"] or "Unnamed Contact" }}
+                                  {% endif %}
+                                </div>
+            
+                                <div class="mt-1">
+                                  {% if c["has_buyer_profile"] %}
+                                    <span class="badge rounded-pill bg-success-subtle text-success-emphasis">Buyer</span>
+                                  {% endif %}
+                                  {% if c["has_seller_profile"] %}
+                                    <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">Seller</span>
+                                  {% endif %}
+                                  {% for b in c["active_reasons"][:2] %}
+                                    <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">
+                                      {{ b }}
+                                    </span>
+                                  {% endfor %}
+                                </div>
                               </div>
-          
-                              <div class="mt-1">
-                                {% if c["has_buyer_profile"] %}
-                                  <span class="badge rounded-pill bg-success-subtle text-success-emphasis">
-                                    Buyer
-                                  </span>
-                                {% endif %}
-                                {% if c["has_seller_profile"] %}
-                                  <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">
-                                    Seller
-                                  </span>
-                                {% endif %}
-                                {% for b in c["active_reasons"][:2] %}
-                                  <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">
-                                    {{ b }}
-                                  </span>
-                                {% endfor %}
-                              </div>
+            
+                              <span class="text-muted small">Open</span>
                             </div>
-          
-                            <span class="text-muted small">Open</span>
-                          </div>
-                        </a>
-                      {% endfor %}
+                          </a>
+                        {% endfor %}
+                      </div>
                     </div>
-          
-                    <div class="mt-2 text-end">
-                      <a class="small text-decoration-none" href="{{ url_for('contacts') }}">View all</a>
-                    </div>
+                        
                   {% else %}
                     <div class="text-muted">Nothing here.</div>
                   {% endif %}
@@ -831,6 +831,13 @@
     }
   })();
   </script>
+<style>
+  /* Fill the available card-body height and scroll only when needed */
+  .active-contacts-scroll {
+    min-height: 0;        /* critical: enables overflow scrolling inside a flex parent */
+    overflow-y: auto;     /* scroll appears only when content overflows */
+  }
+</style>
   
 </div>
 {% endblock %}

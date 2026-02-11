@@ -7,11 +7,17 @@
 
 window.initTaskFormEnhancements = function initTaskFormEnhancements() {
   // Bind once per rendered form instance
-  const contactHiddenId = document.getElementById("taskContactId");
-  if (!contactHiddenId) return;
-  if (contactHiddenId.dataset.bound === "1") return;
-  contactHiddenId.dataset.bound = "1";
+  const formRoot =
+    document.getElementById("taskForm") ||
+    document.querySelector("form[data-task-form]") ||
+    document.querySelector("form"); // last resort
+  
+  if (!formRoot) return;
+  
+  if (formRoot.dataset.taskEnhBound === "1") return;
+  formRoot.dataset.taskEnhBound = "1";
 
+  const contactHiddenId = document.getElementById("taskContactId");
   const contactInput = document.getElementById("taskContactSearch");
   const contactResultsEl = document.getElementById("taskContactResults");
 
@@ -33,8 +39,8 @@ window.initTaskFormEnhancements = function initTaskFormEnhancements() {
     // (or you can disable input; see below)
     contactInput.blur();
     contactInput.style.display = "none";
-
   }
+
   async function refreshTaskContactScopedDropdowns() {
     const cid = (contactHiddenId.value || "").trim();
 
@@ -212,8 +218,138 @@ window.initTaskFormEnhancements = function initTaskFormEnhancements() {
       if (!clickedInside) results.style.display = "none";
     });
   }
+  // ---- Professionals ----
+  const proInput = document.getElementById("taskProfessionalSearch");
+  const proResults = document.getElementById("taskProfessionalResults");
+  const proHiddenId = document.getElementById("taskProfessionalId");
 
-  // Professional selector wiring is intentionally deferred.
+  const proSelectedWrap = document.getElementById("taskProfessionalSelected");
+  const proSelectedLabel = document.getElementById("taskProfessionalSelectedLabel");
+  const proClearBtn = document.getElementById("taskProfessionalClear");
+
+  // If the professional UI isn't present on this form variant, skip quietly.
+  if (proInput && proResults && proHiddenId) {
+    let proTimer = null;
+
+    function proShowSelected(name) {
+      if (proSelectedLabel) proSelectedLabel.textContent = name || "Selected professional";
+      if (proSelectedWrap) proSelectedWrap.style.display = "";
+      proResults.style.display = "none";
+      proResults.innerHTML = "";
+
+      proInput.blur();
+      proInput.style.display = "none";
+    }
+
+    function proClearSelected() {
+      proHiddenId.value = "";
+      proHiddenId.dispatchEvent(new Event("change"));
+
+      if (proSelectedWrap) proSelectedWrap.style.display = "none";
+      if (proSelectedLabel) proSelectedLabel.textContent = "";
+
+      proInput.value = "";
+      proInput.style.display = "";
+      proInput.focus();
+
+      proResults.style.display = "none";
+      proResults.innerHTML = "";
+    }
+
+    if (proClearBtn) proClearBtn.addEventListener("click", proClearSelected);
+
+    async function proDoSearch(q) {
+      const term = (q || "").trim();
+      if (term.length < 2) {
+        proResults.style.display = "none";
+        proResults.innerHTML = "";
+        return;
+      }
+
+      const resp = await fetch(`/professionals/search?q=${encodeURIComponent(term)}`, {
+        credentials: "include",
+      });
+
+      if (!resp.ok) {
+        proResults.style.display = "";
+        proResults.innerHTML = `<div class="list-group-item text-danger">Search failed.</div>`;
+        return;
+      }
+
+      const data = await resp.json();
+
+      proResults.innerHTML = "";
+      proResults.style.display = "";
+
+      if (!data || data.length === 0) {
+        proResults.innerHTML = `<div class="list-group-item text-muted">No matches.</div>`;
+        return;
+      }
+
+      data.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "list-group-item list-group-item-action";
+
+        const metaParts = [];
+        if (item.category) metaParts.push(item.category);
+        if (item.company) metaParts.push(item.company);
+        const meta = metaParts.join(" · ");
+
+        btn.innerHTML = `
+          <div class="fw-semibold">${item.name || "Unnamed"}</div>
+          <div class="text-muted small">${meta}</div>
+        `;
+
+        btn.addEventListener("click", () => {
+          proHiddenId.value = item.id;
+          proHiddenId.dispatchEvent(new Event("change"));
+
+          proInput.value = item.name || "";
+          proShowSelected(item.name || "Professional");
+
+          // Optional: keep the input visible instead of hiding it
+          // If you prefer that behavior, comment out proInput.style.display = "none" in proShowSelected()
+        });
+
+        proResults.appendChild(btn);
+      });
+    }
+
+    proInput.addEventListener("input", () => {
+      clearTimeout(proTimer);
+      proTimer = setTimeout(() => proDoSearch(proInput.value), 200);
+    });
+
+    // If prefilled, treat it like selected (server should render label in the input if it can)
+    (function initPrefilledProfessional() {
+      const pid = (proHiddenId.value || "").trim();
+      if (!pid || pid === "None" || pid === "null" || pid === "undefined") return;
+
+      const label = (proInput.value || "").trim();
+      proShowSelected(label ? label : ("Professional #" + pid));
+    })();
+
+    // Close professional dropdown if clicking elsewhere (reuse the same global doc click guard)
+    if (!window.__taskFormProDocClickBound) {
+      window.__taskFormProDocClickBound = true;
+      document.addEventListener("click", (evt) => {
+        const input = document.getElementById("taskProfessionalSearch");
+        const results = document.getElementById("taskProfessionalResults");
+        const selectedWrap = document.getElementById("taskProfessionalSelected");
+
+        if (!input || !results) return;
+
+        const clickedInside =
+          input.contains(evt.target) ||
+          results.contains(evt.target) ||
+          (selectedWrap && selectedWrap.contains(evt.target));
+
+        if (!clickedInside) results.style.display = "none";
+      });
+    }
+  }
+
 };
 
 // Bind the modal loader once, then init enhancements after HTML is injected.

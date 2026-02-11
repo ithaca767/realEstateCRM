@@ -158,7 +158,16 @@
         <div class="text-muted small">Professionals</div>
     
         {% if professional %}
-          {# show the selected professional card/row here (existing) #}
+          <div class="fw-semibold">
+            {{ professional.name or ("Professional #" ~ professional.id) }}
+          </div>
+        
+          <div class="text-muted small">
+            {% set meta = [] %}
+            {% if professional.category %}{% set _ = meta.append(professional.category) %}{% endif %}
+            {% if professional.company %}{% set _ = meta.append(professional.company) %}{% endif %}
+            {{ meta|join(" · ") }}
+          </div>
         {% else %}
           <div class="text-muted small">No professional linked to this task.</div>
         {% endif %}
