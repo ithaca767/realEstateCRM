@@ -80,26 +80,6 @@ from psycopg2.extras import RealDictCursor, DictCursor
 
 app = Flask(__name__)
 
-@app.route("/__debug/routes_check")
-@login_required
-def debug_routes_check():
-    endpoint = "engagement_followup_done"
-    rules = []
-    for r in app.url_map.iter_rules():
-        if r.endpoint == endpoint:
-            rules.append({
-                "rule": r.rule,
-                "methods": sorted(list(r.methods or [])),
-                "arguments": sorted(list(r.arguments or [])),
-            })
-
-    return jsonify({
-        "has_view_function": endpoint in app.view_functions,
-        "matching_rules": rules,
-        "all_endpoints_sample": sorted(list(app.view_functions.keys()))[:80],
-    })
-
-
 @app.template_filter("phone_display")
 def phone_display_filter(v):
     return format_phone_display(v or "")
