@@ -185,7 +185,7 @@
                       {% if item.item_type == "followup" %}
                         <div class="dash-snap-item">
                           <div class="d-flex justify-content-between align-items-center">
-                            {% if item.is_overdue %}
+                            {% if item.snap_status == "overdue" %}
                               <span class="badge badge-status badge-status-overdue">
                                 Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
                               </span>
@@ -218,7 +218,7 @@
                       {% elif item.item_type == "task" %}
                         <div class="dash-snap-item">
                           <div class="d-flex justify-content-between align-items-center">
-                            {% if item.is_overdue %}
+                            {% if item.snap_status == "overdue" %}
                               <span class="badge badge-status badge-status-overdue">
                                 Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
                               </span>

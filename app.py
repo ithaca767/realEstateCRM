@@ -3555,10 +3555,11 @@ def dashboard():
         elif due <= cutoff:
             followups_upcoming.append(row)
 
-    # Today's Snapshot: Follow-ups due today (NY date)
+    # Today's Snapshot: Follow-ups partitioned by NY date
     today_ny = datetime.now(get_user_tz()).date()
     snapshot_followups_today = []
-
+    snapshot_followups_overdue = []
+    
     for row in followup_rows:
         due = row.get("follow_up_due_at")
         if not due:
@@ -3566,10 +3567,14 @@ def dashboard():
         if due.tzinfo is None:
             due = due.replace(tzinfo=timezone.utc)
         try:
-            if due.astimezone(get_user_tz()).date() == today_ny:
-                snapshot_followups_today.append(row)
+            due_ny_date = due.astimezone(get_user_tz()).date()
         except Exception:
-            pass
+            continue
+    
+        if due_ny_date < today_ny:
+            snapshot_followups_overdue.append(row)
+        elif due_ny_date == today_ny:
+            snapshot_followups_today.append(row)
 
     def _clean_snippet(s, max_len=180):
         s = (s or "").strip()
@@ -3597,7 +3602,7 @@ def dashboard():
     
     # Enrich snapshot followups (overdue + today)
     snapshot_followups_overdue_enriched = []
-    for r in (followups_overdue or []):
+    for r in (snapshot_followups_overdue or []):
         rr = dict(r)
         rr["snap_status"] = "overdue"
         rr["overdue_days"] = _overdue_days_from_due(rr.get("follow_up_due_at"))
@@ -3717,6 +3722,10 @@ def dashboard():
         d = item.get("follow_up_due_at") or item.get("due_ts") or item.get("due_at")
         return d or datetime(1900, 1, 1, tzinfo=timezone.utc)
     
+    over_ids = [r.get("engagement_id") for r in snapshot_followups_overdue]
+    today_ids = [r.get("engagement_id") for r in snapshot_followups_today]
+    print("DEBUG overlap followups:", set(over_ids) & set(today_ids))
+
     snapshot_items_all = []
     
     for r in (snapshot_followups_overdue or []):
