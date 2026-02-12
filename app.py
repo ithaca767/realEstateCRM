@@ -5751,6 +5751,48 @@ def remove_engagement(engagement_id):
     next_url = (request.form.get("next") or "").strip() or url_for("contacts")
     return redirect(next_url)
 
+@app.route(
+    "/engagements/<int:engagement_id>/followup/done",
+    methods=["POST"],
+    endpoint="engagement_followup_done",
+)
+@login_required
+def engagement_followup_done(engagement_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE engagements
+            SET
+              follow_up_completed = true,
+              follow_up_completed_at = now(),
+              updated_at = now()
+            WHERE id = %s AND user_id = %s
+            """,
+            (engagement_id, current_user.id),
+        )
+
+        if cur.rowcount == 0:
+            conn.rollback()
+            flash("Follow-up not found.", "warning")
+        else:
+            conn.commit()
+            flash("Follow-up marked done.", "success")
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"Could not mark follow-up done: {e}", "danger")
+
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    next_url = (request.form.get("next") or "").strip() or url_for("contacts")
+    return redirect(next_url)
+
 @app.route("/engagements/<int:engagement_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_engagement(engagement_id):
