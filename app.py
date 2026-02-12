@@ -5727,21 +5727,11 @@ def delete_engagement(conn, user_id: int, engagement_id: int) -> bool:
     conn.commit()
     return row is not None
 
-@app.route("/engagements/<int:engagement_id>/delete", methods=["POST"])
-@login_required
-def remove_engagement(engagement_id):
-    conn = get_db()
-    deleted =   (conn, current_user.id, engagement_id)
-
-    if deleted:
-        flash("Engagement deleted.", "success")
-    else:
-        flash("Engagement not found.", "warning")
-
-    next_url = request.form.get("next") or url_for("contacts")
-    return redirect(next_url)
-
-@app.route("/engagements/<int:engagement_id>/delete", methods=["POST"])
+@app.route(
+    "/engagements/<int:engagement_id>/delete",
+    methods=["POST"],
+    endpoint="engagement_delete",  # prevents endpoint collisions
+)
 @login_required
 def remove_engagement(engagement_id):
     conn = get_db()
