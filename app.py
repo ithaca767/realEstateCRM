@@ -4,6 +4,7 @@ import re
 import secrets
 import csv
 import io
+import json
 
 try:
     from dotenv import load_dotenv
@@ -24,6 +25,8 @@ from services.ai_guard import ensure_ai_allowed_and_reset_if_needed, increment_a
 
 from engagements import list_engagements_for_contact
 from engagements import insert_engagement
+
+from services.integrations.activepipe import emit_single_contact_csv
 
 
 NY = ZoneInfo("America/New_York")
@@ -3073,6 +3076,42 @@ def is_safe_url(target: str) -> bool:
     test_url = urlparse(urljoin(request.host_url, target))
     return test_url.scheme in ("http", "https") and ref_url.netloc == test_url.netloc
 
+def _activepipe_payload_from_form(form) -> dict:
+    mapping = {
+        "ap_status": "status",
+        "ap_sms_status": "sms_status",
+        "ap_subscribed_at": "subscribed_at",
+        "ap_unsubscribed_at": "unsubscribed_at",
+        "ap_unsubscribed_reason": "unsubscribed_reason",
+        "ap_source": "source",
+        "ap_modified_at": "modified_at",
+        "ap_latest_interaction": "latest_interaction",
+        "ap_buyertype": "buyertype",
+        "ap_locations": "locations",
+        "ap_propertytype": "propertytype",
+        "ap_category": "category",
+        "ap_listingtype": "listingtype",
+        "ap_minbeds": "minbeds",
+        "ap_maxbeds": "maxbeds",
+        "ap_minbaths": "minbaths",
+        "ap_maxbaths": "maxbaths",
+        "ap_minprice": "minprice",
+        "ap_maxprice": "maxprice",
+        "ap_minparking": "minparking",
+        "ap_maxparking": "maxparking",
+        "ap_minlandsize": "minlandsize",
+        "ap_maxlandsize": "maxlandsize",
+        "ap_minbuildingsize": "minbuildingsize",
+        "ap_maxbuildingsize": "maxbuildingsize",
+        "ap_tags": "tags",
+    }
+    payload = {}
+    for form_key, ap_key in mapping.items():
+        val = (form.get(form_key) or "").strip()
+        if val:
+            payload[ap_key] = val
+    return payload
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -3516,11 +3555,10 @@ def dashboard():
         elif due <= cutoff:
             followups_upcoming.append(row)
 
-    # Today's Snapshot: Follow-ups partitioned by NY date
+    # Today's Snapshot: Follow-ups due today (NY date)
     today_ny = datetime.now(get_user_tz()).date()
     snapshot_followups_today = []
-    snapshot_followups_overdue = []
-    
+
     for row in followup_rows:
         due = row.get("follow_up_due_at")
         if not due:
@@ -3528,14 +3566,10 @@ def dashboard():
         if due.tzinfo is None:
             due = due.replace(tzinfo=timezone.utc)
         try:
-            due_ny_date = due.astimezone(get_user_tz()).date()
+            if due.astimezone(get_user_tz()).date() == today_ny:
+                snapshot_followups_today.append(row)
         except Exception:
-            continue
-    
-        if due_ny_date < today_ny:
-            snapshot_followups_overdue.append(row)
-        elif due_ny_date == today_ny:
-            snapshot_followups_today.append(row)
+            pass
 
     def _clean_snippet(s, max_len=180):
         s = (s or "").strip()
@@ -3563,7 +3597,7 @@ def dashboard():
     
     # Enrich snapshot followups (overdue + today)
     snapshot_followups_overdue_enriched = []
-    for r in (snapshot_followups_overdue or []):
+    for r in (followups_overdue or []):
         rr = dict(r)
         rr["snap_status"] = "overdue"
         rr["overdue_days"] = _overdue_days_from_due(rr.get("follow_up_due_at"))
@@ -3683,10 +3717,6 @@ def dashboard():
         d = item.get("follow_up_due_at") or item.get("due_ts") or item.get("due_at")
         return d or datetime(1900, 1, 1, tzinfo=timezone.utc)
     
-    over_ids = [r.get("engagement_id") for r in snapshot_followups_overdue]
-    today_ids = [r.get("engagement_id") for r in snapshot_followups_today]
-    print("DEBUG overlap followups:", set(over_ids) & set(today_ids))
-
     snapshot_items_all = []
     
     for r in (snapshot_followups_overdue or []):
@@ -4739,6 +4769,26 @@ def edit_contact(contact_id):
                 current_user.id,
             ),
         )
+        # -------------------------
+        # ActivePipe integration payload (Phase 8B)
+        # -------------------------
+        if request.form.get("activepipe_enabled") == "1":
+            clear = request.form.get("ap_clear") == "1"
+            payload = {} if clear else _activepipe_payload_from_form(request.form)
+
+            cur.execute(
+                """
+                INSERT INTO contact_integrations
+                    (user_id, contact_id, integration_key, payload_json, created_at, updated_at)
+                VALUES
+                    (%s, %s, 'activepipe', %s::jsonb, NOW(), NOW())
+                ON CONFLICT (user_id, contact_id, integration_key)
+                DO UPDATE SET
+                    payload_json = EXCLUDED.payload_json,
+                    updated_at = NOW()
+                """,
+                (current_user.id, contact_id, json.dumps(payload)),
+            )
 
         conn.commit()
         conn.close()
@@ -4776,6 +4826,18 @@ def edit_contact(contact_id):
         (contact_id, current_user.id),
     )
     contact = cur.fetchone()
+
+    # ActivePipe integration profile (Phase 8B)
+    cur.execute(
+        """
+        SELECT id, integration_key, external_id, payload_json, last_exported_at, last_imported_at
+        FROM contact_integrations
+        WHERE user_id = %s AND contact_id = %s AND integration_key = 'activepipe'
+        """,
+        (current_user.id, contact_id),
+    )
+    activepipe_profile = cur.fetchone()
+    activepipe_payload = (activepipe_profile.get("payload_json") if activepipe_profile else None) or {}
 
     if not contact:
         conn.close()
@@ -5028,17 +5090,31 @@ def edit_contact(contact_id):
     )
     completed_interactions = cur.fetchall()
 
-    # Special dates
+    # Special dates (tenant-safe via contacts join)
     cur.execute(
         """
-        SELECT id, label, special_date, is_recurring, notes
-        FROM contact_special_dates
-        WHERE contact_id = %s
-        ORDER BY special_date ASC, label ASC
+        SELECT csd.id, csd.label, csd.special_date, csd.is_recurring, csd.notes
+        FROM contact_special_dates csd
+        JOIN contacts c ON c.id = csd.contact_id
+        WHERE csd.contact_id = %s
+          AND c.user_id = %s
+        ORDER BY csd.special_date ASC, csd.label ASC
         """,
-        (contact_id,),
+        (contact_id, current_user.id),
     )
     special_dates = cur.fetchall()
+
+    # # Special dates - commented out in phase 8b
+    # cur.execute(
+    #     """
+    #     SELECT id, label, special_date, is_recurring, notes
+    #     FROM contact_special_dates
+    #     WHERE user_id = %s AND contact_id = %s
+    #     ORDER BY special_date ASC, label ASC
+    #     """,
+    #     (current_user.id, contact_id),
+    # )
+    # special_dates = cur.fetchall()
 
     associations = get_contact_associations(conn, current_user.id, contact_id)
 
@@ -5072,8 +5148,9 @@ def edit_contact(contact_id):
         transactions=transactions,
         transaction_statuses=TRANSACTION_STATUSES,
         next_deadlines=next_deadlines,
+        activepipe_profile=activepipe_profile,
+        activepipe_payload=activepipe_payload,
     )
-
 
 @app.route("/contacts/search")
 @login_required
@@ -5878,6 +5955,82 @@ def edit_engagement(engagement_id):
         return_to=return_to,
         return_tab=return_tab,
         active_page="contacts",
+    )
+
+@app.route(
+    "/integrations/activepipe/contact/<int:contact_id>/export.csv",
+    endpoint="activepipe_export_contact_csv",
+)
+@login_required
+def activepipe_export_contact_csv_single(contact_id: int):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Tenant-safe fetch of contact
+    cur.execute(
+        """
+        SELECT
+          id,
+          first_name,
+          last_name,
+          name,
+          email,
+          phone,
+          current_address,
+          current_city,
+          current_state,
+          current_zip
+        FROM contacts
+        WHERE id = %s AND user_id = %s
+        """,
+        (contact_id, current_user.id),
+    )
+    contact = cur.fetchone()
+
+    if not contact:
+        conn.close()
+        abort(404)
+
+    # Fetch existing ActivePipe integration payload (if any)
+    cur.execute(
+        """
+        SELECT payload_json
+        FROM contact_integrations
+        WHERE user_id = %s
+          AND contact_id = %s
+          AND integration_key = 'activepipe'
+        """,
+        (current_user.id, contact_id),
+    )
+    row = cur.fetchone()
+    payload = (row.get("payload_json") if row else None) or {}
+
+    # Emit 1-row CSV (header + row)
+    csv_bytes = emit_single_contact_csv(contact, payload)
+
+    # Update last_exported_at, create integration row if missing
+    cur.execute(
+        """
+        INSERT INTO contact_integrations
+            (user_id, contact_id, integration_key, payload_json, last_exported_at, created_at, updated_at)
+        VALUES
+            (%s, %s, 'activepipe', %s::jsonb, NOW(), NOW(), NOW())
+        ON CONFLICT (user_id, contact_id, integration_key)
+        DO UPDATE SET
+            last_exported_at = NOW(),
+            updated_at = NOW()
+        """,
+        (current_user.id, contact_id, json.dumps(payload)),
+    )
+
+    conn.commit()
+    conn.close()
+
+    filename = f"activepipe_contact_{contact_id}.csv"
+    return Response(
+        csv_bytes,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 # =========================================================
