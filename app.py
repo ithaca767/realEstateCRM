@@ -5730,7 +5730,7 @@ def delete_engagement(conn, user_id: int, engagement_id: int) -> bool:
 @app.route(
     "/engagements/<int:engagement_id>/delete",
     methods=["POST"],
-    endpoint="engagement_delete",  # prevents endpoint collisions
+    endpoint="remove_engagement",
 )
 @login_required
 def remove_engagement(engagement_id):
