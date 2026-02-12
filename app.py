@@ -820,6 +820,71 @@ def init_db():
         except Exception:
             pass
         conn.close()
+
+def delete_engagement(conn, user_id: int, engagement_id: int) -> bool:
+    """
+    Tenant-safe engagement delete.
+
+    Preference order:
+      1) Soft delete using common columns if present
+      2) Fall back to hard delete if no soft-delete columns exist
+
+    Returns True if an engagement row was affected.
+    """
+    cur = conn.cursor()
+
+    # Detect which columns exist (so we can soft-delete without guessing your schema)
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'engagements'
+        """
+    )
+    cols = {r["column_name"] for r in cur.fetchall()}
+
+    # Build a soft-delete UPDATE if possible
+    set_clauses = []
+    params = []
+
+    if "deleted_at" in cols:
+        set_clauses.append("deleted_at = NOW()")
+    if "is_deleted" in cols:
+        set_clauses.append("is_deleted = TRUE")
+    if "is_archived" in cols:
+        set_clauses.append("is_archived = TRUE")
+    if "archived_at" in cols:
+        set_clauses.append("archived_at = NOW()")
+    if "engagement_state" in cols:
+        # Use a conservative state name; adjust if your app uses a different canonical value
+        set_clauses.append("engagement_state = 'archived'")
+
+    if set_clauses:
+        sql = f"""
+            UPDATE engagements
+            SET {", ".join(set_clauses)}
+            WHERE id = %s AND user_id = %s
+            RETURNING id
+        """
+        params = [engagement_id, user_id]
+        cur.execute(sql, params)
+        row = cur.fetchone()
+        conn.commit()
+        return row is not None
+
+    # Fallback: hard delete (relies on FK constraints being OK, ideally ON DELETE CASCADE)
+    cur.execute(
+        """
+        DELETE FROM engagements
+        WHERE id = %s AND user_id = %s
+        RETURNING id
+        """,
+        (engagement_id, user_id),
+    )
+    row = cur.fetchone()
+    conn.commit()
+    return row is not None
     
 def get_contact_associations(conn, user_id, contact_id):
     """
