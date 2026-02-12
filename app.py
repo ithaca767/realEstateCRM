@@ -881,7 +881,7 @@ def create_contact_association(conn, user_id, contact_id_a, contact_id_b, relati
                       updated_at = NOW()
         RETURNING id
         """,
-        (user_id, primary_id, related_id, relationship_type),
+        (user_id, primary_id,   related_id, relationship_type),
     )
     row = cur.fetchone()
     return row["id"] if row and isinstance(row, dict) else (row[0] if row else None)
@@ -5662,11 +5662,76 @@ def add_engagement(contact_id):
     flash("Engagement added.", "success")
     return redirect(url_for("edit_contact", contact_id=contact_id, saved=1) + "#engagements")
 
+def delete_engagement(conn, user_id: int, engagement_id: int) -> bool:
+    """
+    Tenant-safe engagement delete.
+
+    Preference order:
+      1) Soft delete using common columns if present
+      2) Fall back to hard delete if no soft-delete columns exist
+
+    Returns True if an engagement row was affected.
+    """
+    cur = conn.cursor()
+
+    # Detect which columns exist (so we can soft-delete without guessing your schema)
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'engagements'
+        """
+    )
+    cols = {r["column_name"] for r in cur.fetchall()}
+
+    # Build a soft-delete UPDATE if possible
+    set_clauses = []
+    params = []
+
+    if "deleted_at" in cols:
+        set_clauses.append("deleted_at = NOW()")
+    if "is_deleted" in cols:
+        set_clauses.append("is_deleted = TRUE")
+    if "is_archived" in cols:
+        set_clauses.append("is_archived = TRUE")
+    if "archived_at" in cols:
+        set_clauses.append("archived_at = NOW()")
+    if "engagement_state" in cols:
+        # Use a conservative state name; adjust if your app uses a different canonical value
+        set_clauses.append("engagement_state = 'archived'")
+
+    if set_clauses:
+        sql = f"""
+            UPDATE engagements
+            SET {", ".join(set_clauses)}
+            WHERE id = %s AND user_id = %s
+            RETURNING id
+        """
+        params = [engagement_id, user_id]
+        cur.execute(sql, params)
+        row = cur.fetchone()
+        conn.commit()
+        return row is not None
+
+    # Fallback: hard delete (relies on FK constraints being OK, ideally ON DELETE CASCADE)
+    cur.execute(
+        """
+        DELETE FROM engagements
+        WHERE id = %s AND user_id = %s
+        RETURNING id
+        """,
+        (engagement_id, user_id),
+    )
+    row = cur.fetchone()
+    conn.commit()
+    return row is not None
+
 @app.route("/engagements/<int:engagement_id>/delete", methods=["POST"])
 @login_required
 def remove_engagement(engagement_id):
     conn = get_db()
-    deleted = delete_engagement(conn, current_user.id, engagement_id)
+    deleted =   (conn, current_user.id, engagement_id)
 
     if deleted:
         flash("Engagement deleted.", "success")
@@ -5676,35 +5741,22 @@ def remove_engagement(engagement_id):
     next_url = request.form.get("next") or url_for("contacts")
     return redirect(next_url)
 
-@app.route("/engagements/<int:engagement_id>/followup/done", methods=["POST"])
+@app.route("/engagements/<int:engagement_id>/delete", methods=["POST"])
 @login_required
-def engagement_followup_done(engagement_id):
+def remove_engagement(engagement_id):
     conn = get_db()
-    cur = conn.cursor()
     try:
-        cur.execute(
-            """
-            UPDATE engagements
-            SET
-              follow_up_completed = true,
-              follow_up_completed_at = now(),
-              updated_at = now()
-            WHERE id = %s AND user_id = %s
-            """,
-            (engagement_id, current_user.id),
-        )
-
-        if cur.rowcount == 0:
-            conn.rollback()
-            flash("Follow-up not found.", "warning")
-        else:
-            conn.commit()
-            flash("Follow-up marked done.", "success")
-    except Exception as e:
-        conn.rollback()
-        flash(f"Could not mark follow-up done: {e}", "danger")
+        deleted = delete_engagement(conn, current_user.id, engagement_id)
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if deleted:
+        flash("Engagement deleted.", "success")
+    else:
+        flash("Engagement not found.", "warning")
 
     next_url = (request.form.get("next") or "").strip() or url_for("contacts")
     return redirect(next_url)
