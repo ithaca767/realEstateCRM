@@ -1520,10 +1520,10 @@
         
           <div class="card mt-3">
             <div class="card-header bg-primary-subtle text-dark fw-semibold d-flex justify-content-between align-items-center">
-
+        
               <div class="d-flex align-items-baseline gap-3">
                 <div>ActivePipe</div>
-            
+        
                 <div class="text-muted" style="font-size: 0.875rem;">
                   Exported:
                   {{ activepipe_profile.last_exported_at|fmt_date
@@ -1536,69 +1536,20 @@
                      else "Never" }}
                 </div>
               </div>
-            
+        
               <div class="d-flex gap-2">
                 <a class="btn btn-sm btn-outline-primary"
                    href="{{ url_for('activepipe_export_contact_csv', contact_id=c['id']) }}">
                   Download CSV
                 </a>
               </div>
-            
+        
             </div>
         
             <div class="card-body">
         
-              <!-- Subscription + Status -->
+              <!-- Practical field -->
               <div class="row g-3">
-        
-                <div class="col-md-3">
-                  <label class="form-label">Status</label>
-                  <input class="form-control" name="ap_status" form="contactForm"
-                         value="{{ activepipe_payload.get('status','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-3">
-                  <label class="form-label">SMS Status</label>
-                  <input class="form-control" name="ap_sms_status" form="contactForm"
-                         value="{{ activepipe_payload.get('sms_status','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-3">
-                  <label class="form-label">Subscribed At</label>
-                  <input class="form-control" name="ap_subscribed_at" form="contactForm"
-                         value="{{ activepipe_payload.get('subscribed_at','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-3">
-                  <label class="form-label">Unsubscribed At</label>
-                  <input class="form-control" name="ap_unsubscribed_at" form="contactForm"
-                         value="{{ activepipe_payload.get('unsubscribed_at','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-6">
-                  <label class="form-label">Unsubscribe Reason</label>
-                  <input class="form-control" name="ap_unsubscribed_reason" form="contactForm"
-                         value="{{ activepipe_payload.get('unsubscribed_reason','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-3">
-                  <label class="form-label">Latest Interaction</label>
-                  <input class="form-control" name="ap_latest_interaction" form="contactForm"
-                         value="{{ activepipe_payload.get('latest_interaction','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-3">
-                  <label class="form-label">Modified At</label>
-                  <input class="form-control" name="ap_modified_at" form="contactForm"
-                         value="{{ activepipe_payload.get('modified_at','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-6">
-                  <label class="form-label">Source</label>
-                  <input class="form-control" name="ap_source" form="contactForm"
-                         value="{{ activepipe_payload.get('source','') if activepipe_payload else '' }}">
-                </div>
-        
                 <div class="col-md-6">
                   <label class="form-label">Tags</label>
                   <input class="form-control" name="ap_tags" form="contactForm"
@@ -1606,130 +1557,208 @@
                          value="{{ activepipe_payload.get('tags','') if activepipe_payload else '' }}">
                   <div class="form-text">Separate tags with semicolons.</div>
                 </div>
-        
               </div>
         
               <hr class="my-4">
         
-              <!-- Preferences Section -->
-              <div class="fw-semibold mb-3">Preferences</div>
+              <!-- Advanced fields (Ulysses-stored; may not map in ActivePipe) -->
+              <div class="accordion" id="activepipeAdvancedAccordion">
+                <div class="accordion-item">
+                  <h2 class="accordion-header" id="apAdvancedHeading">
+                    <button class="accordion-button collapsed" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#apAdvancedCollapse"
+                            aria-expanded="false" aria-controls="apAdvancedCollapse">
+                      Advanced ActivePipe Fields (stored in Ulysses only)
+                    </button>
+                  </h2>
         
-              <div class="row g-3">
+                  <div id="apAdvancedCollapse" class="accordion-collapse collapse"
+                       aria-labelledby="apAdvancedHeading" data-bs-parent="#activepipeAdvancedAccordion">
+                    <div class="accordion-body">
         
-                <div class="col-md-4">
-                  <label class="form-label">Buyer Type</label>
-                  <input class="form-control" name="ap_buyertype" form="contactForm"
-                         value="{{ activepipe_payload.get('buyertype','') if activepipe_payload else '' }}">
+                      <div class="text-muted small mb-3">
+                        These fields are stored in Ulysses for future integration work. They may not map in ActivePipe imports today.
+                      </div>
+        
+                      <!-- Subscription + Status -->
+                      <div class="row g-3">
+        
+                        <div class="col-md-3">
+                          <label class="form-label">Status</label>
+                          <input class="form-control" name="ap_status" form="contactForm"
+                                 value="{{ activepipe_payload.get('status','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-3">
+                          <label class="form-label">SMS Status</label>
+                          <input class="form-control" name="ap_sms_status" form="contactForm"
+                                 value="{{ activepipe_payload.get('sms_status','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-3">
+                          <label class="form-label">Subscribed At</label>
+                          <input class="form-control" name="ap_subscribed_at" form="contactForm"
+                                 value="{{ activepipe_payload.get('subscribed_at','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-3">
+                          <label class="form-label">Unsubscribed At</label>
+                          <input class="form-control" name="ap_unsubscribed_at" form="contactForm"
+                                 value="{{ activepipe_payload.get('unsubscribed_at','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-6">
+                          <label class="form-label">Unsubscribe Reason</label>
+                          <input class="form-control" name="ap_unsubscribed_reason" form="contactForm"
+                                 value="{{ activepipe_payload.get('unsubscribed_reason','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-3">
+                          <label class="form-label">Latest Interaction</label>
+                          <input class="form-control" name="ap_latest_interaction" form="contactForm"
+                                 value="{{ activepipe_payload.get('latest_interaction','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-3">
+                          <label class="form-label">Modified At</label>
+                          <input class="form-control" name="ap_modified_at" form="contactForm"
+                                 value="{{ activepipe_payload.get('modified_at','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-6">
+                          <label class="form-label">Source</label>
+                          <input class="form-control" name="ap_source" form="contactForm"
+                                 value="{{ activepipe_payload.get('source','') if activepipe_payload else '' }}">
+                        </div>
+        
+                      </div>
+        
+                      <hr class="my-4">
+        
+                      <!-- Preferences Section -->
+                      <div class="fw-semibold mb-3">Preferences</div>
+        
+                      <div class="row g-3">
+        
+                        <div class="col-md-4">
+                          <label class="form-label">Buyer Type</label>
+                          <input class="form-control" name="ap_buyertype" form="contactForm"
+                                 value="{{ activepipe_payload.get('buyertype','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-4">
+                          <label class="form-label">Locations</label>
+                          <input class="form-control" name="ap_locations" form="contactForm"
+                                 value="{{ activepipe_payload.get('locations','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-4">
+                          <label class="form-label">Property Type</label>
+                          <input class="form-control" name="ap_propertytype" form="contactForm"
+                                 value="{{ activepipe_payload.get('propertytype','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-4">
+                          <label class="form-label">Category</label>
+                          <input class="form-control" name="ap_category" form="contactForm"
+                                 value="{{ activepipe_payload.get('category','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-4">
+                          <label class="form-label">Listing Type</label>
+                          <input class="form-control" name="ap_listingtype" form="contactForm"
+                                 value="{{ activepipe_payload.get('listingtype','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <!-- Beds / Baths -->
+                        <div class="col-md-2">
+                          <label class="form-label">Min Beds</label>
+                          <input class="form-control" name="ap_minbeds" form="contactForm"
+                                 value="{{ activepipe_payload.get('minbeds','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-2">
+                          <label class="form-label">Max Beds</label>
+                          <input class="form-control" name="ap_maxbeds" form="contactForm"
+                                 value="{{ activepipe_payload.get('maxbeds','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-2">
+                          <label class="form-label">Min Baths</label>
+                          <input class="form-control" name="ap_minbaths" form="contactForm"
+                                 value="{{ activepipe_payload.get('minbaths','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-2">
+                          <label class="form-label">Max Baths</label>
+                          <input class="form-control" name="ap_maxbaths" form="contactForm"
+                                 value="{{ activepipe_payload.get('maxbaths','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <!-- Price -->
+                        <div class="col-md-3">
+                          <label class="form-label">Min Price</label>
+                          <input class="form-control" name="ap_minprice" form="contactForm"
+                                 value="{{ activepipe_payload.get('minprice','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-3">
+                          <label class="form-label">Max Price</label>
+                          <input class="form-control" name="ap_maxprice" form="contactForm"
+                                 value="{{ activepipe_payload.get('maxprice','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <!-- Parking -->
+                        <div class="col-md-2">
+                          <label class="form-label">Min Parking</label>
+                          <input class="form-control" name="ap_minparking" form="contactForm"
+                                 value="{{ activepipe_payload.get('minparking','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-2">
+                          <label class="form-label">Max Parking</label>
+                          <input class="form-control" name="ap_maxparking" form="contactForm"
+                                 value="{{ activepipe_payload.get('maxparking','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <!-- Land Size -->
+                        <div class="col-md-3">
+                          <label class="form-label">Min Land Size</label>
+                          <input class="form-control" name="ap_minlandsize" form="contactForm"
+                                 value="{{ activepipe_payload.get('minlandsize','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-3">
+                          <label class="form-label">Max Land Size</label>
+                          <input class="form-control" name="ap_maxlandsize" form="contactForm"
+                                 value="{{ activepipe_payload.get('maxlandsize','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <!-- Building Size -->
+                        <div class="col-md-3">
+                          <label class="form-label">Min Building Size</label>
+                          <input class="form-control" name="ap_minbuildingsize" form="contactForm"
+                                 value="{{ activepipe_payload.get('minbuildingsize','') if activepipe_payload else '' }}">
+                        </div>
+        
+                        <div class="col-md-3">
+                          <label class="form-label">Max Building Size</label>
+                          <input class="form-control" name="ap_maxbuildingsize" form="contactForm"
+                                 value="{{ activepipe_payload.get('maxbuildingsize','') if activepipe_payload else '' }}">
+                        </div>
+        
+                      </div>
+        
+                    </div>
+                  </div>
                 </div>
-        
-                <div class="col-md-4">
-                  <label class="form-label">Locations</label>
-                  <input class="form-control" name="ap_locations" form="contactForm"
-                         value="{{ activepipe_payload.get('locations','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-4">
-                  <label class="form-label">Property Type</label>
-                  <input class="form-control" name="ap_propertytype" form="contactForm"
-                         value="{{ activepipe_payload.get('propertytype','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-4">
-                  <label class="form-label">Category</label>
-                  <input class="form-control" name="ap_category" form="contactForm"
-                         value="{{ activepipe_payload.get('category','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-4">
-                  <label class="form-label">Listing Type</label>
-                  <input class="form-control" name="ap_listingtype" form="contactForm"
-                         value="{{ activepipe_payload.get('listingtype','') if activepipe_payload else '' }}">
-                </div>
-        
-                <!-- Beds / Baths -->
-                <div class="col-md-2">
-                  <label class="form-label">Min Beds</label>
-                  <input class="form-control" name="ap_minbeds" form="contactForm"
-                         value="{{ activepipe_payload.get('minbeds','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-2">
-                  <label class="form-label">Max Beds</label>
-                  <input class="form-control" name="ap_maxbeds" form="contactForm"
-                         value="{{ activepipe_payload.get('maxbeds','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-2">
-                  <label class="form-label">Min Baths</label>
-                  <input class="form-control" name="ap_minbaths" form="contactForm"
-                         value="{{ activepipe_payload.get('minbaths','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-2">
-                  <label class="form-label">Max Baths</label>
-                  <input class="form-control" name="ap_maxbaths" form="contactForm"
-                         value="{{ activepipe_payload.get('maxbaths','') if activepipe_payload else '' }}">
-                </div>
-        
-                <!-- Price -->
-                <div class="col-md-3">
-                  <label class="form-label">Min Price</label>
-                  <input class="form-control" name="ap_minprice" form="contactForm"
-                         value="{{ activepipe_payload.get('minprice','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-3">
-                  <label class="form-label">Max Price</label>
-                  <input class="form-control" name="ap_maxprice" form="contactForm"
-                         value="{{ activepipe_payload.get('maxprice','') if activepipe_payload else '' }}">
-                </div>
-        
-                <!-- Parking -->
-                <div class="col-md-2">
-                  <label class="form-label">Min Parking</label>
-                  <input class="form-control" name="ap_minparking" form="contactForm"
-                         value="{{ activepipe_payload.get('minparking','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-2">
-                  <label class="form-label">Max Parking</label>
-                  <input class="form-control" name="ap_maxparking" form="contactForm"
-                         value="{{ activepipe_payload.get('maxparking','') if activepipe_payload else '' }}">
-                </div>
-        
-                <!-- Land Size -->
-                <div class="col-md-3">
-                  <label class="form-label">Min Land Size</label>
-                  <input class="form-control" name="ap_minlandsize" form="contactForm"
-                         value="{{ activepipe_payload.get('minlandsize','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-3">
-                  <label class="form-label">Max Land Size</label>
-                  <input class="form-control" name="ap_maxlandsize" form="contactForm"
-                         value="{{ activepipe_payload.get('maxlandsize','') if activepipe_payload else '' }}">
-                </div>
-        
-                <!-- Building Size -->
-                <div class="col-md-3">
-                  <label class="form-label">Min Building Size</label>
-                  <input class="form-control" name="ap_minbuildingsize" form="contactForm"
-                         value="{{ activepipe_payload.get('minbuildingsize','') if activepipe_payload else '' }}">
-                </div>
-        
-                <div class="col-md-3">
-                  <label class="form-label">Max Building Size</label>
-                  <input class="form-control" name="ap_maxbuildingsize" form="contactForm"
-                         value="{{ activepipe_payload.get('maxbuildingsize','') if activepipe_payload else '' }}">
-                </div>
-        
               </div>
         
               <div class="mt-4 d-flex gap-2">
                 <button type="submit" class="btn btn-primary" form="contactForm">
                   Save Contact
                 </button>
-                
+        
                 <button type="submit"
                         class="btn btn-outline-danger"
                         name="ap_clear"
@@ -1738,13 +1767,15 @@
                   Clear ActivePipe Fields
                 </button>
               </div>
-                
+        
             </div>
           </div>
-        <div class="mt-3 text-muted small text-center">
-          ActivePipe is a third-party marketing platform. Ulysses CRM is not affiliated with or endorsed by ActivePipe.
-        </div>
-      </div> <!-- /integrations tab-pane -->
+        
+          <div class="mt-3 text-muted small text-center">
+            ActivePipe is a third-party marketing platform. Ulysses CRM is not affiliated with or endorsed by ActivePipe.
+          </div>
+        
+        </div> <!-- /integrations tab-pane -->
         <!-- /Integrations End -->
         
       </div> <!-- /tab-content -->
