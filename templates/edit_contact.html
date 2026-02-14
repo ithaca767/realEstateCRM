@@ -1539,12 +1539,12 @@
         
               <div class="d-flex gap-2">
                 <a class="btn btn-sm btn-outline-primary"
-                   href="{{ url_for('activepipe_export_contact_csv', contact_id=c['id'], mode='basic') }}">
+                   href="{{ url_for('activepipe_export_contact_csv', contact_id=c['id']) }}?mode=basic">
                   Download CSV (Basic)
                 </a>
                 
                 <a class="btn btn-sm btn-outline-secondary"
-                   href="{{ url_for('activepipe_export_contact_csv', contact_id=c['id'], mode='extended') }}">
+                   href="{{ url_for('activepipe_export_contact_csv', contact_id=c['id']) }}?mode=extended">
                   Download CSV (Extended)
                 </a>
               </div>
