@@ -15,14 +15,25 @@
         </div>
       </div>
     
-      <button
-        type="button"
-        class="btn btn-success"
-        data-bs-toggle="modal"
-        data-bs-target="#addContactModal"
-      >
-        + Add New Contact
-      </button>
+      <div class="d-flex gap-2">
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          data-bs-toggle="modal"
+          data-bs-target="#exportContactsModal"
+        >
+          Export Contacts
+        </button>
+      
+        <button
+          type="button"
+          class="btn btn-success"
+          data-bs-toggle="modal"
+          data-bs-target="#addContactModal"
+        >
+          + Add New Contact
+        </button>
+      </div>
     </div>
 
   <!-- Contacts panel: tabs + search + table + pagination -->
@@ -392,6 +403,93 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="exportContactsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title">Export Contacts</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="exportForSelect" class="form-label">Export for</label>
+          <select id="exportForSelect" class="form-select">
+            <option value="activepipe" selected>ActivePipe</option>
+            <option value="generic">Generic CSV</option>
+          </select>
+        </div>
+
+        <div id="activepipeOptions" class="mb-3">
+          <label class="form-label d-block mb-2">Mode</label>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="apMode" id="apModeBasic" value="basic" checked>
+            <label class="form-check-label" for="apModeBasic">Basic</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="apMode" id="apModeExtended" value="extended">
+            <label class="form-check-label" for="apModeExtended">Extended</label>
+          </div>
+
+          <div class="form-text mt-2">
+            Exports contacts with an email. One row per email. Uses the most recently updated contact when duplicates exist.
+          </div>
+        </div>
+
+        <div id="genericOptions" class="alert alert-light border d-none">
+          Generic CSV export is not enabled yet.
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="exportContactsDownloadBtn">
+          Download CSV
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const exportForSelect = document.getElementById("exportForSelect");
+    const activepipeOptions = document.getElementById("activepipeOptions");
+    const genericOptions = document.getElementById("genericOptions");
+    const downloadBtn = document.getElementById("exportContactsDownloadBtn");
+
+    function syncExportUI() {
+      const v = exportForSelect.value;
+      if (v === "activepipe") {
+        activepipeOptions.classList.remove("d-none");
+        genericOptions.classList.add("d-none");
+        downloadBtn.disabled = false;
+      } else {
+        activepipeOptions.classList.add("d-none");
+        genericOptions.classList.remove("d-none");
+        downloadBtn.disabled = true; // until generic route exists
+      }
+    }
+
+    exportForSelect.addEventListener("change", syncExportUI);
+    syncExportUI();
+
+    downloadBtn.addEventListener("click", function() {
+      const v = exportForSelect.value;
+      if (v === "activepipe") {
+        const mode = document.querySelector('input[name="apMode"]:checked')?.value || "basic";
+        let url = "/integrations/activepipe/export.csv";
+        if (mode === "extended") {
+          url += "?mode=extended";
+        }
+        window.location.href = url;
+      }
+    });
+  })();
+</script>
 
 {% endblock %}
 

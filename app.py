@@ -26,8 +26,12 @@ from services.ai_guard import ensure_ai_allowed_and_reset_if_needed, increment_a
 from engagements import list_engagements_for_contact
 from engagements import insert_engagement
 
-from services.integrations.activepipe import emit_single_contact_csv
-
+from services.integrations.activepipe import (
+    emit_single_contact_csv,
+    ACTIVEPIPE_HEADERS_BASIC,
+    ACTIVEPIPE_HEADERS_EXTENDED,
+    build_activepipe_row,
+)
 
 NY = ZoneInfo("America/New_York")
 
@@ -46,6 +50,7 @@ from flask import (
     render_template_string,
     jsonify,
     Response,
+    make_response,
     session,
     flash,
     abort,
@@ -6155,7 +6160,13 @@ def activepipe_export_contact_csv_single(contact_id: int):
     payload = (row.get("payload_json") if row else None) or {}
 
     # Emit 1-row CSV (header + row)
-    csv_bytes = emit_single_contact_csv(contact, payload)
+    mode = (request.args.get("mode") or "").strip().lower()
+    if mode not in ("basic", "extended"):
+        mode = "basic"
+    
+    headers = ACTIVEPIPE_HEADERS_EXTENDED if mode == "extended" else ACTIVEPIPE_HEADERS_BASIC
+    csv_bytes = emit_single_contact_csv(contact, payload, headers=headers)
+    
 
     # Update last_exported_at, create integration row if missing
     cur.execute(
@@ -6175,12 +6186,113 @@ def activepipe_export_contact_csv_single(contact_id: int):
     conn.commit()
     conn.close()
 
-    filename = f"activepipe_contact_{contact_id}.csv"
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"activepipe_contact_{contact_id}_{mode}_{ts}.csv"
     return Response(
         csv_bytes,
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+@app.route("/integrations/activepipe/export.csv", methods=["GET"])
+@login_required
+def activepipe_bulk_export_csv():
+    """
+    Bulk ActivePipe export.
+
+    Query params:
+      - mode=basic|extended (default: basic)
+
+    Guarantees:
+      - Tenant scoped by current_user.id
+      - Deterministic order
+      - Always returns header row, even with 0 contacts
+      - last_exported_at upserted for exported contacts
+    """
+    mode = (request.args.get("mode") or "").strip().lower()
+    if mode not in ("basic", "extended"):
+        mode = "basic"
+
+    headers = ACTIVEPIPE_HEADERS_EXTENDED if mode == "extended" else ACTIVEPIPE_HEADERS_BASIC
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Pull all tenant contacts plus any existing ActivePipe payload
+    cur.execute(
+        """
+        SELECT DISTINCT ON (LOWER(TRIM(c.email)))
+            c.*,
+            ci.payload_json AS ap_payload
+        FROM contacts c
+        LEFT JOIN contact_integrations ci
+          ON ci.user_id = c.user_id
+         AND ci.contact_id = c.id
+         AND ci.integration_key = 'activepipe'
+        WHERE c.user_id = %s
+          AND c.email IS NOT NULL
+          AND TRIM(c.email) <> ''
+        ORDER BY
+            LOWER(TRIM(c.email)) ASC,
+            c.updated_at DESC NULLS LAST,
+            c.id DESC
+        """,
+        (current_user.id,),
+    )
+    rows = cur.fetchall() or []
+
+    # Build CSV
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=headers, extrasaction="ignore")
+    writer.writeheader()
+
+    contact_ids = []
+    for r in rows:
+        # With RealDictCursor, r is dict-like.
+        contact = dict(r)
+        payload = contact.pop("ap_payload", None)
+
+        ap_row = build_activepipe_row(contact, payload)
+        writer.writerow(ap_row)
+
+        if contact.get("id") is not None:
+            contact_ids.append(contact["id"])
+
+    csv_bytes = buf.getvalue().encode("utf-8")
+
+    # Update last_exported_at for exported contacts
+    if contact_ids:
+        cur.execute(
+            """
+            INSERT INTO contact_integrations
+                (user_id, contact_id, integration_key, last_exported_at, created_at, updated_at)
+            SELECT
+                %s AS user_id,
+                x.contact_id,
+                'activepipe' AS integration_key,
+                NOW() AS last_exported_at,
+                NOW() AS created_at,
+                NOW() AS updated_at
+            FROM UNNEST(%s::bigint[]) AS x(contact_id)
+            ON CONFLICT (user_id, contact_id, integration_key)
+            DO UPDATE SET
+                last_exported_at = NOW(),
+                updated_at = NOW()
+            """,
+            (current_user.id, contact_ids),
+        )
+
+    conn.commit()
+    conn.close()
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"activepipe_export_{mode}_{ts}.csv"
+
+    resp = make_response(csv_bytes)
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
+
 
 # =========================================================
 # Phase 5 (v0.11.0): Tasks

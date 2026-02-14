@@ -22,6 +22,13 @@ ACTIVEPIPE_HEADERS: List[str] = [
     "tags",
 ]
 
+ACTIVEPIPE_HEADERS_BASIC: List[str] = [
+    "firstname", "lastname", "email", "phone", "mobile",
+    "streetaddress", "city", "state", "postcode", "country",
+    "tags",
+]
+
+ACTIVEPIPE_HEADERS_EXTENDED: List[str] = ACTIVEPIPE_HEADERS[:]  # full list, locked
 
 def _safe_str(v) -> str:
     if v is None:
@@ -80,10 +87,15 @@ def build_activepipe_row(contact: Dict, payload: Optional[Dict]) -> Dict[str, st
         row["mobile"] = contact_phone
         row["phone"] = ""
 
-    row["streetaddress"] = _safe_str(contact.get("address") or contact.get("streetaddress") or contact.get("street_address"))
-    row["city"] = _safe_str(contact.get("city"))
-    row["state"] = _safe_str(contact.get("state"))
-    row["postcode"] = _safe_str(contact.get("zip") or contact.get("postcode"))
+    row["streetaddress"] = _safe_str(
+        contact.get("current_address")
+        or contact.get("address")
+        or contact.get("streetaddress")
+        or contact.get("street_address")
+    )
+    row["city"] = _safe_str(contact.get("current_city") or contact.get("city"))
+    row["state"] = _safe_str(contact.get("current_state") or contact.get("state"))
+    row["postcode"] = _safe_str(contact.get("current_zip") or contact.get("zip") or contact.get("postcode"))
     row["country"] = _safe_str(contact.get("country"))
 
     # Integration-only fields from payload
@@ -100,13 +112,11 @@ def build_activepipe_row(contact: Dict, payload: Optional[Dict]) -> Dict[str, st
     return row
 
 
-def emit_single_contact_csv(contact: Dict, payload: Optional[Dict]) -> bytes:
-    """
-    Returns CSV bytes with header + one row, using ACTIVEPIPE_HEADERS order.
-    """
+def emit_single_contact_csv(contact: Dict, payload: Optional[Dict], headers: Optional[List[str]] = None) -> bytes:
+    headers = headers or ACTIVEPIPE_HEADERS_BASIC
     row = build_activepipe_row(contact, payload)
     buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=ACTIVEPIPE_HEADERS, extrasaction="ignore")
+    writer = csv.DictWriter(buf, fieldnames=headers, extrasaction="ignore")
     writer.writeheader()
     writer.writerow(row)
     return buf.getvalue().encode("utf-8")
