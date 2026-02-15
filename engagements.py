@@ -25,6 +25,8 @@ def list_engagements_for_contact(conn, user_id, contact_id, limit=50, offset=0):
     rows = cur.fetchall() or []
     return rows
 
+from collections.abc import Mapping
+
 def insert_engagement(
     conn,
     user_id: int,
@@ -37,6 +39,7 @@ def insert_engagement(
     summary_clean,
     requires_follow_up: bool = False,
     follow_up_due_at=None,
+    commit: bool = True,
 ):
     cur = conn.cursor()
     try:
@@ -77,10 +80,11 @@ def insert_engagement(
         row = cur.fetchone()
         new_id = None
         if row:
-            # supports dict cursor or tuple cursor
-            new_id = row["id"] if isinstance(row, dict) else row[0]
+            new_id = row["id"] if isinstance(row, Mapping) else row[0]
 
-        conn.commit()
+        if commit:
+            conn.commit()
+
         return new_id
     finally:
         cur.close()

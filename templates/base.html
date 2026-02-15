@@ -135,6 +135,17 @@
             <a class="nav-link" href="{{ url_for('account') }}">Account</a>
           </li>
         {% endif %}
+
+          <form class="d-flex ms-2" method="GET" action="{{ url_for('global_search') }}">
+            <input
+              class="form-control form-control-sm"
+              type="search"
+              name="q"
+              placeholder="Search"
+              aria-label="Search"
+            />
+          </form>
+        
         {% if current_user.is_authenticated %}
           <li class="nav-item ms-auto">
             <a class="nav-link text-danger" href="{{ url_for('logout') }}">Logout</a>

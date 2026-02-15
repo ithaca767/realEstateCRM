@@ -887,6 +887,16 @@ def delete_engagement(conn, user_id: int, engagement_id: int) -> bool:
         """,
         (engagement_id, user_id),
     )
+
+    # After successful delete or soft-delete
+    cur.execute(
+        """
+        DELETE FROM search_index
+        WHERE user_id = %s AND object_type = 'engagement' AND object_id = %s
+        """,
+        (user_id, engagement_id),
+    )
+
     row = cur.fetchone()
     conn.commit()
     return row is not None
@@ -4746,6 +4756,31 @@ def add_contact():
     new_id = new_contact["id"]
 
     conn.commit()
+
+    # Best-effort: update AI search index (never block contact save)
+    try:
+        from services.search_indexer import build_contact_search_text, upsert_search_index
+        contact_for_index = dict(data)
+        contact_for_index["id"] = new_id
+        label, search_text = build_contact_search_text(contact_for_index)
+
+        ok = upsert_search_index(
+            conn,
+            user_id=current_user.id,
+            object_type="contact",
+            object_id=new_id,
+            contact_id=new_id,
+            label=label,
+            search_text=search_text,
+        )
+        if ok:
+            conn.commit()
+        else:
+            conn.rollback()
+    except Exception:
+        conn.rollback()
+        logging.exception("Contact index upsert failed (user_id=%s contact_id=%s)", current_user.id, new_id)
+    
     conn.close()
 
     flash("Contact added.", "success")
@@ -4861,6 +4896,31 @@ def edit_contact(contact_id):
             )
 
         conn.commit()
+
+        # Best-effort: update AI search index (never block contact update)
+        try:
+            from services.search_indexer import build_contact_search_text, upsert_search_index
+            contact_for_index = dict(data)
+            contact_for_index["id"] = contact_id
+            label, search_text = build_contact_search_text(contact_for_index)
+
+            ok = upsert_search_index(
+                conn,
+                user_id=current_user.id,
+                object_type="contact",
+                object_id=contact_id,
+                contact_id=contact_id,
+                label=label,
+                search_text=search_text,
+            )
+            if ok:
+                conn.commit()
+            else:
+                conn.rollback()
+        except Exception:
+            conn.rollback()
+            logging.exception("Contact index upsert failed (user_id=%s contact_id=%s)", current_user.id, contact_id)
+        
         conn.close()
         return redirect(url_for("edit_contact", contact_id=contact_id, saved=1))
 
@@ -5791,7 +5851,7 @@ def add_engagement(contact_id):
             requires_follow_up = False
             follow_up_due_at = None
 
-    insert_engagement(
+    engagement_id = insert_engagement(
         conn=conn,
         user_id=current_user.id,
         contact_id=contact_id,
@@ -5804,6 +5864,15 @@ def add_engagement(contact_id):
         requires_follow_up=requires_follow_up,
         follow_up_due_at=follow_up_due_at,
     )
+    
+    # Index it (best-effort, never break the save)
+    try:
+        from services.search_index_service import upsert_engagement_index
+        upsert_engagement_index(conn, user_id=current_user.id, engagement_id=engagement_id)
+    except Exception:
+        logging.exception("Engagement index upsert failed (user_id=%s, engagement_id=%s)", current_user.id, engagement_id)
+    
+    conn.commit()
 
     conn.close()
     flash("Engagement added.", "success")
@@ -6077,6 +6146,13 @@ def edit_engagement(engagement_id):
                 current_user.id,
             ),
         )
+        # Index it (best-effort)
+        try:
+            from services.search_index_service import upsert_engagement_index
+            upsert_engagement_index(conn, user_id=current_user.id, engagement_id=engagement_id)
+        except Exception:
+            logging.exception("Engagement index upsert failed (user_id=%s, engagement_id=%s)", current_user.id, engagement_id)
+        
         conn.commit()
         conn.close()
 
@@ -6110,6 +6186,54 @@ def edit_engagement(engagement_id):
         return_tab=return_tab,
         active_page="contacts",
     )
+
+@app.route("/search")
+@login_required
+def global_search():
+    q = (request.args.get("q") or "").strip()
+    ai = (request.args.get("ai") or "").strip().lower() in ("1", "true", "yes", "on")
+
+    conn = get_db()
+    try:
+        from services.search_service import search_all
+        results = search_all(conn, current_user.id, q)
+        ai_results = None
+        if ai:
+            from services.search_service import semantic_broaden
+            ai_results = semantic_broaden(conn, current_user.id, q, per_type_limit=10)
+
+        for c in results["contacts"]:
+            c["url"] = url_for("edit_contact", contact_id=c["id"])
+
+        for e in results["engagements"]:
+            cid = e.get("contact_id")
+            if cid:
+                e["url"] = url_for("edit_contact", contact_id=cid) + "#engagements"
+            else:
+                e["url"] = ""
+        
+        for tx in results.get("transactions", []):
+            tx["url"] = url_for("edit_transaction", transaction_id=tx["id"])
+        
+        for p in results.get("professionals", []):
+            p["url"] = url_for("edit_professional", prof_id=p["id"])
+        if ai_results:
+            for r in ai_results.get("contacts", []):
+                r["url"] = url_for("edit_contact", contact_id=r["id"])
+        
+            for r in ai_results.get("engagements", []):
+                cid = r.get("contact_id")
+                r["url"] = url_for("edit_contact", contact_id=cid) + "#engagements" if cid else ""
+        
+            for r in ai_results.get("transactions", []):
+                r["url"] = url_for("edit_transaction", transaction_id=r["id"])
+        
+            for r in ai_results.get("professionals", []):
+                r["url"] = url_for("edit_professional", prof_id=r["id"])
+
+        return render_template("search.html", q=q, results=results, ai=ai, ai_results=ai_results)
+    finally:
+        conn.close()
 
 @app.route(
     "/integrations/activepipe/contact/<int:contact_id>/export.csv",
@@ -7750,9 +7874,9 @@ def edit_professional(prof_id):
                 category = %s,
                 grade = %s,
                 notes = %s
-            WHERE id = %s
+            WHERE id = %s AND user_id = %s
             """,
-            (name, company, phone, email, category, grade, notes, prof_id),
+            (name, company, phone, email, category, grade, notes, prof_id, current_user.id),
         )
         conn.commit()
         flash("Professional updated.", "success")
@@ -10276,6 +10400,36 @@ def api_contacts_search():
 
     finally:
         conn.close()
+
+@app.route("/admin/search-index/rebuild", methods=["POST"])
+@login_required
+def admin_rebuild_search_index():
+    # Local-first guard (tight, safe)
+    if getattr(current_user, "id", None) != 1:
+        abort(403)
+
+    # Optional: preserve query + ai state for redirect
+    q = (request.form.get("q") or "").strip()
+    ai = (request.form.get("ai") or "").strip()
+
+    conn = get_db()
+    try:
+        from scripts.rebuild_search_index_local import rebuild_for_user
+        rebuild_for_user(conn, user_id=current_user.id)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logging.exception("Search index rebuild failed (user_id=%s)", getattr(current_user, "id", None))
+        flash("Search index rebuild failed.", "danger")
+        return redirect(url_for("global_search", q=q, ai=ai))
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    flash("Search index rebuilt.", "success")
+    return redirect(url_for("global_search", q=q, ai=ai))
 
 @app.route("/account", methods=["GET", "POST"])
 @login_required

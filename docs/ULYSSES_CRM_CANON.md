@@ -13285,4 +13285,349 @@ Design principles reinforced:
 - Explicit user consent for AI
 - Canon treated as a living but controlled specification
 
+# 🔁 Ulysses CRM – Transition to New Chat
+
+**Baseline:** Post-Phase 8A  
+**Version:** 1.1.1  
+**Governance:** Canon Controlled  
+
+---
+
+## Objective
+
+Establish a clean development baseline following Phase 8A stabilization before entering Phase 8B.
+
+The system is now considered operationally stable and ready for deliberate expansion.
+
+---
+
+## Current System State
+
+- **Version:** 1.1.1  
+- **Branch:** main  
+- Multi-tenant safe (`user_id` scoped across core entities)  
+- Dashboard paged at 20 items per card  
+- Snapshot unified (tasks + followups)  
+- Task professional rendering stabilized  
+- No known runtime or compile errors  
+- Production and local environments aligned  
+
+---
+
+## Canon Governance
+
+All continued development must conform to:
+
+- `ULYSSES_CRM_CANON.md` (authoritative governance document)  
+- Established Phase documentation in `docs/phases/`  
+- Release discipline (version bump + manifest on production commits)  
+- Local-first development workflow  
+- No destructive schema changes without migration documentation  
+
+If architectural decisions conflict with Canon, Canon prevails.
+
+---
+
+## UI Standards (Locked Principles)
+
+### Consistency Over Novelty
+
+- Bootstrap styling conventions  
+- Subtle badge system (`*-subtle` with emphasis variants)  
+- Rounded-pill badges where applicable  
+- No visual regressions across cards  
+
+### No Forced Scroll Regions
+
+- Prefer paging over scroll traps  
+- Mobile-first readability  
+- Deterministic card height behavior  
+
+### No Cross-Tenant Leakage
+
+- All queries scoped by `user_id`  
+- No global fallback loads  
+- No lateral joins without user guard  
+
+### Controlled Feature Growth
+
+- Stabilize before expanding  
+- Avoid premature schema expansion  
+- Multi-professional tasks deferred unless workflow demands it  
+
+### Render Predictability
+
+- No duplicate `render_template` args  
+- No uninitialized variables  
+- `py_compile` must pass before commit  
+- Explicit paging flags (`has_prev_*`, `has_more_*`)  
+
+---
+
+## Architectural Baseline (Post-8A)
+
+- Dashboard paging unified under `DASH_PAGE_SIZE`  
+- Snapshot items use unified enriched structure  
+- Task professionals remain single-FK based  
+- Transactions and Contacts paged via offset logic  
+- Version discipline active (1.1.1 tagged)  
+
+---
+
+## Standing Safety Rules
+
+- Never echo full `DATABASE_URL` in terminal or chat  
+- Warn if a command could expose credentials  
+- Rotate credentials after production debugging  
+- Do not introduce schema changes casually on main  
+
+---
+
+## State of the System
+
+Ulysses CRM is now in a stable operational phase.
+
+The next phase must be deliberate and structured.
+
+### Permissible Focus Areas
+
+- Performance refinement  
+- UX polish  
+- Optional feature layer  
+- Architectural expansion  
+
+Reactive bug fixing is no longer the governing mode.
+
+
+
+# Phase 8B – ActivePipe Integration Bridge (Completed)
+
+**Released:** v1.1.3  
+**Stabilized:** v1.1.4  
+
+## Objective
+Introduce a tenant-safe external integration layer without polluting core contact schema or breaking system-of-record integrity.
+
+## Delivered
+
+- `contact_integrations` table (multi-tenant safe)
+- Integration key pattern (`integration_key = 'activepipe'`)
+- JSON payload storage (`payload_json`)
+- `last_exported_at` timestamp tracking
+- Single-contact ActivePipe CSV export
+- Deterministic header ordering
+- Contact → ActivePipe bridge UI in Integrations tab
+- Strict tenant isolation via `user_id`
+- No core Contact table modification
+
+## Architectural Principle
+
+Ulysses CRM remains the **system of record**.  
+ActivePipe is treated as a **distribution layer only**.
+
+No external integration owns contact data.
+
+---
+
+# Phase 8C – Bulk Export + Export Modes (Completed)
+
+**Released:** v1.1.4  
+
+## Objective
+Extend the ActivePipe bridge to support bulk export with safe mode partitioning and contract-stable CSV structure.
+
+## Delivered
+
+### Bulk Export Route
+
+GET /integrations/activepipe/export.csv
+
+
+### Mode Support
+
+- `mode=basic`
+- `mode=extended`
+- Default: `basic`
+
+### CSV Contract Guarantees
+
+- Locked header definitions:
+  - `ACTIVEPIPE_HEADERS_BASIC`
+  - `ACTIVEPIPE_HEADERS_EXTENDED`
+- Deterministic ordering:
+  - `last_name ASC`
+  - `first_name ASC`
+  - `id ASC`
+- Email-level deduplication in bulk export
+- Headers-only behavior when 0 contacts
+- Per-contact `last_exported_at` upsert on export
+- No schema changes required
+
+### UI Enhancements
+
+- Contacts page “Export Contacts” modal
+- Export selection:
+  - ActivePipe
+  - Basic vs Extended mode
+- Contact-level export buttons:
+  - Download CSV (Basic)
+  - Download CSV (Extended)
+
+### Stability Guarantees
+
+- No regression to Phase 8B single export
+- Multi-tenant safety preserved
+- No cross-tenant leakage
+- CSV format contract locked as of v1.1.4
+
+---
+
+## Not Yet Implemented (Future Enhancements)
+
+- Bulk ActivePipe import
+- Integration event logging table
+- Conflict preview UI
+- Override vs Buyer Profile default injection logic
+- Scheduled export automation
+
+---
+
+## Governance Rule
+
+As of v1.1.4, the ActivePipe CSV header structure and column ordering are considered **production-stable contracts**.
+
+Future modifications must:
+- Maintain backward compatibility
+- Avoid column renaming
+- Avoid order mutation without version bump
+- Be documented in release manifest
+
+---
+✅ 2️⃣ Formal Release Manifest
+Create new file:
+docs/releases/v1.1.4_phase_8c_export_modes_release_manifest.md
+
+# Ulysses CRM – Release Manifest
+## Version 1.1.4
+## Phase 8C – ActivePipe Bulk Export Completion
+
+Date: 2026-02-14  
+Branch: main  
+Migration Required: Yes (contact_integrations)  
+Status: Production Deployed
+
+---
+
+# Summary
+
+Phase 8C completes the ActivePipe integration bridge by introducing bulk export functionality, export mode partitioning, and UI-based export controls.
+
+This release finalizes the external distribution architecture for ActivePipe while preserving Ulysses CRM as the system of record.
+
+---
+
+# Included Features
+
+## 1. Bulk ActivePipe Export
+
+Route:
+GET /integrations/activepipe/export.csv
+
+
+Capabilities:
+- Tenant-scoped
+- Deterministic ordering
+- Email-level dedupe
+- Timestamp updates per exported contact
+- Headers-only export when zero contacts exist
+
+---
+
+## 2. Export Modes
+
+Supported modes:
+- `mode=basic`
+- `mode=extended`
+
+Default: `basic`
+
+Headers locked via:
+- `ACTIVEPIPE_HEADERS_BASIC`
+- `ACTIVEPIPE_HEADERS_EXTENDED`
+
+---
+
+## 3. Contact-Level Export
+
+Per-contact export:
+/integrations/activepipe/contact/<id>/export.csv?mode=basic
+/integrations/activepipe/contact/<id>/export.csv?mode=extended
+
+
+---
+
+## 4. UI Enhancements
+
+Contacts page:
+- “Export Contacts” modal
+- Integration selector
+- Mode selector
+
+Contact Edit page:
+- Download CSV (Basic)
+- Download CSV (Extended)
+
+---
+
+# Database Migration
+
+File:
+docs/migrations/2026_02_11_add_contact_integrations.sql
+
+
+Migration must be executed in production prior to deployment.
+
+---
+
+# Stability & Contract Lock
+
+The ActivePipe CSV format is now considered production-stable.
+
+Changes to:
+- Header names
+- Column ordering
+- Export logic
+- Deduplication logic
+
+Require:
+- Version bump
+- Canon update
+- Release manifest documentation
+
+---
+
+# Post-Deployment Verification Checklist
+
+- [ ] Version footer shows 1.1.4
+- [ ] Single-contact export works (basic)
+- [ ] Single-contact export works (extended)
+- [ ] Bulk export works (basic)
+- [ ] Bulk export works (extended)
+- [ ] No duplicate emails in export
+- [ ] No cross-tenant data leakage
+
+---
+
+# Deferred Scope
+
+The following were intentionally deferred:
+
+- Bulk import
+- Event audit log
+- Integration override hierarchy
+- Automated export scheduling
+
+---
+
+Phase 8C is now production-stable.
 

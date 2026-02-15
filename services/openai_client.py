@@ -14,6 +14,9 @@ class OpenAIMissingDependencyError(RuntimeError):
     pass
 
 
+class OpenAIEmbeddingsUnavailableError(Exception):
+    pass
+
 @dataclass(frozen=True)
 class OpenAIConfig:
     api_key: str
@@ -91,3 +94,24 @@ def call_summarize_model(*, system_prompt: str, instruction_prompt: str, user_tr
         if isinstance(e, OpenAIMissingDependencyError):
             raise
         raise OpenAIUpstreamError("OpenAI request failed") from e
+
+def call_embeddings_model(text: str):
+    text = (text or "").strip()
+    if not text:
+        return None
+
+    try:
+        from openai import OpenAI
+    except Exception as e:
+        raise OpenAIMissingDependencyError() from e
+
+    client = OpenAI()
+
+    try:
+        resp = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text,
+        )
+        return resp.data[0].embedding
+    except Exception as e:
+        raise OpenAIEmbeddingsUnavailableError(str(e)) from e

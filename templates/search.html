@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Search</h2>
+    <div class="text-muted">Search contacts, engagements, transactions, and professionals</div>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-body">
+    <form method="GET" action="{{ url_for('global_search') }}">
+      <div class="input-group">
+        <input
+          type="text"
+          name="q"
+          class="form-control"
+          placeholder="Type to search"
+          value="{{ q }}"
+          autocomplete="off"
+        />
+        <button class="btn btn-primary" type="submit">Search</button>
+      </div>
+      <div class="text-muted small mt-2">Type at least 2 characters.</div>
+
+      {% if ai and q and q|length >= 2 and (not ai_results or (not ai_results.contacts and not ai_results.engagements and not ai_results.transactions and not ai_results.professionals)) %}
+        <div class="alert alert-warning mt-3 mb-0">
+          AI broadening is on, but no AI matches were found. If this seems wrong, rebuild the AI index.
+        </div>
+      {% endif %}
+			
+			{% if q and q|length >= 2 %}
+			  <div class="mt-2 d-flex gap-2">
+			    {% if not ai %}
+			      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('global_search') }}?q={{ q|urlencode }}&ai=1">Broaden with AI</a>
+			    {% else %}
+			      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('global_search') }}?q={{ q|urlencode }}">AI broadening is on (turn off)</a>
+			    {% endif %}
+			  </div>
+			{% endif %}
+
+      {% if q and q|length >= 2 and current_user.id == 1 %}
+        <form method="POST" action="{{ url_for('admin_rebuild_search_index') }}" class="mt-2">
+          <input type="hidden" name="q" value="{{ q }}">
+          <input type="hidden" name="ai" value="{{ '1' if ai else '' }}">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">
+            Rebuild AI index
+          </button>
+        </form>
+      {% endif %}
+      
+    </form>
+  </div>
+</div>
+
+{% if q and (results.contacts or results.engagements) %}
+
+  <div class="card mt-3">
+    <div class="card-header bg-primary-subtle text-dark fw-semibold">
+      Results
+    </div>
+    <div class="card-body">
+
+      {% if results.contacts %}
+        <div class="fw-semibold mb-2">Contacts</div>
+        <div class="list-group mb-3">
+          {% for r in results.contacts %}
+            <a class="list-group-item list-group-item-action" href="{{ r.url }}">
+              <div class="d-flex justify-content-between">
+                <div class="fw-semibold">{{ r.label }}</div>
+                <div class="text-muted small">{{ "%.3f"|format(r.score) }}</div>
+              </div>
+              {% if r.snippet %}
+                <div class="text-muted small mt-1">{{ r.snippet }}</div>
+              {% endif %}
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if results.engagements %}
+        <div class="fw-semibold mb-2">Engagements</div>
+        <div class="list-group">
+          {% for r in results.engagements %}
+            {% if r.url %}
+              <a class="list-group-item list-group-item-action" href="{{ r.url }}">
+            {% else %}
+              <div class="list-group-item">
+            {% endif %}
+                <div class="d-flex justify-content-between">
+                  <div class="fw-semibold">{{ r.label }}</div>
+                  <div class="text-muted small">{{ "%.3f"|format(r.score) }}</div>
+                </div>
+                {% if r.snippet %}
+                  <div class="text-muted small mt-1">{{ r.snippet }}</div>
+                {% endif %}
+            {% if r.url %}
+              </a>
+            {% else %}
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
+			
+			{% if results.transactions %}
+			  <div class="fw-semibold mb-2">Transactions</div>
+			  <div class="list-group mb-3">
+			    {% for r in results.transactions %}
+			      <a class="list-group-item list-group-item-action" href="{{ r.url }}">
+			        <div class="d-flex justify-content-between">
+			          <div class="fw-semibold">{{ r.label }}</div>
+			          <div class="text-muted small">{{ "%.3f"|format(r.score) }}</div>
+			        </div>
+			        {% if r.snippet %}
+			          <div class="text-muted small mt-1">{{ r.snippet }}</div>
+			        {% endif %}
+			      </a>
+			    {% endfor %}
+			  </div>
+			{% endif %}
+		
+			{% if results.professionals %}
+		  <div class="fw-semibold mb-2">Professionals</div>
+		  <div class="list-group mb-3">
+		    {% for r in results.professionals %}
+		      <a class="list-group-item list-group-item-action" href="{{ r.url }}">
+		        <div class="d-flex justify-content-between">
+		          <div class="fw-semibold">{{ r.label }}</div>
+		          <div class="text-muted small">{{ "%.3f"|format(r.score) }}</div>
+		        </div>
+		        {% if r.snippet %}
+		          <div class="text-muted small mt-1">{{ r.snippet }}</div>
+		        {% endif %}
+		      </a>
+		    {% endfor %}
+		  </div>
+		{% endif %}
+
+
+    </div>
+  </div>
+
+{% elif q %}
+  <div class="card mt-3">
+    <div class="card-body">
+      <div class="text-muted">No results.</div>
+    </div>
+  </div>
+{% endif %}
+{% if ai and ai_results and (ai_results.contacts or ai_results.engagements or ai_results.transactions or ai_results.professionals) %}
+  <div class="card mt-3">
+    <div class="card-header bg-info-subtle text-dark fw-semibold">
+      AI Broadened Results
+    </div>
+    <div class="card-body">
+
+      {% if ai_results.contacts %}
+        <div class="fw-semibold mb-2">Contacts</div>
+        <div class="list-group mb-3">
+          {% for r in ai_results.contacts %}
+            <a class="list-group-item list-group-item-action" href="{{ r.url }}">
+              <div class="d-flex justify-content-between">
+                <div class="fw-semibold">{{ r.label }}</div>
+                <div class="text-muted small">{{ "%.3f"|format(r.score) }}</div>
+              </div>
+              {% if r.snippet %}
+                <div class="text-muted small mt-1">{{ r.snippet }}</div>
+              {% endif %}
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if ai_results.transactions %}
+        <div class="fw-semibold mb-2">Transactions</div>
+        <div class="list-group mb-3">
+          {% for r in ai_results.transactions %}
+            <a class="list-group-item list-group-item-action" href="{{ r.url }}">
+              <div class="d-flex justify-content-between">
+                <div class="fw-semibold">{{ r.label }}</div>
+                <div class="text-muted small">{{ "%.3f"|format(r.score) }}</div>
+              </div>
+              {% if r.snippet %}
+                <div class="text-muted small mt-1">{{ r.snippet }}</div>
+              {% endif %}
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if ai_results.professionals %}
+        <div class="fw-semibold mb-2">Professionals</div>
+        <div class="list-group mb-3">
+          {% for r in ai_results.professionals %}
+            <a class="list-group-item list-group-item-action" href="{{ r.url }}">
+              <div class="d-flex justify-content-between">
+                <div class="fw-semibold">{{ r.label }}</div>
+                <div class="text-muted small">{{ "%.3f"|format(r.score) }}</div>
+              </div>
+              {% if r.snippet %}
+                <div class="text-muted small mt-1">{{ r.snippet }}</div>
+              {% endif %}
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if ai_results.engagements %}
+        <div class="fw-semibold mb-2">Engagements</div>
+        <div class="list-group">
+          {% for r in ai_results.engagements %}
+            {% if r.url %}
+              <a class="list-group-item list-group-item-action" href="{{ r.url }}">
+            {% else %}
+              <div class="list-group-item">
+            {% endif %}
+                <div class="d-flex justify-content-between">
+                  <div class="fw-semibold">{{ r.label }}</div>
+                  <div class="text-muted small">{{ "%.3f"|format(r.score) }}</div>
+                </div>
+                {% if r.snippet %}
+                  <div class="text-muted small mt-1">{{ r.snippet }}</div>
+                {% endif %}
+            {% if r.url %}
+              </a>
+            {% else %}
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
+
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}
