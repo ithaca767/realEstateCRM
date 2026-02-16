@@ -54,6 +54,12 @@
 
 <body class="app-bg {% block body_class %}{% endblock %}">
 
+{% if APP_ENV != "PROD" %}
+  <div class="env-banner text-center py-1 small fw-semibold">
+    ⚠️ LOCAL DEVELOPMENT ENVIRONMENT — NOT PRODUCTION
+  </div>
+{% endif %}
+
 {% set hide_nav = hide_nav|default(false) %}
 
 {% if not hide_nav %}
@@ -79,15 +85,15 @@
     </button>
 
     <div class="collapse navbar-collapse" id="mainNav">
-      <ul class="navbar-nav ms-0 ms-md-2 w-100 d-flex">
 
+      <!-- LEFT: primary navigation -->
+      <ul class="navbar-nav ms-0 ms-md-2">
         <li class="nav-item">
           <a href="{{ url_for('dashboard') }}"
              class="nav-link {% if active_page == 'dashboard' %}fw-semibold{% endif %}">
             Dashboard
           </a>
         </li>
-
 
         <li class="nav-item">
           <a href="{{ url_for('contacts') }}"
@@ -111,58 +117,122 @@
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('openhouse_list') }}">Open Houses</a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('templates_index') }}">Templates</a>
-        </li>
-        
-      {% if current_user.is_authenticated and current_user.role == "owner" %}
-        <li class="nav-item">
-          <a class="nav-link {% if active_page == 'admin' %}fw-semibold{% endif %}"
-             href="{{ url_for('admin_home') }}">
-            Admin
+          <a class="nav-link {% if active_page == 'open_houses' %}fw-semibold{% endif %}"
+             href="{{ url_for('openhouse_list') }}">
+            Open Houses
           </a>
         </li>
-      {% endif %}
-        
-        <li class="nav-item">
-          <a class="nav-link" href="{{ calendar_feed_url }}" target="_blank">Calendar Feed</a>
+
+        <!-- More dropdown -->
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if active_page in ['templates','admin'] %}fw-semibold{% endif %}"
+             href="#"
+             id="navMoreDropdown"
+             role="button"
+             data-bs-toggle="dropdown"
+             aria-expanded="false">
+            More
+          </a>
+          <ul class="dropdown-menu" aria-labelledby="navMoreDropdown">
+            <li>
+              <a class="dropdown-item {% if active_page == 'templates' %}active{% endif %}"
+                 href="{{ url_for('templates_index') }}">
+                Templates
+              </a>
+            </li>
+
+            <li>
+              <a class="dropdown-item" href="{{ calendar_feed_url }}" target="_blank" rel="noopener">
+                Calendar Feed
+              </a>
+            </li>
+
+            {% if current_user.is_authenticated and current_user.role == "owner" %}
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <a class="dropdown-item {% if active_page == 'admin' %}active{% endif %}"
+                   href="{{ url_for('admin_home') }}">
+                  Admin
+                </a>
+              </li>
+            {% endif %}
+          </ul>
         </li>
-        {% if current_user.is_authenticated %}
-          <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('account') }}">Account</a>
-          </li>
-        {% endif %}
-
-          <form class="d-flex ms-2" method="GET" action="{{ url_for('global_search') }}">
-            <input
-              class="form-control form-control-sm"
-              type="search"
-              name="q"
-              placeholder="Search"
-              aria-label="Search"
-            />
-          </form>
-        
-        {% if current_user.is_authenticated %}
-          <li class="nav-item ms-auto">
-            <a class="nav-link text-danger" href="{{ url_for('logout') }}">Logout</a>
-          </li>
-        {% endif %}
-
       </ul>
+
+      <!-- RIGHT: utilities -->
+      <div class="d-flex align-items-center gap-2 ms-auto">
+
+        <!-- Search button -->
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary"
+                data-bs-toggle="modal"
+                data-bs-target="#globalSearchModal"
+                aria-label="Search">
+          <!-- Bootstrap Icons optional. If you do not use icons, replace with text "Search" -->
+          <span aria-hidden="true">Search</span>
+        </button>
+
+        {% if current_user.is_authenticated %}
+          <!-- Account dropdown -->
+          <div class="dropdown">
+            <button class="btn btn-sm btn-outline-primary dropdown-toggle"
+                    type="button"
+                    id="accountDropdown"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false">
+              Account
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountDropdown">
+              <li>
+                <a class="dropdown-item" href="{{ url_for('account') }}">Account</a>
+              </li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <a class="dropdown-item text-danger" href="{{ url_for('logout') }}">Logout</a>
+              </li>
+            </ul>
+          </div>
+        {% endif %}
+
+      </div>
     </div>
   </div>
 </nav>
 {% endif %}
 
-{% if APP_ENV != "PROD" %}
-  <div class="env-banner text-center py-1 small fw-semibold">
-    ⚠️ LOCAL DEVELOPMENT ENVIRONMENT — NOT PRODUCTION
+<!-- Global Search Modal -->
+<div class="modal fade" id="globalSearchModal" tabindex="-1" aria-labelledby="globalSearchModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <form method="GET" action="{{ url_for('global_search') }}">
+        <div class="modal-header">
+          <h5 class="modal-title" id="globalSearchModalLabel">Search</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <input
+            id="globalSearchInput"
+            class="form-control"
+            type="search"
+            name="q"
+            placeholder="Type to search..."
+            autocomplete="off"
+          />
+          <div class="form-text mt-2">Tip: press / or Ctrl+K to open search.</div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Search</button>
+        </div>
+      </form>
+
+    </div>
   </div>
-{% endif %}
+</div>
 
 {% block flashes %}
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -388,6 +458,47 @@
     return window.openTaskModal(url, "New Task");
   };
 </script>
+
+<script>
+  (function () {
+    const modalEl = document.getElementById('globalSearchModal');
+    const inputEl = document.getElementById('globalSearchInput');
+
+    if (modalEl && inputEl) {
+      modalEl.addEventListener('shown.bs.modal', function () {
+        inputEl.focus();
+        inputEl.select();
+      });
+    }
+
+    function openSearchModal() {
+      if (!modalEl) return;
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+    }
+
+    document.addEventListener('keydown', function (e) {
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+      const typing = (tag === 'input' || tag === 'textarea' || e.target.isContentEditable);
+
+      if (typing) return;
+
+      // "/" opens search
+      if (e.key === '/') {
+        e.preventDefault();
+        openSearchModal();
+        return;
+      }
+
+      // Ctrl+K (or Cmd+K on Mac) opens search
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        openSearchModal();
+      }
+    });
+  })();
+</script>
+
 
 {% endblock %}
 
