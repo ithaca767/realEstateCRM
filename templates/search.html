@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+{% set premium_active = premium_active|default(false) %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
@@ -30,31 +31,140 @@
         </div>
       {% endif %}
 			
-			{% if q and q|length >= 2 %}
-			  <div class="mt-2 d-flex gap-2">
-			    {% if not ai %}
-			      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('global_search') }}?q={{ q|urlencode }}&ai=1">Broaden with AI</a>
-			    {% else %}
-			      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('global_search') }}?q={{ q|urlencode }}">AI broadening is on (turn off)</a>
-			    {% endif %}
-			  </div>
-			{% endif %}
-
-      {% if q and q|length >= 2 and current_user.id == 1 %}
-        <form method="POST" action="{{ url_for('admin_rebuild_search_index') }}" class="mt-2">
-          <input type="hidden" name="q" value="{{ q }}">
-          <input type="hidden" name="ai" value="{{ '1' if ai else '' }}">
-          <button class="btn btn-sm btn-outline-secondary" type="submit">
-            Rebuild AI index
+      {% if q and q|length >= 2 %}
+        {% set ai_panel_open = ai or answer %}
+      
+        <div class="mt-2">
+          <button
+            class="btn btn-sm btn-outline-primary"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#aiAssistPanel"
+            aria-expanded="{{ 'true' if ai_panel_open else 'false' }}"
+            aria-controls="aiAssistPanel"
+          >
+            AI Assist
+            {% if ai or answer %}
+              <span class="badge bg-primary-subtle text-dark border ms-2">On</span>
+            {% endif %}
           </button>
-        </form>
+      
+          <div class="collapse {% if ai_panel_open %}show{% endif %} mt-2" id="aiAssistPanel">
+            <div class="border rounded p-2 bg-light">
+              <div class="d-flex flex-wrap gap-2">
+      
+                {% if not ai %}
+                  <a class="btn btn-sm btn-outline-primary"
+                     href="{{ url_for('global_search') }}?q={{ q|urlencode }}&ai=1{% if answer %}&answer=1{% endif %}">
+                    Broaden with AI
+                  </a>
+                {% else %}
+                  <a class="btn btn-sm btn-outline-secondary"
+                     href="{{ url_for('global_search') }}?q={{ q|urlencode }}{% if answer %}&answer=1{% endif %}">
+                    AI Broadening is on (turn off)
+                  </a>
+                {% endif %}
+      
+                {% if premium_active %}
+                  {% if not answer %}
+                    <a class="btn btn-sm btn-outline-success"
+                       href="{{ url_for('global_search') }}?q={{ q|urlencode }}{% if ai %}&ai=1{% endif %}&answer=1">
+                      Answer with AI
+                    </a>
+                  {% else %}
+                    <a class="btn btn-sm btn-outline-secondary"
+                       href="{{ url_for('global_search') }}?q={{ q|urlencode }}{% if ai %}&ai=1{% endif %}">
+                      AI Answer Mode is on (turn off)
+                    </a>
+                  {% endif %}
+                {% else %}
+                  <button class="btn btn-sm btn-outline-secondary" type="button" disabled>
+                    Answer with AI (Premium)
+                  </button>
+                {% endif %}
+      
+                {% if current_user.id == 1 %}
+                  <form method="POST" action="{{ url_for('admin_rebuild_search_index') }}" class="m-0">
+                    <input type="hidden" name="q" value="{{ q }}">
+                    <input type="hidden" name="ai" value="{{ '1' if ai else '' }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">
+                      Rebuild AI index
+                    </button>
+                  </form>
+                {% endif %}
+      
+              </div>
+      
+              <div class="text-muted small mt-2">
+                Use AI Assist to broaden matches. Premium enables grounded answers with citations.
+              </div>
+            </div>
+          </div>
+        </div>
       {% endif %}
       
     </form>
   </div>
 </div>
 
-{% if q and (results.contacts or results.engagements) %}
+{% if premium_active and answer and answer_result and q and q|length >= 2 %}
+  <div class="card mt-3">
+    <div class="card-header bg-success-subtle text-dark fw-semibold">
+      AI Answer
+    </div>
+    <div class="card-body">
+      {% if answer_result.no_answer %}
+        <div class="text-muted">No grounded answer found in your CRM data.</div>
+        {% if answer_result.warning %}
+          <div class="alert alert-warning mt-2 mb-0">{{ answer_result.warning }}</div>
+        {% endif %}
+      {% else %}
+        <div class="mb-2">{{ answer_result.answer }}</div>
+
+        <div class="mt-2">
+          <div class="small text-muted fw-semibold mb-1">Sources</div>
+        
+          <div class="d-flex flex-column gap-2 mt-2">
+            {% for c in answer_result.citations %}
+              <div class="border rounded p-2 bg-light">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div class="fw-semibold small">
+                    {% if c.url %}
+                      <a href="{{ c.url }}">{{ c.label or (c.type ~ ' #' ~ c.id) }}</a>
+                    {% else %}
+                      {{ c.label or (c.type ~ ' #' ~ c.id) }}
+                    {% endif %}
+                  </div>
+                  <span class="badge bg-secondary-subtle text-dark border">
+                    {{ c.type }}
+                  </span>
+                </div>
+          
+                {% if c.snippet %}
+                  <div class="text-muted small mt-1">
+                    {{ c.snippet }}
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="text-muted small mt-2">
+          Confidence: {{ (answer_result.confidence * 100)|round|int }}
+        </div>
+
+        {% if answer_result.warning %}
+          <div class="alert alert-warning mt-2 mb-0">{{ answer_result.warning }}</div>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+{% set has_valid_answer = premium_active and answer and answer_result and not answer_result.no_answer %}
+
+{% if q and (results.contacts or results.engagements or results.transactions or results.professionals) %}
 
   <div class="card mt-3">
     <div class="card-header bg-primary-subtle text-dark fw-semibold">
@@ -142,13 +252,14 @@
     </div>
   </div>
 
-{% elif q %}
+{% elif q and q|length >= 2 and not has_valid_answer %}
   <div class="card mt-3">
     <div class="card-body">
       <div class="text-muted">No results.</div>
     </div>
   </div>
 {% endif %}
+
 {% if ai and ai_results and (ai_results.contacts or ai_results.engagements or ai_results.transactions or ai_results.professionals) %}
   <div class="card mt-3">
     <div class="card-header bg-info-subtle text-dark fw-semibold">

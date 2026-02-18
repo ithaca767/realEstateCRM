@@ -1,4 +1,6 @@
 import re
+import json
+
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 
@@ -139,4 +141,42 @@ def parse_engagement_summary_output(raw_output: str) -> Dict[str, object]:
         "one_sentence_summary": one_sentence.strip(),
         "crm_narrative_summary": crm_narrative.strip(),
         "suggested_follow_up_items": follow_up_items,
+    }
+
+# services/ai_parsers.py (additions)
+
+def parse_ai_answer_json(raw_text: str) -> dict:
+    """
+    Strict parse. Fail closed.
+    Expected keys: no_answer(bool), answer(str), citations(list), confidence(float), notes(optional)
+    """
+    try:
+        data = json.loads((raw_text or "").strip())
+    except Exception:
+        return {"no_answer": True, "answer": "", "citations": [], "confidence": 0.0, "notes": "Invalid AI response."}
+
+    no_answer = bool(data.get("no_answer"))
+    answer = (data.get("answer") or "").strip()
+    citations = data.get("citations") or []
+    confidence = data.get("confidence")
+
+    try:
+        confidence = float(confidence)
+    except Exception:
+        confidence = 0.0
+
+    notes = (data.get("notes") or "").strip() if isinstance(data.get("notes"), str) else ""
+
+    if no_answer:
+        return {"no_answer": True, "answer": "", "citations": [], "confidence": 0.0, "notes": notes or "No answer."}
+
+    if not isinstance(citations, list):
+        citations = []
+
+    return {
+        "no_answer": False,
+        "answer": answer,
+        "citations": citations,
+        "confidence": confidence,
+        "notes": notes,
     }

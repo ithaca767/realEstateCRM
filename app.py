@@ -356,6 +356,7 @@ class User(UserMixin):
         self.last_name = row.get("last_name")
         self.role = row.get("role", "owner")
         self._is_active = row.get("is_active", True)
+        self.ai_premium_enabled = bool(row.get("ai_premium_enabled", False))
 
     def get_id(self):
         return str(self.id)
@@ -458,7 +459,7 @@ def load_user(user_id):
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT id, email, first_name, last_name, role, is_active
+        SELECT id, email, first_name, last_name, role, is_active, ai_premium_enabled
         FROM users
         WHERE id = %s
         """,
@@ -5282,45 +5283,6 @@ def edit_contact(contact_id):
         activepipe_payload=activepipe_payload,
     )
 
-@app.route("/contacts/search")
-@login_required
-def contacts_search():
-    q = (request.args.get("q") or "").strip()
-    if len(q) < 2:
-        return jsonify([])
-
-    conn = get_db()
-    try:
-        cur = conn.cursor()
-        like = f"%{q}%"
-        cur.execute(
-            """
-            SELECT
-              id,
-              COALESCE(
-                NULLIF(TRIM(name), ''),
-                NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
-                '(Unnamed)'
-              ) AS name,
-              email,
-              phone
-            FROM contacts
-            WHERE user_id = %s
-              AND (
-                name ILIKE %s OR
-                CONCAT_WS(' ', first_name, last_name) ILIKE %s OR
-                email ILIKE %s OR
-                phone ILIKE %s
-              )
-            ORDER BY name ASC
-            LIMIT 10
-            """,
-            (current_user.id, like, like, like, like),
-        )
-        return jsonify(cur.fetchall() or [])
-    finally:
-        conn.close()
-
 @app.route("/contacts/<int:contact_id>/associations/add", methods=["POST"])
 @login_required
 def add_contact_association(contact_id):
@@ -5629,160 +5591,6 @@ def contact_set_state(contact_id):
 
     return redirect(url_for("contacts", tab="imported"))
 
-@app.route("/engagements/search")
-@login_required
-def engagements_search():
-    q = (request.args.get("q") or "").strip()
-    contact_id_raw = (request.args.get("contact_id") or "").strip()
-
-    # Contact required for this UX
-    if not contact_id_raw:
-        return jsonify([])
-
-    try:
-        contact_id = int(contact_id_raw)
-    except ValueError:
-        return jsonify([])
-
-    # Match the contact/transaction search behavior
-    if len(q) < 2:
-        return jsonify([])
-
-    like = f"%{q}%"
-
-    conn = get_db()
-    try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        # NOTE:
-        # This assumes common columns: engagements.id, engagements.user_id, engagements.contact_id,
-        # plus occurred_at, engagement_type, summary/notes.
-        #
-        # If your column names differ, tell me what they are and I’ll adjust in one pass.
-        cur.execute(
-            """
-            SELECT
-                id,
-                occurred_at,
-                engagement_type,
-                summary_clean,
-                notes
-            FROM engagements
-            WHERE user_id = %s
-              AND contact_id = %s
-              AND (
-                engagement_type ILIKE %s
-                OR COALESCE(summary_clean, '') ILIKE %s
-                OR COALESCE(notes, '') ILIKE %s
-              )
-            ORDER BY occurred_at DESC, id DESC
-            LIMIT 10
-            """,
-            (current_user.id, contact_id, like, like, like),
-        )
-
-        rows = cur.fetchall() or []
-        out = []
-        for r in rows:
-            occurred = r.get("occurred_at")
-        
-            summary = (r.get("summary_clean") or "").strip()
-            if not summary:
-                summary = (r.get("notes") or "").strip()
-        
-            out.append(
-                {
-                    "id": r["id"],
-                    "occurred_at": occurred.date().isoformat() if occurred else "",
-                    "type_label": (r.get("engagement_type") or "").replace("_", " ").title(),
-                    "summary": summary,
-                }
-            )
-
-        return jsonify(out)
-
-    finally:
-        conn.close()
-
-@app.route("/transactions/search")
-@login_required
-def transactions_search():
-    q = (request.args.get("q") or "").strip()
-    contact_id_raw = (request.args.get("contact_id") or "").strip()
-
-    # For this UX, contact is required
-    if not contact_id_raw:
-        return jsonify([])
-
-    try:
-        contact_id = int(contact_id_raw)
-    except ValueError:
-        return jsonify([])
-
-    # Match the Contact search behavior
-    if len(q) < 2:
-        return jsonify([])
-
-    status_labels = dict(TRANSACTION_STATUSES)
-    like = f"%{q}%"
-
-    conn = get_db()
-    try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        cur.execute(
-            """
-            SELECT
-                id,
-                status,
-                transaction_type,
-                address,
-                expected_close_date,
-                updated_at
-            FROM transactions
-            WHERE contact_id = %s
-              AND user_id = %s
-              AND (
-                address ILIKE %s
-                OR status ILIKE %s
-                OR transaction_type ILIKE %s
-              )
-            ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
-            LIMIT 10
-            """,
-            (contact_id, current_user.id, like, like, like),
-        )
-
-        rows = cur.fetchall() or []
-        out = []
-        for r in rows:
-            out.append(
-                {
-                    "id": r["id"],
-                    "address": r.get("address") or "",
-                    "status_label": status_labels.get(r.get("status") or "", r.get("status") or ""),
-                    "transaction_type": r.get("transaction_type") or "",
-                    "expected_close_date": (
-                        r["expected_close_date"].isoformat()
-                        if r.get("expected_close_date")
-                        else ""
-                    ),
-                }
-            )
-
-        return jsonify(out)
-
-    finally:
-        conn.close()
-
-@app.route("/transactions")
-@login_required
-def transactions():
-    # Temporary placeholder until list UI is built
-    return render_template(
-        "transactions/index.html",
-        active_page="transactions",
-    )
 
 @app.route("/contacts/<int:contact_id>/engagements/add", methods=["POST"])
 @login_required
@@ -6186,54 +5994,6 @@ def edit_engagement(engagement_id):
         return_tab=return_tab,
         active_page="contacts",
     )
-
-@app.route("/search")
-@login_required
-def global_search():
-    q = (request.args.get("q") or "").strip()
-    ai = (request.args.get("ai") or "").strip().lower() in ("1", "true", "yes", "on")
-
-    conn = get_db()
-    try:
-        from services.search_service import search_all
-        results = search_all(conn, current_user.id, q)
-        ai_results = None
-        if ai:
-            from services.search_service import semantic_broaden
-            ai_results = semantic_broaden(conn, current_user.id, q, per_type_limit=10)
-
-        for c in results["contacts"]:
-            c["url"] = url_for("edit_contact", contact_id=c["id"])
-
-        for e in results["engagements"]:
-            cid = e.get("contact_id")
-            if cid:
-                e["url"] = url_for("edit_contact", contact_id=cid) + "#engagements"
-            else:
-                e["url"] = ""
-        
-        for tx in results.get("transactions", []):
-            tx["url"] = url_for("edit_transaction", transaction_id=tx["id"])
-        
-        for p in results.get("professionals", []):
-            p["url"] = url_for("edit_professional", prof_id=p["id"])
-        if ai_results:
-            for r in ai_results.get("contacts", []):
-                r["url"] = url_for("edit_contact", contact_id=r["id"])
-        
-            for r in ai_results.get("engagements", []):
-                cid = r.get("contact_id")
-                r["url"] = url_for("edit_contact", contact_id=cid) + "#engagements" if cid else ""
-        
-            for r in ai_results.get("transactions", []):
-                r["url"] = url_for("edit_transaction", transaction_id=r["id"])
-        
-            for r in ai_results.get("professionals", []):
-                r["url"] = url_for("edit_professional", prof_id=r["id"])
-
-        return render_template("search.html", q=q, results=results, ai=ai, ai_results=ai_results)
-    finally:
-        conn.close()
 
 @app.route(
     "/integrations/activepipe/contact/<int:contact_id>/export.csv",
@@ -7896,45 +7656,6 @@ def edit_professional(prof_id):
         active_page="professionals"
     )
 
-@app.route("/professionals/search")
-@login_required
-def professionals_search():
-    q = (request.args.get("q") or "").strip()
-    if len(q) < 2:
-        return jsonify([])
-
-    like = f"%{q}%"
-    conn = get_db()
-    try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute(
-            """
-            SELECT id, name, company, category
-            FROM professionals
-            WHERE user_id = %s
-              AND (
-                    name ILIKE %s
-                 OR COALESCE(company, '') ILIKE %s
-                 OR COALESCE(category, '') ILIKE %s
-              )
-            ORDER BY name ASC, id DESC
-            LIMIT 10
-            """,
-            (current_user.id, like, like, like),
-        )
-        rows = cur.fetchall() or []
-        return jsonify([
-            {
-                "id": r["id"],
-                "name": r.get("name") or "",
-                "category": r.get("category") or "",
-                "company": r.get("company") or "",
-            }
-            for r in rows
-        ])
-    finally:
-        conn.close()
-
 @app.route("/professionals/<int:prof_id>/delete", methods=["POST"])
 @login_required
 def delete_professional(prof_id):
@@ -9495,6 +9216,63 @@ def api_reminders_due():
     conn.close()
     return jsonify(reminders)
 
+@app.route("/api/search/answer", methods=["POST"])
+@login_required
+def api_search_answer():
+    payload = request.get_json(silent=True) or {}
+    q = (payload.get("q") or "").strip()
+
+    if len(q) < 2:
+        return jsonify({
+            "ok": True,
+            "no_answer": True,
+            "answer": "",
+            "citations": [],
+            "confidence": 0.0,
+            "warning": "Query too short.",
+        })
+
+    premium_active = (
+        getattr(current_user, "id", None) == 1
+        or bool(getattr(current_user, "ai_premium_enabled", False))
+    )
+
+    if not premium_active:
+        return jsonify({
+            "ok": True,
+            "no_answer": True,
+            "answer": "",
+            "citations": [],
+            "confidence": 0.0,
+            "warning": "AI Answer Mode is not enabled for this account.",
+        }), 403
+
+    def _build_search_url(obj_type: str, obj_id: int, contact_id: Optional[int]) -> str:
+        t = (obj_type or "").strip().lower()
+        if t == "contact":
+            return url_for("edit_contact", contact_id=obj_id)
+        if t == "engagement":
+            return (url_for("edit_contact", contact_id=contact_id) + "#engagements") if contact_id else ""
+        if t == "transaction":
+            return url_for("edit_transaction", transaction_id=obj_id)
+        if t == "professional":
+            return url_for("edit_professional", prof_id=obj_id)
+        return ""
+
+    conn = get_db()
+    try:
+        from services.ai_search import generate_answer
+        result = generate_answer(
+            conn,
+            current_user.id,
+            q,
+            per_type_limit=10,
+            url_builder=_build_search_url,
+        )
+        return jsonify(result)
+    finally:
+        conn.close()
+
 @app.route("/followups.ics")
 def followups_ics():
     """
@@ -10430,6 +10208,321 @@ def admin_rebuild_search_index():
 
     flash("Search index rebuilt.", "success")
     return redirect(url_for("global_search", q=q, ai=ai))
+@app.route("/contacts/search")
+@login_required
+def contacts_search():
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify([])
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        like = f"%{q}%"
+        cur.execute(
+            """
+            SELECT
+              id,
+              COALESCE(
+                NULLIF(TRIM(name), ''),
+                NULLIF(TRIM(CONCAT_WS(' ', first_name, last_name)), ''),
+                '(Unnamed)'
+              ) AS name,
+              email,
+              phone
+            FROM contacts
+            WHERE user_id = %s
+              AND (
+                name ILIKE %s OR
+                CONCAT_WS(' ', first_name, last_name) ILIKE %s OR
+                email ILIKE %s OR
+                phone ILIKE %s
+              )
+            ORDER BY name ASC
+            LIMIT 10
+            """,
+            (current_user.id, like, like, like, like),
+        )
+        return jsonify(cur.fetchall() or [])
+    finally:
+        conn.close()
+
+@app.route("/engagements/search")
+@login_required
+def engagements_search():
+    q = (request.args.get("q") or "").strip()
+    contact_id_raw = (request.args.get("contact_id") or "").strip()
+
+    # Contact required for this UX
+    if not contact_id_raw:
+        return jsonify([])
+
+    try:
+        contact_id = int(contact_id_raw)
+    except ValueError:
+        return jsonify([])
+
+    # Match the contact/transaction search behavior
+    if len(q) < 2:
+        return jsonify([])
+
+    like = f"%{q}%"
+
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # NOTE:
+        # This assumes common columns: engagements.id, engagements.user_id, engagements.contact_id,
+        # plus occurred_at, engagement_type, summary/notes.
+        #
+        # If your column names differ, tell me what they are and I’ll adjust in one pass.
+        cur.execute(
+            """
+            SELECT
+                id,
+                occurred_at,
+                engagement_type,
+                summary_clean,
+                notes
+            FROM engagements
+            WHERE user_id = %s
+              AND contact_id = %s
+              AND (
+                engagement_type ILIKE %s
+                OR COALESCE(summary_clean, '') ILIKE %s
+                OR COALESCE(notes, '') ILIKE %s
+              )
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT 10
+            """,
+            (current_user.id, contact_id, like, like, like),
+        )
+
+        rows = cur.fetchall() or []
+        out = []
+        for r in rows:
+            occurred = r.get("occurred_at")
+        
+            summary = (r.get("summary_clean") or "").strip()
+            if not summary:
+                summary = (r.get("notes") or "").strip()
+        
+            out.append(
+                {
+                    "id": r["id"],
+                    "occurred_at": occurred.date().isoformat() if occurred else "",
+                    "type_label": (r.get("engagement_type") or "").replace("_", " ").title(),
+                    "summary": summary,
+                }
+            )
+
+        return jsonify(out)
+
+    finally:
+        conn.close()
+
+@app.route("/transactions/search")
+@login_required
+def transactions_search():
+    q = (request.args.get("q") or "").strip()
+    contact_id_raw = (request.args.get("contact_id") or "").strip()
+
+    # For this UX, contact is required
+    if not contact_id_raw:
+        return jsonify([])
+
+    try:
+        contact_id = int(contact_id_raw)
+    except ValueError:
+        return jsonify([])
+
+    # Match the Contact search behavior
+    if len(q) < 2:
+        return jsonify([])
+
+    status_labels = dict(TRANSACTION_STATUSES)
+    like = f"%{q}%"
+
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute(
+            """
+            SELECT
+                id,
+                status,
+                transaction_type,
+                address,
+                expected_close_date,
+                updated_at
+            FROM transactions
+            WHERE contact_id = %s
+              AND user_id = %s
+              AND (
+                address ILIKE %s
+                OR status ILIKE %s
+                OR transaction_type ILIKE %s
+              )
+            ORDER BY COALESCE(expected_close_date, updated_at) DESC, id DESC
+            LIMIT 10
+            """,
+            (contact_id, current_user.id, like, like, like),
+        )
+
+        rows = cur.fetchall() or []
+        out = []
+        for r in rows:
+            out.append(
+                {
+                    "id": r["id"],
+                    "address": r.get("address") or "",
+                    "status_label": status_labels.get(r.get("status") or "", r.get("status") or ""),
+                    "transaction_type": r.get("transaction_type") or "",
+                    "expected_close_date": (
+                        r["expected_close_date"].isoformat()
+                        if r.get("expected_close_date")
+                        else ""
+                    ),
+                }
+            )
+
+        return jsonify(out)
+
+    finally:
+        conn.close()
+
+@app.route("/transactions")
+@login_required
+def transactions():
+    # Temporary placeholder until list UI is built
+    return render_template(
+        "transactions/index.html",
+        active_page="transactions",
+    )
+
+@app.route("/professionals/search")
+@login_required
+def professionals_search():
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify([])
+
+    like = f"%{q}%"
+    conn = get_db()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT id, name, company, category
+            FROM professionals
+            WHERE user_id = %s
+              AND (
+                    name ILIKE %s
+                 OR COALESCE(company, '') ILIKE %s
+                 OR COALESCE(category, '') ILIKE %s
+              )
+            ORDER BY name ASC, id DESC
+            LIMIT 10
+            """,
+            (current_user.id, like, like, like),
+        )
+        rows = cur.fetchall() or []
+        return jsonify([
+            {
+                "id": r["id"],
+                "name": r.get("name") or "",
+                "category": r.get("category") or "",
+                "company": r.get("company") or "",
+            }
+            for r in rows
+        ])
+    finally:
+        conn.close()
+
+@app.route("/search")
+@login_required
+def global_search():
+    q = (request.args.get("q") or "").strip()
+
+    ai = (request.args.get("ai") or "").strip().lower() in ("1", "true", "yes", "on")
+    answer = (request.args.get("answer") or "").strip().lower() in ("1", "true", "yes", "on")
+
+    def _build_search_url(obj_type: str, obj_id: int, contact_id: Optional[int]) -> str:
+        t = (obj_type or "").strip().lower()
+        if t == "contact":
+            return url_for("edit_contact", contact_id=obj_id)
+        if t == "engagement":
+            return (url_for("edit_contact", contact_id=contact_id) + "#engagements") if contact_id else ""
+        if t == "transaction":
+            return url_for("edit_transaction", transaction_id=obj_id)
+        if t == "professional":
+            return url_for("edit_professional", prof_id=obj_id)
+        return ""
+
+    conn = get_db()
+    try:
+        from services.search_service import search_all
+
+        results = search_all(conn, current_user.id, q)
+        ai_results = None
+
+        if ai:
+            from services.search_service import semantic_broaden
+            ai_results = semantic_broaden(conn, current_user.id, q, per_type_limit=10)
+
+        # Decorate normal results with urls
+        for c in results["contacts"]:
+            c["url"] = url_for("edit_contact", contact_id=c["id"])
+        for e in results["engagements"]:
+            cid = e.get("contact_id")
+            e["url"] = url_for("edit_contact", contact_id=cid) + "#engagements" if cid else ""
+        for tx in results.get("transactions", []):
+            tx["url"] = url_for("edit_transaction", transaction_id=tx["id"])
+        for p in results.get("professionals", []):
+            p["url"] = url_for("edit_professional", prof_id=p["id"])
+
+        if ai_results:
+            for r in ai_results.get("contacts", []):
+                r["url"] = url_for("edit_contact", contact_id=r["id"])
+            for r in ai_results.get("engagements", []):
+                cid = r.get("contact_id")
+                r["url"] = url_for("edit_contact", contact_id=cid) + "#engagements" if cid else ""
+            for r in ai_results.get("transactions", []):
+                r["url"] = url_for("edit_transaction", transaction_id=r["id"])
+            for r in ai_results.get("professionals", []):
+                r["url"] = url_for("edit_professional", prof_id=r["id"])
+        premium_active = (
+            getattr(current_user, "id", None) == 1
+            or bool(getattr(current_user, "ai_premium_enabled", False))
+        )
+        
+        
+        answer_result = None
+        
+        if answer and q and len(q) >= 2 and premium_active:
+            from services.ai_search import generate_answer
+            answer_result = generate_answer(
+                conn,
+                current_user.id,
+                q,
+                per_type_limit=10,
+                url_builder=_build_search_url,
+            )
+
+        return render_template(
+            "search.html",
+            q=q,
+            results=results,
+            ai=ai,
+            ai_results=ai_results,
+            answer=answer,
+            answer_result=answer_result,
+            premium_active=premium_active,
+        )
+    finally:
+        conn.close()
 
 @app.route("/account", methods=["GET", "POST"])
 @login_required
