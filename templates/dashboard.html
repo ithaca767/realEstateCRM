@@ -318,13 +318,13 @@
                 
                               <div class="mt-1">
                                 {% if c["has_buyer_profile"] %}
-                                  <span class="badge rounded-pill bg-success-subtle text-success-emphasis">Buyer</span>
+                                  <span class="badge bg-success-subtle text-success-emphasis">Buyer</span>
                                 {% endif %}
                                 {% if c["has_seller_profile"] %}
-                                  <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">Seller</span>
+                                  <span class="badge bg-primary-subtle text-primary-emphasis">Seller</span>
                                 {% endif %}
                                 {% for b in c["active_reasons"][:2] %}
-                                  <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">
+                                  <span class="badge bg-secondary-subtle text-secondary-emphasis">
                                     {{ b }}
                                   </span>
                                 {% endfor %}
