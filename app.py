@@ -3636,22 +3636,28 @@ def dashboard():
         elif due <= cutoff:
             followups_upcoming.append(row)
 
-    # Today's Snapshot: Follow-ups due today (NY date)
-    today_ny = datetime.now(get_user_tz()).date()
+    # Today's Snapshot: Follow-ups due today (NY date) but not overdue
+    tz = get_user_tz()
+    today_ny = datetime.now(tz).date()
+    now_utc = datetime.now(timezone.utc)
+    
     snapshot_followups_today = []
-
+    
     for row in followup_rows:
         due = row.get("follow_up_due_at")
         if not due:
             continue
+    
+        # Normalize to aware UTC if naive
         if due.tzinfo is None:
             due = due.replace(tzinfo=timezone.utc)
+    
         try:
-            if due.astimezone(get_user_tz()).date() == today_ny:
+            # Exclude overdue items so they cannot appear twice
+            if due >= now_utc and due.astimezone(tz).date() == today_ny:
                 snapshot_followups_today.append(row)
         except Exception:
             pass
-
     def _clean_snippet(s, max_len=180):
         s = (s or "").strip()
         if not s:
