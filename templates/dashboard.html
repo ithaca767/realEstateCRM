@@ -234,15 +234,15 @@
                                 Task
                               </span>
                           
-                          {% if item.snap_status == "overdue" %}
-                            <span class="badge bg-danger-subtle text-danger-emphasis">
-                              Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
-                            </span>
-                          {% else %}
-                            <span class="badge bg-primary-subtle text-primary-emphasis">
-                              Due today
-                            </span>
-                          {% endif %}
+                              {% if item.snap_status == "overdue" %}
+                                <span class="badge bg-danger-subtle text-danger-emphasis">
+                                  Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
+                                </span>
+                              {% else %}
+                                <span class="badge bg-primary-subtle text-primary-emphasis">
+                                  Due today
+                                </span>
+                              {% endif %}
                           
                             </div>
               
