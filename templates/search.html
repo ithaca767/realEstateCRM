@@ -26,8 +26,8 @@
       <div class="text-muted small mt-2">Type at least 2 characters.</div>
 
       {% if ai and q and q|length >= 2 and (not ai_results or (not ai_results.contacts and not ai_results.engagements and not ai_results.transactions and not ai_results.professionals)) %}
-        <div class="alert alert-warning mt-3 mb-0">
-          AI broadening is on, but no AI matches were found. If this seems wrong, rebuild the AI index.
+        <div class="alert alert-secondary mt-3 mb-0">
+          No AI matches were found. Try refining your search terms.
         </div>
       {% endif %}
 			
@@ -94,7 +94,10 @@
                 {% endif %}
       
               </div>
-      
+                  <span id="aiModeSpinner" class="d-none mt-2">
+                    <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                    <span class="small text-muted ms-1">Generating…</span>
+                  </span>      
               <div class="text-muted small mt-2">
                 Use AI Assist to broaden matches. Premium enables grounded answers with citations.
               </div>
@@ -346,5 +349,26 @@
     </div>
   </div>
 {% endif %}
+<script>
+(function () {
+  const spinner = document.getElementById("aiModeSpinner");
+  if (!spinner) return;
+
+  document.querySelectorAll('a[href*="answer=1"], a[href*="&ai=1"]').forEach(btn => {
+    btn.addEventListener("click", function () {
+      spinner.classList.remove("d-none");
+
+      // Optional: prevent double-clicks
+      btn.classList.add("disabled");
+      btn.style.pointerEvents = "none";
+    });
+  });
+
+  // Hide spinner if user navigates back via cache
+  window.addEventListener("pageshow", function () {
+    spinner.classList.add("d-none");
+  });
+})();
+</script>
 
 {% endblock %}

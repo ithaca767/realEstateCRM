@@ -164,14 +164,15 @@
               <div class="card-header d-flex justify-content-between align-items-center">
                 <div>
                   <div class="fw-semibold">Today’s Snapshot</div>
-                  <div class="text-muted dash-secondary">Quick hits for {{ today|fmt_date }}</div>
+                  <div class="text-muted dash-secondary d-none d-lg-block">
+                    Quick hits for {{ today|fmt_date }}
+                  </div>
                 </div>
                 <div class="d-flex gap-2">
-                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tasks_list') }}">
-                    Tasks
-                  </a>
-                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('tasks_new') }}">
-                    Add Task
+                  <a class="btn btn-sm btn-outline-primary text-nowrap"
+                     href="{{ url_for('tasks_new') }}">
+                    <span class="d-inline d-sm-none">Add</span>
+                    <span class="d-none d-sm-inline">Add Task</span>
                   </a>
                 </div>
               </div>
@@ -182,30 +183,28 @@
                   <div class="mt-2">
               
                     {% for item in snapshot_items %}
+              
                       {% if item.item_type == "followup" %}
                         <div class="dash-snap-item">
+              
                           <div class="d-flex justify-content-between align-items-center">
                             <div class="d-flex align-items-center gap-2">
-                          
-                              <span class="badge bg-warning-subtle text-warning-emphasis">
-                                Followup
-                              </span>
-                          
+              
+                              <span class="badge bg-warning-subtle text-warning-emphasis">Followup</span>
+              
                               {% if item.snap_status == "overdue" %}
                                 <span class="badge bg-danger-subtle text-danger-emphasis">
                                   Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
                                 </span>
                               {% else %}
-                                <span class="badge bg-primary-subtle text-primary-emphasis">
-                                  Due today
-                                </span>
+                                <span class="badge bg-primary-subtle text-primary-emphasis">Due today</span>
                               {% endif %}
-                          
+              
                             </div>
               
                             {% if item.get('contact_id') %}
                               <a class="small text-decoration-none"
-                                 href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}#engagements">
+                                 href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}?engagement_id={{ item['engagement_id'] }}#pane-followups">
                                 See more
                               </a>
                             {% else %}
@@ -213,9 +212,13 @@
                             {% endif %}
                           </div>
               
+                          <div class="text-muted small mt-1">
+                            {{ item.get("follow_up_due_at")|fmt_dt }}
+                          </div>
+              
                           <div class="fw-semibold mt-1">
                             <a class="text-decoration-none"
-                               href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}#engagements">
+                               href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}?engagement_id={{ item['engagement_id'] }}#pane-followups">
                               {{ item.contact_name or "Unnamed Contact" }}
                             </a>
                           </div>
@@ -223,27 +226,25 @@
                           {% if item.snippet %}
                             <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
                           {% endif %}
+              
                         </div>
               
                       {% elif item.item_type == "task" %}
                         <div class="dash-snap-item">
+              
                           <div class="d-flex justify-content-between align-items-center">
                             <div class="d-flex align-items-center gap-2">
-                          
-                              <span class="badge bg-info-subtle text-info-emphasis">
-                                Task
-                              </span>
-                          
+              
+                              <span class="badge bg-info-subtle text-info-emphasis">Task</span>
+              
                               {% if item.snap_status == "overdue" %}
                                 <span class="badge bg-danger-subtle text-danger-emphasis">
                                   Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
                                 </span>
                               {% else %}
-                                <span class="badge bg-primary-subtle text-primary-emphasis">
-                                  Due today
-                                </span>
+                                <span class="badge bg-primary-subtle text-primary-emphasis">Due today</span>
                               {% endif %}
-                          
+              
                             </div>
               
                             <a class="small text-decoration-none"
@@ -251,6 +252,12 @@
                               See more
                             </a>
                           </div>
+              
+                          {% if item.get("due_ts") %}
+                            <div class="text-muted small mt-1">
+                              {{ item.get("due_ts")|fmt_dt }}
+                            </div>
+                          {% endif %}
               
                           <div class="fw-semibold mt-1">{{ item.title or "Task" }}</div>
               
@@ -270,8 +277,10 @@
                           {% if item.snippet %}
                             <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
                           {% endif %}
+              
                         </div>
                       {% endif %}
+              
                     {% endfor %}
               
                   </div>
@@ -292,7 +301,7 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                   <div>
                     <div class="fw-semibold">Active Contacts</div>
-                    <div class="text-muted small">
+                    <div class="text-muted small d-none d-lg-block">
                       Showing {{ active_contacts|length if active_contacts else 0 }} (max 20)
                     </div>
                   </div>
@@ -352,11 +361,14 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                   <div>
                     <div class="fw-semibold">Active Transactions</div>
-                    <div class="text-muted small">{{ active_transactions_total }} active</div>
+                    <div class="text-muted small d-none d-lg-block">
+                      {{ active_transactions_total }} active
+                    </div>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-primary"
+                  <button type="button" class="btn btn-sm btn-outline-primary text-nowrap"
                           data-bs-toggle="modal" data-bs-target="#txContactPickerModal">
-                    + Add Transaction
+                    <span class="d-inline d-sm-none">Add</span>
+                    <span class="d-none d-sm-inline">Add Transaction</span>
                   </button>
                 </div>
           
