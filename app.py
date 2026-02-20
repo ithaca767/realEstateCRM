@@ -10546,6 +10546,16 @@ def global_search():
             return url_for("edit_professional", prof_id=obj_id)
         return ""
 
+    def _is_empty_results(r: dict) -> bool:
+        if not r:
+            return True
+        return (
+            len(r.get("contacts", [])) == 0
+            and len(r.get("engagements", [])) == 0
+            and len(r.get("transactions", [])) == 0
+            and len(r.get("professionals", [])) == 0
+        )
+
     conn = get_db()
     try:
         from services.search_service import search_all
@@ -10558,9 +10568,9 @@ def global_search():
             ai_results = semantic_broaden(conn, current_user.id, q, per_type_limit=10)
 
         # Decorate normal results with urls
-        for c in results["contacts"]:
+        for c in results.get("contacts", []):
             c["url"] = url_for("edit_contact", contact_id=c["id"])
-        for e in results["engagements"]:
+        for e in results.get("engagements", []):
             cid = e.get("contact_id")
             e["url"] = url_for("edit_contact", contact_id=cid) + "#engagements" if cid else ""
         for tx in results.get("transactions", []):
@@ -10578,14 +10588,31 @@ def global_search():
                 r["url"] = url_for("edit_transaction", transaction_id=r["id"])
             for r in ai_results.get("professionals", []):
                 r["url"] = url_for("edit_professional", prof_id=r["id"])
+
         premium_active = (
             getattr(current_user, "id", None) == 1
             or bool(getattr(current_user, "ai_premium_enabled", False))
         )
-        
-        
+
+        # Guard: never run Answer with AI if there are no grounded results
+        if answer and premium_active and q and len(q) >= 2 and _is_empty_results(results):
+            answer_result = {
+                "answer": f"No matching records found for: {q}",
+                "confidence": 0,
+                "sources": [],
+            }
+            return render_template(
+                "search.html",
+                q=q,
+                results=results,
+                ai=ai,
+                ai_results=ai_results,
+                answer=answer,
+                answer_result=answer_result,
+                premium_active=premium_active,
+            )
+
         answer_result = None
-        
         if answer and q and len(q) >= 2 and premium_active:
             from services.ai_search import generate_answer
             answer_result = generate_answer(
@@ -10606,9 +10633,10 @@ def global_search():
             answer_result=answer_result,
             premium_active=premium_active,
         )
+
     finally:
         conn.close()
-
+        
 @app.route("/account", methods=["GET", "POST"])
 @login_required
 def account():
