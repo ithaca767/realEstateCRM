@@ -51,7 +51,7 @@
 
           <tbody>
             {% for t in tasks %}
-              <tr>
+              <tr class="{% if t.is_overdue %}task-overdue{% endif %}">
                 <td>
                   <div class="fw-semibold">
                     <button
@@ -62,15 +62,27 @@
                     </button>
                   </div>
 
-                  {# Desktop description can stay simple (optional) #}
                   {% if t.description %}
-                    <div class="d-none d-md-block text-muted small">{{ t.description }}</div>
-                  {% endif %}
+                    {% set full = t.description|string %}
+                    {% set is_long = (full|length > 220) %}
                   
-                  {# Mobile stacked meta + clamped description #}
-                  <div class="d-md-none mt-2">
+                    <div class="d-none d-md-block mt-1">
+                      <div id="taskDescDesktop_{{ t.id }}"
+                           class="task-desc text-muted small {% if is_long %}is-clamped clamp-3{% endif %}">
+                        {{ full }}
+                      </div>
                   
-                    {# Status badge (same logic as your Status column) #}
+                      {% if is_long %}
+                        <button type="button"
+                                class="btn btn-link p-0 text-decoration-none task-see-more"
+                                data-desc-toggle="1"
+                                data-target="taskDescDesktop_{{ t.id }}">
+                          See more
+                        </button>
+                      {% endif %}
+                    </div>
+                  {% endif %}                  <div class="d-md-none mt-2">
+                  
                     {% set badge_class = "bg-secondary" %}
                     {% if t.status == "open" %}{% set badge_class = "bg-primary" %}{% endif %}
                     {% if t.status == "completed" %}{% set badge_class = "bg-success" %}{% endif %}
@@ -81,7 +93,13 @@
                       <span class="badge {{ badge_class }}">
                         {{ t.status|replace('_',' ')|title }}
                       </span>
-                  
+
+                      {% if t.is_overdue %}
+                        <div class="mt-1">
+                          <span class="badge bg-danger-subtle text-danger-emphasis">Overdue</span>
+                        </div>
+                      {% endif %}                  
+                      
                       <span class="text-muted ms-2">
                         Due:
                         {% if t.due_at %}
@@ -104,12 +122,12 @@
                         </div>
                   
                         {% if is_long %}
-                          <button type="button"
-                                  class="btn btn-link p-0 small"
-                                  data-desc-toggle="1"
-                                  data-target="taskDesc_{{ t.id }}">
-                            See more
-                          </button>
+                        <button type="button"
+                                class="btn btn-link p-0 text-decoration-none task-see-more"
+                                data-desc-toggle="1"
+                                data-target="taskDescDesktop_{{ t.id }}">
+                          See more
+                        </button>
                         {% endif %}
                       </div>
                     {% endif %}
@@ -132,7 +150,7 @@
                   {% if t.status == "completed" %}{% set badge_class = "bg-success" %}{% endif %}
                   {% if t.status == "snoozed" %}{% set badge_class = "bg-warning text-dark" %}{% endif %}
                   {% if t.status == "snoozed" and t.snoozed_until %}
-                    <div class="text-muted small">Until {{ t.snoozed_until }}</div>
+                    <div class="text-muted small">Until {{ t.snoozed_until|fmt_dt }}</div>
                   {% endif %}
                   {% if t.status == "canceled" %}{% set badge_class = "bg-secondary" %}{% endif %}
 
@@ -143,14 +161,19 @@
 
                 <td class="d-none d-md-table-cell">
                   {% if t.due_at %}
-                    {{ t.due_at|fmt_dt }}
+                    <div>{{ t.due_at|fmt_dt }}</div>
                   {% elif t.due_date %}
-                    {{ t.due_date|fmt_date }}
+                    <div>{{ t.due_date|fmt_date }}</div>
                   {% else %}
-                    <span class="text-muted">—</span>
+                    <div class="text-muted">—</div>
+                  {% endif %}
+                
+                  {% if t.is_overdue %}
+                    <div class="mt-1">
+                      <span class="badge bg-danger-subtle text-danger-emphasis">Overdue</span>
+                    </div>
                   {% endif %}
                 </td>
-
                 <td class="text-end">
                   <div class="d-inline-flex align-items-center justify-content-end">
                     <div class="btn-group btn-group-sm" role="group" aria-label="Task actions">
@@ -232,6 +255,7 @@
 
   </div>
 </div>
+
 <div class="modal fade" id="snoozeModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -293,32 +317,30 @@
     modal.show();
   }
 </script>
-<style>
-  .task-desc.is-clamped {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-</style>
 
 <script>
-  document.addEventListener("click", function (e) {
-    const btn = e.target.closest('[data-desc-toggle="1"]');
-    if (!btn) return;
+document.addEventListener("click", function (e) {
+  const btn = e.target.closest('[data-desc-toggle="1"]');
+  if (!btn) return;
 
-    const id = btn.getAttribute("data-target");
-    const el = document.getElementById(id);
-    if (!el) return;
+  const id = btn.getAttribute("data-target");
+  const el = document.getElementById(id);
+  if (!el) return;
 
-    if (el.classList.contains("is-clamped")) {
-      el.classList.remove("is-clamped");
-      btn.textContent = "See less";
+  if (el.classList.contains("is-clamped") || el.classList.contains("is-clamped-4")) {
+    el.classList.remove("is-clamped");
+    el.classList.remove("is-clamped-4");
+    btn.textContent = "See less";
+  } else {
+    // Restore appropriate clamp type
+    if (el.classList.contains("task-desc-desktop")) {
+      el.classList.add("is-clamped-4");
     } else {
       el.classList.add("is-clamped");
-      btn.textContent = "See more";
     }
-  });
+    btn.textContent = "See more";
+  }
+});
 </script>
 
 {% endblock %}

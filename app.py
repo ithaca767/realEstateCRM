@@ -3586,12 +3586,19 @@ def dashboard():
               '(Unnamed)'
             ) AS contact_name,
             e.follow_up_due_at,
-
+    
+            -- Followup engagement itself (so multiple followups don't share the same context)
+            e.engagement_type,
+            e.outcome,
+            e.notes,
+            e.summary_clean,
+    
+            -- Most recent engagement for the contact (kept as fallback/extra context)
             le.occurred_at AS last_engagement_at,
             le.engagement_type AS last_engagement_type,
             le.outcome AS last_engagement_outcome,
             le.summary_clean AS last_engagement_summary
-
+    
         FROM engagements e
         JOIN contacts c ON c.id = e.contact_id
 
@@ -3616,7 +3623,7 @@ def dashboard():
     """
     cur.execute(followups_sql, (current_user.id, current_user.id, current_user.id))
     followup_rows = cur.fetchall() or []
-
+    
     # Build follow-ups buckets
     now = datetime.now(timezone.utc)
     cutoff = now + timedelta(days=UPCOMING_DAYS)
@@ -3666,8 +3673,17 @@ def dashboard():
         return s[:max_len] + ("…" if len(s) > max_len else "")
     
     def _followup_snippet(r):
-        # Outcome first, then summary, then type
-        return _clean_snippet(r.get("last_engagement_outcome")) or _clean_snippet(r.get("last_engagement_summary")) or _clean_snippet(r.get("last_engagement_type"))
+        # Prefer the followup engagement itself first
+        return (
+            _clean_snippet(r.get("outcome"))
+            or _clean_snippet(r.get("summary_clean"))
+            or _clean_snippet(r.get("notes"))
+            or _clean_snippet(r.get("engagement_type"))
+            # Fallback to last engagement if needed
+            or _clean_snippet(r.get("last_engagement_outcome"))
+            or _clean_snippet(r.get("last_engagement_summary"))
+            or _clean_snippet(r.get("last_engagement_type"))
+        )
     
     today_ny = datetime.now(get_user_tz()).date()
     
@@ -3701,6 +3717,14 @@ def dashboard():
     
     snapshot_followups_overdue = snapshot_followups_overdue_enriched
     snapshot_followups_today = snapshot_followups_today_enriched
+    
+    app.logger.info(
+        "snapshot followups overdue=%s today=%s ids_overdue=%s ids_today=%s",
+        len(snapshot_followups_overdue),
+        len(snapshot_followups_today),
+        [r.get("engagement_id") for r in snapshot_followups_overdue],
+        [r.get("engagement_id") for r in snapshot_followups_today],
+    )
 
     # Today's Snapshot: Tasks (exact schema)
     cur.execute(
@@ -3825,6 +3849,25 @@ def dashboard():
         tt = dict(t)
         tt["item_type"] = "task"
         snapshot_items_all.append(tt)
+
+    # Defensive de-dupe: never show the same Snapshot item twice
+    seen = set()
+    deduped = []
+    
+    for it in snapshot_items_all:
+        if it.get("item_type") == "followup":
+            k = ("followup", it.get("engagement_id"))
+        elif it.get("item_type") == "task":
+            k = ("task", it.get("task_id"))
+        else:
+            k = ("unknown", it.get("id"))
+    
+        if k in seen:
+            continue
+        seen.add(k)
+        deduped.append(it)
+    
+    snapshot_items_all = deduped
     
     snapshot_items_all.sort(key=_snap_due_dt)
     
@@ -6213,6 +6256,42 @@ def tasks_list():
     try:
         cur = conn.cursor()
         tasks = list_tasks_for_user(cur, current_user.id, status=status)
+
+        # ---- Overdue computation (local time) ----
+        tz = get_user_tz()
+        now_local = datetime.now(tz)
+
+        def _as_local(dt):
+            if not dt:
+                return None
+            # normalize naive timestamps as UTC (consistent with rest of app)
+            if getattr(dt, "tzinfo", None) is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            try:
+                return dt.astimezone(tz)
+            except Exception:
+                return None
+
+        def _task_due_local(t):
+            # Prefer due_at, else treat due_date as 9:00 AM local
+            due_at = t.get("due_at")
+            if due_at:
+                return _as_local(due_at)
+
+            due_date = t.get("due_date")
+            if due_date:
+                try:
+                    return datetime(due_date.year, due_date.month, due_date.day, 9, 0, 0, tzinfo=tz)
+                except Exception:
+                    return None
+
+            return None
+
+        for t in tasks:
+            due_local = _task_due_local(t)
+            t["due_local"] = due_local
+            t["is_overdue"] = bool(due_local and due_local < now_local)
+        # ---- /Overdue computation ----
 
         # Build contact_id -> display_name map for UI polish
         contact_ids = [t.get("contact_id") for t in tasks if t.get("contact_id")]

@@ -11,3 +11,4 @@ localdbstart
 # Local only
 transaction_deadlines_backup.csv
 _local_scratch/
+docs/seeds/

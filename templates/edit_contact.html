@@ -1034,7 +1034,7 @@
                     <tbody>
                       {% for e in engagements %}
                         <tr>
-                          <td class="text-muted">{{ e["occurred_at"] }}</td>
+                          <td class="text-muted">{{ e["occurred_at"]|fmt_dt }}</td>
                           <td>{{ (e["engagement_type"] or "")|replace("_"," ")|title }}</td>
               
                           <td>
@@ -1227,7 +1227,7 @@
                     <tbody>
                       {% for f in followups_for_contact %}
                         {% set ds = f.get('_due_status') %}
-                        <tr class="{% if ds == 'overdue' %}table-danger{% elif ds == 'today' %}table-warning{% endif %}">
+                        <tr id="fu-{{ f['id'] }}" class="{% if ds == 'overdue' %}table-danger{% elif ds == 'today' %}table-warning{% endif %}">
                           <td class="text-muted">
                             {{ f.get("follow_up_due_at")|fmt_dt }}
 
@@ -2120,5 +2120,27 @@
     });
   });
 </script>
+<script>
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const engagementId = params.get("engagement_id");
+  if (!engagementId) return;
+
+  // Only do this when user intends to land on followups
+  if (window.location.hash !== "#pane-followups") return;
+
+  window.setTimeout(() => {
+    const row = document.getElementById(`fu-${engagementId}`);
+    if (!row) return;
+
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // Brief highlight without fighting existing table-* classes
+    row.classList.add("followup-flash");
+    window.setTimeout(() => row.classList.remove("followup-flash"), 1500);
+  }, 150);
+})();
+</script>
+
 
 {% endblock %}
