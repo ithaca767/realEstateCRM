@@ -40,6 +40,8 @@
     <div class="card-body">
 
       <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+        <div style="padding:6px 0; font-size:12px; opacity:.7;">
+        </div>
         <ul class="nav nav-tabs border-0 mb-0">
           <li class="nav-item" role="presentation">
             <button class="nav-link active d-flex align-items-center gap-2"
@@ -80,6 +82,18 @@
             </button>
           </li>
 
+          {% if current_user.email_sync_enabled %}
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="emails-tab"
+                    data-bs-toggle="tab"
+                    data-bs-target="#emails"
+                    type="button"
+                    role="tab">
+              Emails
+            </button>
+          </li>
+          {% endif %}
+          
           <li class="nav-item" role="presentation">
             <button class="nav-link"
                     id="tab-transactions"
@@ -1299,6 +1313,78 @@
 
         </div>
         <!-- /FOLLOW-UPS -->
+
+        <!-- Emails -->
+        {% if current_user.email_sync_enabled %}
+        <div class="tab-pane fade" id="emails" role="tabpanel">
+        
+          <div class="card mb-3">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <h5 class="mb-1">Emails</h5>
+                  <p class="mb-0 text-muted">Manage contact email addresses and connect Gmail when ready.</p>
+                </div>
+                <a href="/integrations/email" class="btn btn-sm btn-outline-primary">Connect Gmail</a>
+              </div>
+            </div>
+          </div>
+        
+          <div class="card">
+            <div class="card-body">
+              <h6 class="mb-3">Contact email addresses</h6>
+        
+              {% if contact_emails and contact_emails|length > 0 %}
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th>Email</th>
+                        <th>Label</th>
+                        <th style="width: 1%;"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for ce in contact_emails %}
+                      <tr>
+                        <td>{{ ce.email }}</td>
+                        <td class="text-muted">{{ ce.label or "" }}</td>
+                        <td class="text-end">
+                          <form method="post"
+                                action="{{ url_for('delete_contact_email', contact_id=c.id, contact_email_id=ce.id) }}"
+                                style="display:inline;">
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                          </form>
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <p class="text-muted mb-3">No emails saved yet.</p>
+              {% endif %}
+        
+              <hr>
+        
+              <form method="post" action="{{ url_for('add_contact_email', contact_id=c.id) }}" class="row g-2">
+                <div class="col-md-6">
+                  <input type="email" name="email" class="form-control form-control-sm" placeholder="Add email address" required>
+                </div>
+                <div class="col-md-4">
+                  <input type="text" name="label" class="form-control form-control-sm" placeholder="Label (work, personal)">
+                </div>
+                <div class="col-md-2 d-grid">
+                  <button class="btn btn-sm btn-primary" type="submit">Add</button>
+                </div>
+              </form>
+        
+            </div>
+          </div>
+        
+        </div>
+        {% endif %}
+
 
         <!-- TRANSACTIONS -->
         <div class="tab-pane fade" id="pane-transactions" role="tabpanel" aria-labelledby="tab-transactions">

@@ -5,6 +5,7 @@ import secrets
 import csv
 import io
 import json
+import requests
 
 try:
     from dotenv import load_dotenv
@@ -18,6 +19,8 @@ from datetime import date, datetime, timedelta, time, timezone
 from math import ceil
 from typing import Optional
 from zoneinfo import ZoneInfo
+
+from cryptography.fernet import Fernet
 
 from services.ai_prompts_v110 import SYSTEM_PROMPT_V110, INSTRUCTION_PROMPT_V110
 from services.ai_parsers import parse_engagement_summary_output, AIParseError
@@ -78,6 +81,7 @@ from tasks import (
     delete_task,
 )
 
+import urllib.parse
 from urllib.parse import urlparse, urljoin
 
 from werkzeug.security import generate_password_hash
@@ -306,11 +310,29 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
+
+
 # Optional token for calendar feed protection
 ICS_TOKEN = os.environ.get("ICS_TOKEN")
 
 PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
 app.config["PUBLIC_BASE_URL"] = PUBLIC_BASE_URL
+
+def _email_token_cipher() -> Fernet:
+    key = (os.environ.get("EMAIL_TOKEN_ENCRYPTION_KEY") or "").strip()
+    if not key:
+        raise RuntimeError("EMAIL_TOKEN_ENCRYPTION_KEY is not set")
+    return Fernet(key.encode("utf-8"))
+
+def encrypt_token(value: str) -> str:
+    if not value:
+        return None
+    return _email_token_cipher().encrypt(value.encode("utf-8")).decode("utf-8")
+
+def decrypt_token(value_enc: str) -> str:
+    if not value_enc:
+        return None
+    return _email_token_cipher().decrypt(value_enc.encode("utf-8")).decode("utf-8")
                             
 @app.context_processor
 def inject_calendar_feed_url():
@@ -357,13 +379,14 @@ class User(UserMixin):
         self.role = row.get("role", "owner")
         self._is_active = row.get("is_active", True)
         self.ai_premium_enabled = bool(row.get("ai_premium_enabled", False))
+        self.email_sync_enabled = bool(row.get("email_sync_enabled", False))  # NEW
 
     def get_id(self):
         return str(self.id)
 
     def is_active(self):
         return bool(self._is_active)
-
+        
 @app.template_filter("fmt_date")
 def fmt_date(value):
     if not value:
@@ -459,7 +482,7 @@ def load_user(user_id):
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT id, email, first_name, last_name, role, is_active, ai_premium_enabled
+        SELECT id, email, first_name, last_name, role, is_active, ai_premium_enabled, email_sync_enabled
         FROM users
         WHERE id = %s
         """,
@@ -469,7 +492,7 @@ def load_user(user_id):
     cur.close()
     conn.close()
     return User(row) if row else None
-
+    
 def generate_public_token() -> str:
     return secrets.token_urlsafe(24)
 
@@ -590,6 +613,167 @@ def get_professionals_for_dropdown(user_id: int, category=None):
         cur.close()
         conn.close()
 
+GMAIL_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GMAIL_TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "openid",
+]
+
+@app.route("/integrations/email")
+@login_required
+def integrations_email():
+    if not getattr(current_user, "email_sync_enabled", False):
+        abort(403)
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, provider, primary_email, sync_enabled, last_sync_at
+            FROM email_accounts
+            WHERE user_id = %s
+            ORDER BY id DESC
+            """,
+            (current_user.id,),
+        )
+        accounts = cur.fetchall()
+    finally:
+        conn.close()
+
+    # If you don't have a template yet, keep it simple for now
+    return render_template_string(
+        """
+        <h3>Email Integrations</h3>
+        <p><a href="/oauth/gmail/start">Connect Gmail</a></p>
+        <ul>
+        {% for a in accounts %}
+          <li>{{ a.provider }}: {{ a.primary_email }}</li>
+        {% endfor %}
+        </ul>
+        """,
+        accounts=accounts,
+    )
+
+
+@app.route("/oauth/gmail/start")
+@login_required
+def oauth_gmail_start():
+    if not getattr(current_user, "email_sync_enabled", False):
+        abort(403)
+
+    client_id = (os.environ.get("GMAIL_OAUTH_CLIENT_ID") or "").strip()
+    redirect_uri = (os.environ.get("GMAIL_OAUTH_REDIRECT_URI") or "").strip()
+    if not client_id or not redirect_uri:
+        abort(500)
+
+    state = secrets.token_urlsafe(32)
+    session["gmail_oauth_state"] = state
+
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": " ".join(GMAIL_SCOPES),
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
+        "include_granted_scopes": "true",
+    }
+    return redirect(GMAIL_AUTH_URL + "?" + urllib.parse.urlencode(params))
+
+@app.route("/oauth/gmail/callback")
+@login_required
+def oauth_gmail_callback():
+    if not getattr(current_user, "email_sync_enabled", False):
+        abort(403)
+
+    expected_state = session.get("gmail_oauth_state")
+    received_state = request.args.get("state")
+    if not expected_state or received_state != expected_state:
+        abort(400)
+
+    code = request.args.get("code")
+    if not code:
+        abort(400)
+
+    client_id = (os.environ.get("GMAIL_OAUTH_CLIENT_ID") or "").strip()
+    client_secret = (os.environ.get("GMAIL_OAUTH_CLIENT_SECRET") or "").strip()
+    redirect_uri = (os.environ.get("GMAIL_OAUTH_REDIRECT_URI") or "").strip()
+
+    token_resp = requests.post(
+        GMAIL_TOKEN_URL,
+        data={
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        },
+        timeout=20,
+    )
+    if token_resp.status_code != 200:
+        abort(400)
+
+    token_json = token_resp.json()
+    access_token = token_json.get("access_token")
+    refresh_token = token_json.get("refresh_token")
+    expires_in = token_json.get("expires_in")
+
+    if not access_token:
+        abort(400)
+
+    expires_at = None
+    if expires_in:
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+
+    # Get the authenticated email address
+    userinfo_resp = requests.get(
+        "https://openidconnect.googleapis.com/v1/userinfo",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=20,
+    )
+    userinfo = userinfo_resp.json()
+    primary_email = (userinfo.get("email") or "").strip().lower()
+    if not primary_email:
+        abort(400)
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO email_accounts
+              (user_id, provider, primary_email, access_token_enc, refresh_token_enc, token_expires_at,
+               sync_enabled, created_at, updated_at)
+            VALUES
+              (%s, 'gmail', %s, %s, %s, %s, TRUE, NOW(), NOW())
+            ON CONFLICT (user_id, provider, lower(primary_email))
+            DO UPDATE SET
+              access_token_enc = EXCLUDED.access_token_enc,
+              refresh_token_enc = COALESCE(EXCLUDED.refresh_token_enc, email_accounts.refresh_token_enc),
+              token_expires_at = EXCLUDED.token_expires_at,
+              updated_at = NOW();
+            """,
+            (
+                current_user.id,
+                primary_email,
+                encrypt_token(access_token),
+                encrypt_token(refresh_token) if refresh_token else None,
+                expires_at,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    session.pop("gmail_oauth_state", None)
+    flash("Gmail connected.", "success")
+    return redirect(url_for("integrations_email"))
+    
 def init_db():
     if APP_ENV == "PROD":
         raise RuntimeError("init_db() is disabled in production.")
@@ -3212,7 +3396,7 @@ def login():
 
             cur.execute(
                 """
-                SELECT id, email, password_hash, first_name, last_name, role, is_active
+                SELECT id, email, password_hash, first_name, last_name, role, is_active, email_sync_enabled
                 FROM users
                 WHERE email = %s AND is_active = TRUE
                 LIMIT 1;
@@ -5270,6 +5454,19 @@ def edit_contact(contact_id):
     )
     completed_interactions = cur.fetchall()
 
+    contact_emails = []
+    if getattr(current_user, "email_sync_enabled", False):
+        cur.execute(
+            """
+            SELECT id, email, label, is_primary
+            FROM contact_emails
+            WHERE user_id = %s AND contact_id = %s
+            ORDER BY is_primary DESC, email ASC;
+            """,
+            (current_user.id, contact_id),
+        )
+        contact_emails = cur.fetchall()
+        
     # Special dates (tenant-safe via contacts join)
     cur.execute(
         """
@@ -5330,6 +5527,7 @@ def edit_contact(contact_id):
         next_deadlines=next_deadlines,
         activepipe_profile=activepipe_profile,
         activepipe_payload=activepipe_payload,
+        contact_emails=contact_emails,
     )
 
 @app.route("/contacts/<int:contact_id>/associations/add", methods=["POST"])
@@ -9358,6 +9556,89 @@ def api_search_answer():
     finally:
         conn.close()
 
+from flask import flash
+
+@app.post("/contacts/<int:contact_id>/emails/add")
+@login_required
+def add_contact_email(contact_id):
+    if not getattr(current_user, "email_sync_enabled", False):
+        abort(403)
+
+    email = (request.form.get("email") or "").strip().lower()
+    label = (request.form.get("label") or "").strip() or None
+
+    if not email or "@" not in email:
+        flash("Please enter a valid email address.", "warning")
+        return redirect(url_for("edit_contact", contact_id=contact_id) + "#emails")
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Confirm contact is owned by current user
+        cur.execute(
+            "SELECT id FROM contacts WHERE id = %s AND user_id = %s;",
+            (contact_id, current_user.id),
+        )
+        if not cur.fetchone():
+            abort(404)
+
+        # Insert with tenant-safe uniqueness (indexes enforce lower(email) uniqueness)
+        cur.execute(
+            """
+            INSERT INTO contact_emails (user_id, contact_id, email, label, is_primary, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, FALSE, NOW(), NOW())
+            ON CONFLICT (user_id, lower(email)) DO NOTHING;
+            """,
+            (current_user.id, contact_id, email, label),
+        )
+        conn.commit()
+
+        if cur.rowcount == 0:
+            flash("That email is already used by another contact (or already exists).", "warning")
+        else:
+            flash("Email added.", "success")
+
+    finally:
+        conn.close()
+
+    return redirect(url_for("edit_contact", contact_id=contact_id) + "#emails")
+
+
+@app.post("/contacts/<int:contact_id>/emails/<int:contact_email_id>/delete")
+@login_required
+def delete_contact_email(contact_id, contact_email_id):
+    if not getattr(current_user, "email_sync_enabled", False):
+        abort(403)
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Confirm contact is owned by current user
+        cur.execute(
+            "SELECT id FROM contacts WHERE id = %s AND user_id = %s;",
+            (contact_id, current_user.id),
+        )
+        if not cur.fetchone():
+            abort(404)
+
+        cur.execute(
+            """
+            DELETE FROM contact_emails
+            WHERE id = %s AND contact_id = %s AND user_id = %s;
+            """,
+            (contact_email_id, contact_id, current_user.id),
+        )
+        conn.commit()
+
+        flash("Email removed." if cur.rowcount else "Email not found.", "success")
+
+    finally:
+        conn.close()
+
+    return redirect(url_for("edit_contact", contact_id=contact_id) + "#emails")
+    
 @app.route("/followups.ics")
 def followups_ics():
     """

@@ -4,3 +4,5 @@ psycopg2-binary==2.9.10
 flask-login==0.6.3
 python-dotenv
 openai>=1.0.0
+cryptography
+requests
