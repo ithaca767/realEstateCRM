@@ -25,6 +25,7 @@ from cryptography.fernet import Fernet
 from services.ai_prompts_v110 import SYSTEM_PROMPT_V110, INSTRUCTION_PROMPT_V110
 from services.ai_parsers import parse_engagement_summary_output, AIParseError
 from services.ai_guard import ensure_ai_allowed_and_reset_if_needed, increment_ai_usage_on_success, AIGuardError
+from services.email_sync.gmail_importer import import_last_messages_gmail
 
 from engagements import list_engagements_for_contact
 from engagements import insert_engagement
@@ -685,6 +686,49 @@ def oauth_gmail_start():
     }
     return redirect(GMAIL_AUTH_URL + "?" + urllib.parse.urlencode(params))
 
+@app.route("/integrations/email/gmail/import", methods=["POST"])
+@login_required
+def gmail_import_messages():
+    if not getattr(current_user, "email_sync_enabled", False):
+        return ("Email sync is disabled.", 403)
+
+    email_account_id = (
+        request.form.get("email_account_id", type=int)
+        or request.args.get("email_account_id", type=int)
+    )
+    
+    limit = (
+        request.form.get("limit", type=int)
+        or request.args.get("limit", type=int)
+        or 25
+    )
+    
+    if email_account_id <= 0:
+        return ("Missing email_account_id.", 400)
+    if limit < 1 or limit > 200:
+        return ("Invalid limit (1-200).", 400)
+
+    conn = get_db()
+    try:
+        stats = import_last_messages_gmail(
+            conn,
+            user_id=current_user.id,
+            email_account_id=email_account_id,
+            limit=limit,
+        )
+        return jsonify({"ok": True, "stats": stats})
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e)[:300],
+            "error_type": type(e).__name__,
+            "error_repr": repr(e)[:300],
+        }), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass            
 @app.route("/oauth/gmail/callback")
 @login_required
 def oauth_gmail_callback():
