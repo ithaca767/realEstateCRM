@@ -901,10 +901,13 @@ def oauth_create_state(conn, user_id: int, provider: str, redirect_path: Optiona
 @require_email_sync
 def oauth_outlook_start():
     try:
-        client_id = os.getenv("MS_OAUTH_CLIENT_ID")
-        tenant_id = os.getenv("MS_OAUTH_TENANT_ID")
-        redirect_uri = os.getenv("MS_OAUTH_REDIRECT_URI")
-        secret_present = bool(os.getenv("MS_OAUTH_CLIENT_SECRET"))
+        if not getattr(current_user, "email_sync_enabled", False):
+            abort(403)
+
+        client_id = (os.environ.get("MS_OAUTH_CLIENT_ID") or "").strip()
+        tenant_id = (os.environ.get("MS_OAUTH_TENANT_ID") or "").strip()
+        redirect_uri = (os.environ.get("MS_OAUTH_REDIRECT_URI") or "").strip()
+        secret_present = bool(os.environ.get("MS_OAUTH_CLIENT_SECRET"))
 
         app.logger.info(
             "Outlook start config: client_id=%s tenant_id=%s redirect_uri=%s secret_present=%s",
@@ -914,37 +917,31 @@ def oauth_outlook_start():
             secret_present,
         )
 
-    if not getattr(current_user, "email_sync_enabled", False):
-        abort(403)
+        if not client_id or not redirect_uri:
+            abort(500)
 
-    client_id = (os.environ.get("MS_OAUTH_CLIENT_ID") or "").strip()
-    redirect_uri = (os.environ.get("MS_OAUTH_REDIRECT_URI") or "").strip()
-    app.logger.info("Outlook OAuth redirect_uri=%s", redirect_uri)
-    if not client_id or not redirect_uri:
-        abort(500)
+        conn = get_db()
+        try:
+            state = oauth_create_state(conn, current_user.id, "outlook")
+            conn.commit()
+        finally:
+            conn.close()
 
-    conn = get_db()
-    try:
-        state = oauth_create_state(conn, current_user.id, "outlook")
-        conn.commit()
-    finally:
-        conn.close()
+        params = {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "response_mode": "query",
+            "scope": " ".join(MS_SCOPES),
+            "state": state,
+            "prompt": "select_account",
+        }
+        return redirect(MS_OAUTH_AUTH_URL + "?" + urllib.parse.urlencode(params))
 
-    params = {
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "response_mode": "query",
-        "scope": " ".join(MS_SCOPES),
-        "state": state,
-        # optional but helps some tenants
-        "prompt": "select_account",
-    }
-    return redirect(MS_OAUTH_AUTH_URL + "?" + urllib.parse.urlencode(params))
     except Exception:
         app.logger.exception("Outlook start failed (user_id=%s)", getattr(current_user, "id", None))
-        raise    
-    
+        raise
+            
 @app.route("/oauth/outlook/callback")
 @login_required
 @require_email_sync
