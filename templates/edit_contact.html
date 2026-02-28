@@ -1316,28 +1316,54 @@
 
         <!-- Emails -->
         {% if current_user.email_sync_enabled %}
-        <div class="tab-pane fade" id="emails" role="tabpanel">
+        <div class="tab-pane fade" id="emails" role="tabpanel" aria-labelledby="emails-tab">
         
-          <div class="card mb-3">
+          <style>
+            .email-snippet {
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              max-width: 980px;
+            }
+          </style>
+        
+          <!-- Emails Overview / Integrations -->
+          <div class="card mt-3">
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start gap-2">
                 <div>
                   <h5 class="mb-1">Emails</h5>
-                  <p class="mb-0 text-muted">Manage contact email addresses and connect Gmail when ready.</p>
+                  <div class="text-muted">
+                    Manage contact email addresses and connect email when ready.
+                  </div>
                 </div>
-                <a href="/integrations/email" class="btn btn-sm btn-outline-primary">Connect Gmail</a>
+                <div class="d-inline-flex align-items-center justify-content-end">
+                  <div class="btn-group btn-group-sm" role="group" aria-label="Email integration actions">
+                    {% if email_primary_provider %}
+                      <button type="button" class="btn btn-outline-secondary" disabled>
+                        Email Connected{% if email_primary_provider %} (Default: {{ email_primary_provider|capitalize }}){% endif %}
+                      </button>
+                      <a href="/integrations/email" class="btn btn-outline-primary">Manage</a>
+                    {% else %}
+                      <a href="/integrations/email" class="btn btn-outline-primary">Connect Email</a>
+                    {% endif %}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         
-          <div class="card">
+          <!-- Contact email addresses -->
+          <div class="card mt-3">
+            <div class="card-header bg-primary-subtle text-dark fw-semibold">
+              Contact email addresses
+            </div>
             <div class="card-body">
-              <h6 class="mb-3">Contact email addresses</h6>
         
               {% if contact_emails and contact_emails|length > 0 %}
                 <div class="table-responsive">
-                  <table class="table table-sm align-middle">
-                    <thead>
+                  <table class="table table-sm table-striped mb-0 align-middle">
+                    <thead class="table-light">
                       <tr>
                         <th>Email</th>
                         <th>Label</th>
@@ -1348,7 +1374,7 @@
                       {% for ce in contact_emails %}
                       <tr>
                         <td>{{ ce.email }}</td>
-                        <td class="text-muted">{{ ce.label or "" }}</td>
+                        <td class="text-muted">{{ ce.label or "Unlabeled" }}</td>
                         <td class="text-end">
                           <form method="post"
                                 action="{{ url_for('delete_contact_email', contact_id=c.id, contact_email_id=ce.id) }}"
@@ -1362,17 +1388,21 @@
                   </table>
                 </div>
               {% else %}
-                <p class="text-muted mb-3">No emails saved yet.</p>
+                <div class="text-muted mb-3">
+                  No email addresses saved yet. Add one to link messages.
+                </div>
               {% endif %}
         
               <hr>
         
               <form method="post" action="{{ url_for('add_contact_email', contact_id=c.id) }}" class="row g-2">
                 <div class="col-md-6">
-                  <input type="email" name="email" class="form-control form-control-sm" placeholder="Add email address" required>
+                  <input type="email" name="email" class="form-control form-control-sm"
+                         placeholder="Add email address" required>
                 </div>
                 <div class="col-md-4">
-                  <input type="text" name="label" class="form-control form-control-sm" placeholder="Label (work, personal)">
+                  <input type="text" name="label" class="form-control form-control-sm"
+                         placeholder="Label (work, personal)">
                 </div>
                 <div class="col-md-2 d-grid">
                   <button class="btn btn-sm btn-primary" type="submit">Add</button>
@@ -1382,10 +1412,150 @@
             </div>
           </div>
         
+          <!-- Email Messages -->
+          <div class="card mt-3">
+            <div class="card-header bg-primary-subtle text-dark fw-semibold">
+              Email messages
+            </div>
+        
+            <div class="card-body">
+        
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted small">Messages linked to this contact</div>
+        
+                <form method="get"
+                      action="{{ url_for('edit_contact', contact_id=c.id) }}"
+                      class="d-flex gap-2 align-items-center">
+        
+                  <input type="hidden" name="email_offset" value="0">
+                  <input type="hidden" name="email_limit" value="{{ email_limit }}">
+        
+                  <select name="email_dir" class="form-select form-select-sm" style="width: 140px;">
+                    <option value="all" {% if email_dir == "all" %}selected{% endif %}>All</option>
+                    <option value="inbound" {% if email_dir == "inbound" %}selected{% endif %}>Inbound</option>
+                    <option value="outbound" {% if email_dir == "outbound" %}selected{% endif %}>Outbound</option>
+                    <option value="unknown" {% if email_dir == "unknown" %}selected{% endif %}>Unknown</option>
+                  </select>
+        
+                  <select name="email_days" class="form-select form-select-sm" style="width: 140px;">
+                    <option value="90" {% if email_days == "90" %}selected{% endif %}>Last 90 days</option>
+                    <option value="30" {% if email_days == "30" %}selected{% endif %}>Last 30 days</option>
+                    <option value="365" {% if email_days == "365" %}selected{% endif %}>Last 365 days</option>
+                    <option value="all" {% if email_days == "all" %}selected{% endif %}>All time</option>
+                  </select>
+        
+                  <input type="text" name="email_from" value="{{ email_from or '' }}"
+                         class="form-control form-control-sm"
+                         placeholder="From contains"
+                         style="width: 160px;">
+        
+                  <input type="text" name="email_q" value="{{ email_q or '' }}"
+                         class="form-control form-control-sm"
+                         placeholder="Subject or body"
+                         style="width: 200px;">
+        
+                  <div class="btn-group btn-group-sm" role="group">
+                    <button type="submit" class="btn btn-outline-primary">Apply</button>
+        
+                    <a class="btn btn-outline-secondary"
+                       href="{{ url_for('edit_contact', contact_id=c.id) }}#emails">
+                      Reset
+                    </a>
+        
+                    <a class="btn btn-outline-primary"
+                       href="{{ url_for('email_sync_now', contact_id=c.id) }}#emails">
+                      Sync Now
+                    </a>
+                  </div>
+                </form>
+              </div>
+        
+              <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0 align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width:170px;">When</th>
+                      <th style="width:110px;">Direction</th>
+                      <th style="width:100px;">Provider</th>
+                      <th style="width:260px;">From</th>
+                      <th style="width:70px;">Links</th>
+                      <th style="width:110px;">Actions</th>
+                    </tr>
+                  </thead>
+        
+                  <tbody>
+                    {% for m in email_messages %}
+                    <tr>
+                      <td>{{ m.message_date_display or m.message_date or "" }}</td>
+        
+                      <td>
+                        {% if m.direction == "inbound" %}
+                          <span class="badge bg-success-subtle text-dark">Inbound</span>
+                        {% elif m.direction == "outbound" %}
+                          <span class="badge bg-primary-subtle text-dark">Outbound</span>
+                        {% else %}
+                          <span class="badge bg-secondary-subtle text-dark">Unknown</span>
+                        {% endif %}
+                      </td>
+        
+                      <td>
+                        {% if m.provider %}
+                          <span class="badge bg-light text-dark border">
+                            {{ m.provider|capitalize }}
+                          </span>
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+        
+                      <td>{{ m.from_email or "" }}</td>
+        
+                      <td>
+                        {% if m.link_count and m.link_count > 0 %}
+                          <a href="{{ url_for('email_message_detail', message_id=m.id, contact_id=c.id) }}#links">
+                            {{ m.link_count }}
+                          </a>
+                        {% else %}
+                          <span class="text-muted">0</span>
+                        {% endif %}
+                      </td>
+        
+                      <td>
+                        <a class="btn btn-sm btn-outline-primary"
+                           href="{{ url_for('email_message_detail', message_id=m.id, contact_id=c.id) }}#emails">
+                          View
+                        </a>
+                      </td>
+                    </tr>
+        
+                    <tr>
+                      <td colspan="6" class="pt-0 pb-3">
+                        <div class="fw-semibold">
+                          {{ m.subject or "(No subject)" }}
+                        </div>
+                        {% if m.snippet %}
+                          <div class="text-muted small email-snippet">
+                            {{ m.snippet }}
+                          </div>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    {% endfor %}
+        
+                    {% if not email_messages %}
+                    <tr>
+                      <td colspan="6" class="text-muted">No messages yet.</td>
+                    </tr>
+                    {% endif %}
+                  </tbody>
+                </table>
+              </div>
+        
+            </div>
+          </div>
+        
         </div>
         {% endif %}
-
-
         <!-- TRANSACTIONS -->
         <div class="tab-pane fade" id="pane-transactions" role="tabpanel" aria-labelledby="tab-transactions">
 
@@ -1644,7 +1814,7 @@
                 <div class="col-md-6">
                   <label class="form-label">Tags</label>
                   <input class="form-control" name="ap_tags" form="contactForm"
-                         placeholder="past-client; buyer; keyport"
+                         placeholder="past-client; buyer"
                          value="{{ activepipe_payload.get('tags','') if activepipe_payload else '' }}">
                   <div class="form-text">Separate tags with semicolons.</div>
                 </div>
@@ -2072,8 +2242,8 @@
     document.addEventListener("DOMContentLoaded", function () {
       if (window.location.hash) {
         let hash = window.location.hash.replace("#", "");
-
         if (hash === "followups") hash = "pane-followups";
+        if (hash === "email") hash = "emails";
 
         const btnByTarget = document.querySelector(
           '[data-bs-toggle="tab"][data-bs-target="#' + hash + '"]'
@@ -2087,8 +2257,11 @@
           details: "tab-details",
           engagements: "tab-engagements",
           followups: "tab-followups",
+          "pane-followups": "tab-followups",
           transactions: "tab-transactions",
+          emails: "emails-tab",
         };
+        
         const btnId = map[hash];
         if (btnId) {
           const btn = document.getElementById(btnId);

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Email Message</h2>
+    <div class="text-muted">Message details and linked contacts</div>
+  </div>
+  {% if contact_id %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('edit_contact', contact_id=contact_id) }}#emails">Back to Contact</a>
+  {% else %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('contacts') }}">Back</a>
+  {% endif %}
+</div>
+
+<div class="card mt-3">
+  <div class="card-header bg-primary-subtle text-dark fw-semibold">
+    Message
+  </div>
+  <div class="card-body">
+    <div class="row g-2">
+      <div class="col-md-3 text-muted small">When</div>
+      <div class="col-md-9">{{ msg.message_date or "" }}</div>
+
+      <div class="col-md-3 text-muted small">Direction</div>
+      <div class="col-md-9">{{ msg.direction }}</div>
+
+      <div class="col-md-3 text-muted small">From</div>
+      <div class="col-md-9">{{ msg.from_email or "" }}</div>
+
+      <div class="col-md-3 text-muted small">Subject</div>
+      <div class="col-md-9">{{ msg.subject or "" }}</div>
+    </div>
+
+    {% if msg.snippet %}
+      <hr>
+      <div class="text-muted small mb-1">Snippet</div>
+      <div>{{ msg.snippet }}</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header bg-primary-subtle text-dark fw-semibold">
+    Linked contacts
+  </div>
+  <div class="card-body">
+    {% if links and links|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Contact</th>
+              <th style="width: 140px;">Match</th>
+              <th>Matched email</th>
+              <th style="width: 110px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for l in links %}
+            <tr>
+              <td>
+                <a href="{{ url_for('edit_contact', contact_id=l.contact_id) }}#emails" class="text-decoration-none">
+                  {{ (l.first_name or "") }} {{ (l.last_name or "") }}
+                </a>
+              </td>
+              <td class="text-muted">{{ l.match_type }}</td>
+              <td class="text-muted">{{ l.matched_email or "" }}</td>
+              <td class="text-end">
+                <!-- Option B remove will go here next -->
+                <span class="text-muted small"> </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No linked contacts yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

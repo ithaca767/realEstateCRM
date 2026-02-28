@@ -17,7 +17,7 @@ from version import APP_VERSION
 from functools import wraps
 from datetime import date, datetime, timedelta, time, timezone
 from math import ceil
-from typing import Optional
+from typing import Optional, Dict, Any
 from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet
@@ -25,7 +25,9 @@ from cryptography.fernet import Fernet
 from services.ai_prompts_v110 import SYSTEM_PROMPT_V110, INSTRUCTION_PROMPT_V110
 from services.ai_parsers import parse_engagement_summary_output, AIParseError
 from services.ai_guard import ensure_ai_allowed_and_reset_if_needed, increment_ai_usage_on_success, AIGuardError
+
 from services.email_sync.gmail_importer import import_last_messages_gmail
+from services.email_sync.dispatcher import sync_email_account
 
 from engagements import list_engagements_for_contact
 from engagements import insert_engagement
@@ -439,6 +441,14 @@ def owner_required(f):
         return f(*args, **kwargs)
     return wrapper
 
+def require_email_sync(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not getattr(current_user, "email_sync_enabled", False):
+            abort(403)
+        return fn(*args, **kwargs)
+    return wrapper
+    
 def normalize_url(value):
     v = (value or "").strip()
     if not v:
@@ -623,8 +633,37 @@ GMAIL_SCOPES = [
     "openid",
 ]
 
+MS_OAUTH_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+MS_OAUTH_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+MS_GRAPH_ME_URL = "https://graph.microsoft.com/v1.0/me"
+
+MS_SCOPES = [
+    "offline_access",
+    "User.Read",
+    "Mail.Read",
+]
+        
+def oauth_consume_state(conn, user_id: int, provider: str, state: str) -> Optional[Dict[str, Any]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE oauth_states
+               SET consumed_at = NOW()
+             WHERE user_id = %s
+               AND provider = %s
+               AND state = %s
+               AND consumed_at IS NULL
+               AND created_at >= NOW() - (%s || ' minutes')::interval
+         RETURNING id, redirect_path, created_at
+            """,
+            (user_id, provider, state, OAUTH_STATE_TTL_MINUTES),
+        )
+        row = cur.fetchone()
+    return row
+    
 @app.route("/integrations/email")
 @login_required
+@require_email_sync
 def integrations_email():
     if not getattr(current_user, "email_sync_enabled", False):
         abort(403)
@@ -634,10 +673,10 @@ def integrations_email():
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, provider, primary_email, sync_enabled, last_sync_at
+            SELECT id, provider, primary_email, sync_enabled, last_sync_at, is_primary
             FROM email_accounts
             WHERE user_id = %s
-            ORDER BY id DESC
+            ORDER BY is_primary DESC, id DESC
             """,
             (current_user.id,),
         )
@@ -645,23 +684,446 @@ def integrations_email():
     finally:
         conn.close()
 
-    # If you don't have a template yet, keep it simple for now
-    return render_template_string(
-        """
-        <h3>Email Integrations</h3>
-        <p><a href="/oauth/gmail/start">Connect Gmail</a></p>
-        <ul>
-        {% for a in accounts %}
-          <li>{{ a.provider }}: {{ a.primary_email }}</li>
-        {% endfor %}
-        </ul>
-        """,
-        accounts=accounts,
+    return render_template("integrations_email.html", accounts=accounts)
+    
+@app.post("/integrations/email/set-primary/<int:email_account_id>")
+@login_required
+@require_email_sync
+def integrations_email_set_primary(email_account_id: int):
+    conn = get_db()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM email_accounts
+                    WHERE id = %s AND user_id = %s
+                    """,
+                    (email_account_id, current_user.id),
+                )
+                if not cur.fetchone():
+                    abort(404)
+
+                cur.execute(
+                    """
+                    UPDATE email_accounts
+                    SET is_primary = FALSE, updated_at = now()
+                    WHERE user_id = %s AND is_primary = TRUE
+                    """,
+                    (current_user.id,),
+                )
+                cur.execute(
+                    """
+                    UPDATE email_accounts
+                    SET is_primary = TRUE, updated_at = now()
+                    WHERE id = %s AND user_id = %s
+                    """,
+                    (email_account_id, current_user.id),
+                )
+
+        flash("Default email account updated.", "success")
+        return redirect(url_for("integrations_email"))
+    finally:
+        conn.close()
+        
+        
+@app.route("/email/sync/<int:contact_id>", methods=["GET"])
+@login_required
+@require_email_sync
+def email_sync_now(contact_id: int):
+    if not getattr(current_user, "email_sync_enabled", False):
+        abort(403)
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Tenant-safe contact existence check
+        cur.execute(
+            "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+            (contact_id, current_user.id),
+        )
+        if not cur.fetchone():
+            abort(404)
+
+        # Choose primary enabled email account (provider-agnostic)
+        cur.execute(
+            """
+            SELECT id, provider
+            FROM email_accounts
+            WHERE user_id = %s
+              AND sync_enabled = TRUE
+            ORDER BY is_primary DESC, updated_at DESC, id DESC
+            LIMIT 1
+            """,
+            (current_user.id,),
+        )
+        acct = cur.fetchone()
+        if not acct:
+            flash("No email account connected or sync is disabled.", "warning")
+            return redirect(url_for("edit_contact", contact_id=contact_id) + "#emails")
+        
+        email_account_id = int(acct["id"])
+        provider = acct["provider"]
+        
+        # Dispatch by provider (Gmail now, Outlook later)
+        
+        stats = sync_email_account(
+            conn,
+            user_id=current_user.id,
+            email_account_id=email_account_id,
+            limit=25,
+        )
+        
+        flash(
+            f"Email sync complete ({provider}). Imported {stats.get('imported_messages', 0)} messages and created {stats.get('links_created', 0)} links.",
+            "success",
+        )
+        return redirect(url_for("edit_contact", contact_id=contact_id) + "#emails")
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"Email sync failed: {e}", "danger")
+        return redirect(url_for("edit_contact", contact_id=contact_id) + "#emails")
+    finally:
+        conn.close()
+
+@app.route("/email/message/<int:message_id>", methods=["GET"])
+@login_required
+@require_email_sync
+def email_message_detail(message_id: int):
+    if not getattr(current_user, "email_sync_enabled", False):
+        abort(403)
+
+    contact_id = request.args.get("contact_id", type=int)
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT *
+            FROM email_messages
+            WHERE id = %s AND user_id = %s
+            """,
+            (message_id, current_user.id),
+        )
+        msg = cur.fetchone()
+        if not msg:
+            abort(404)
+
+        cur.execute(
+            """
+            SELECT
+              l.id,
+              l.contact_id,
+              l.match_type,
+              l.matched_email,
+              c.first_name,
+              c.last_name
+            FROM email_message_links l
+            JOIN contacts c
+              ON c.id = l.contact_id
+             AND c.user_id = l.user_id
+            WHERE l.user_id = %s
+              AND l.email_message_id = %s
+            ORDER BY l.match_type ASC, c.last_name ASC, c.first_name ASC
+            """,
+            (current_user.id, message_id),
+        )
+        links = cur.fetchall() or []
+
+        return render_template(
+            "email_message_detail.html",
+            msg=msg,
+            links=links,
+            contact_id=contact_id,
+            active_page="contacts",
+        )
+    finally:
+        conn.close()
+
+OAUTH_STATE_TTL_MINUTES = 30
+
+def oauth_consume_state(conn, user_id: int, provider: str, state: str) -> Optional[Dict[str, Any]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE oauth_states
+               SET consumed_at = NOW()
+             WHERE user_id = %s
+               AND provider = %s
+               AND state = %s
+               AND consumed_at IS NULL
+               AND created_at >= NOW() - (%s || ' minutes')::interval
+         RETURNING id, redirect_path, created_at
+            """,
+            (user_id, provider, state, OAUTH_STATE_TTL_MINUTES),
+        )
+        row = cur.fetchone()
+    return row
+    
+def oauth_consume_state_any_user(conn, provider: str, state: str) -> Optional[Dict[str, Any]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE oauth_states
+               SET consumed_at = NOW()
+             WHERE provider = %s
+               AND state = %s
+               AND consumed_at IS NULL
+               AND created_at >= NOW() - (%s || ' minutes')::interval
+         RETURNING id, user_id, redirect_path, created_at
+            """,
+            (provider, state, OAUTH_STATE_TTL_MINUTES),
+        )
+        return cur.fetchone()    
+
+from typing import Optional
+import secrets
+
+def oauth_create_state(conn, user_id: int, provider: str, redirect_path: Optional[str] = None) -> str:
+    state = secrets.token_urlsafe(32)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO oauth_states (user_id, provider, state, redirect_path)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (user_id, provider, state, redirect_path),
+        )
+    return state
+    
+@app.route("/oauth/outlook/start")
+@login_required
+@require_email_sync
+def oauth_outlook_start():
+    if not getattr(current_user, "email_sync_enabled", False):
+        abort(403)
+
+    client_id = (os.environ.get("MS_OAUTH_CLIENT_ID") or "").strip()
+    redirect_uri = (os.environ.get("MS_OAUTH_REDIRECT_URI") or "").strip()
+    app.logger.info("Outlook OAuth redirect_uri=%s", redirect_uri)
+    if not client_id or not redirect_uri:
+        abort(500)
+
+    conn = get_db()
+    try:
+        state = oauth_create_state(conn, current_user.id, "outlook")
+        conn.commit()
+    finally:
+        conn.close()
+
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "response_mode": "query",
+        "scope": " ".join(MS_SCOPES),
+        "state": state,
+        # optional but helps some tenants
+        "prompt": "select_account",
+    }
+    return redirect(MS_OAUTH_AUTH_URL + "?" + urllib.parse.urlencode(params))
+    
+@app.route("/oauth/outlook/callback")
+@login_required
+@require_email_sync
+def oauth_outlook_callback():
+    app.logger.info(
+        "Outlook callback HIT (args keys=%s)",
+        sorted(list(request.args.keys()))
     )
 
+    try:
+        received_state = request.args.get("state")
+        if not received_state:
+            flash("Outlook connect failed: missing OAuth state.", "danger")
+            return redirect(url_for("integrations_email"))
 
+        code = request.args.get("code")
+        if not code:
+            flash("Outlook connect failed: missing authorization code.", "danger")
+            return redirect(url_for("integrations_email"))
+
+        client_id = (os.environ.get("MS_OAUTH_CLIENT_ID") or "").strip()
+        client_secret = (os.environ.get("MS_OAUTH_CLIENT_SECRET") or "").strip()
+        redirect_uri = (os.environ.get("MS_OAUTH_REDIRECT_URI") or "").strip()
+        if not client_id or not client_secret or not redirect_uri:
+            flash("Outlook OAuth is not configured (missing MS_OAUTH_* env vars).", "danger")
+            return redirect(url_for("integrations_email"))
+
+        # 🔒 DB-backed state validation (single-use, TTL limited)
+        conn = get_db()
+        try:
+            state_row = oauth_consume_state_any_user(conn, "outlook", received_state)
+            if not state_row:
+                conn.commit()
+                flash(
+                    "Outlook connect failed: invalid or expired state. Please click Connect Outlook again.",
+                    "danger",
+                )
+                return redirect(url_for("integrations_email"))
+
+            user_id = state_row["user_id"]
+            conn.commit()
+        finally:
+            conn.close()
+
+        # 🔒 Permission check via DB (cannot rely on current_user here)
+        conn = get_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT email_sync_enabled FROM users WHERE id = %s",
+                    (user_id,),
+                )
+                u = cur.fetchone()
+
+            if not u or not u.get("email_sync_enabled"):
+                flash(
+                    "Outlook connect failed: email sync is not enabled for this user.",
+                    "danger",
+                )
+                return redirect(url_for("integrations_email"))
+        finally:
+            conn.close()
+
+        # 🔁 Exchange authorization code for tokens
+        token_resp = requests.post(
+            MS_OAUTH_TOKEN_URL,
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            },
+            timeout=20,
+        )
+
+        if token_resp.status_code != 200:
+            flash("Outlook connect failed: token exchange failed.", "danger")
+            return redirect(url_for("integrations_email"))
+
+        token_json = token_resp.json()
+        access_token = token_json.get("access_token")
+        refresh_token = token_json.get("refresh_token")
+        expires_in = token_json.get("expires_in")
+
+        if not access_token:
+            flash("Outlook connect failed: missing access token.", "danger")
+            return redirect(url_for("integrations_email"))
+
+        expires_at = None
+        if expires_in:
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+
+        # 📬 Fetch mailbox identity
+        me_resp = requests.get(
+            MS_GRAPH_ME_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=20,
+        )
+
+        if me_resp.status_code != 200:
+            flash("Outlook connect failed: could not fetch /me.", "danger")
+            return redirect(url_for("integrations_email"))
+
+        me = me_resp.json()
+        ms_user_id = (me.get("id") or "").strip()
+        primary_email = (
+            me.get("mail") or me.get("userPrincipalName") or ""
+        ).strip().lower()
+
+        if not primary_email or not ms_user_id:
+            flash(
+                "Outlook connect failed: could not determine mailbox identity.",
+                "danger",
+            )
+            return redirect(url_for("integrations_email"))
+
+        # 💾 Insert or update email account
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO email_accounts
+                  (
+                    user_id,
+                    provider,
+                    primary_email,
+                    provider_account_id,
+                    access_token_enc,
+                    refresh_token_enc,
+                    token_expires_at,
+                    sync_enabled,
+                    is_primary,
+                    created_at,
+                    updated_at
+                  )
+                VALUES
+                  (
+                    %s,
+                    'outlook',
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    TRUE,
+                    CASE
+                      WHEN NOT EXISTS (
+                        SELECT 1 FROM email_accounts
+                        WHERE user_id = %s AND is_primary = TRUE
+                      )
+                      THEN TRUE
+                      ELSE FALSE
+                    END,
+                    NOW(),
+                    NOW()
+                  )
+                ON CONFLICT (user_id, provider, lower(primary_email))
+                DO UPDATE SET
+                  provider_account_id = EXCLUDED.provider_account_id,
+                  access_token_enc = EXCLUDED.access_token_enc,
+                  refresh_token_enc = COALESCE(
+                      EXCLUDED.refresh_token_enc,
+                      email_accounts.refresh_token_enc
+                  ),
+                  token_expires_at = EXCLUDED.token_expires_at,
+                  updated_at = NOW();
+                """,
+                (
+                    user_id,
+                    primary_email,
+                    ms_user_id,
+                    encrypt_token(access_token),
+                    encrypt_token(refresh_token) if refresh_token else None,
+                    expires_at,
+                    user_id,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        flash("Outlook connected.", "success")
+        return redirect(url_for("integrations_email"))
+
+    except Exception as e:
+        flash(
+            f"Outlook connect failed: {type(e).__name__}: {str(e)[:200]}",
+            "danger",
+        )
+        return redirect(url_for("integrations_email"))
+                        
 @app.route("/oauth/gmail/start")
 @login_required
+@require_email_sync
 def oauth_gmail_start():
     if not getattr(current_user, "email_sync_enabled", False):
         abort(403)
@@ -688,6 +1150,7 @@ def oauth_gmail_start():
 
 @app.route("/integrations/email/gmail/import", methods=["POST"])
 @login_required
+@require_email_sync
 def gmail_import_messages():
     if not getattr(current_user, "email_sync_enabled", False):
         return ("Email sync is disabled.", 403)
@@ -729,8 +1192,10 @@ def gmail_import_messages():
             conn.close()
         except Exception:
             pass            
+            
 @app.route("/oauth/gmail/callback")
 @login_required
+@require_email_sync
 def oauth_gmail_callback():
     if not getattr(current_user, "email_sync_enabled", False):
         abort(403)
@@ -791,10 +1256,38 @@ def oauth_gmail_callback():
         cur.execute(
             """
             INSERT INTO email_accounts
-              (user_id, provider, primary_email, access_token_enc, refresh_token_enc, token_expires_at,
-               sync_enabled, created_at, updated_at)
+              (
+                user_id,
+                provider,
+                primary_email,
+                access_token_enc,
+                refresh_token_enc,
+                token_expires_at,
+                sync_enabled,
+                is_primary,
+                created_at,
+                updated_at
+              )
             VALUES
-              (%s, 'gmail', %s, %s, %s, %s, TRUE, NOW(), NOW())
+              (
+                %s,
+                'gmail',
+                %s,
+                %s,
+                %s,
+                %s,
+                TRUE,
+                CASE
+                  WHEN NOT EXISTS (
+                    SELECT 1 FROM email_accounts
+                    WHERE user_id = %s AND is_primary = TRUE
+                  )
+                  THEN TRUE
+                  ELSE FALSE
+                END,
+                NOW(),
+                NOW()
+              )
             ON CONFLICT (user_id, provider, lower(primary_email))
             DO UPDATE SET
               access_token_enc = EXCLUDED.access_token_enc,
@@ -808,6 +1301,7 @@ def oauth_gmail_callback():
                 encrypt_token(access_token),
                 encrypt_token(refresh_token) if refresh_token else None,
                 expires_at,
+                current_user.id,  # <-- for CASE subquery
             ),
         )
         conn.commit()
@@ -1172,6 +1666,20 @@ def get_contact_associations(conn, user_id, contact_id):
         (contact_id, contact_id, user_id, contact_id, contact_id),
     )
     return cur.fetchall()
+
+def get_primary_email_account(conn, user_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT *
+            FROM email_accounts
+            WHERE user_id = %s AND sync_enabled = true
+            ORDER BY is_primary DESC, created_at DESC, id DESC
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        return cur.fetchone()
 
 def create_contact_association(conn, user_id, contact_id_a, contact_id_b, relationship_type=None):
     """
@@ -5395,6 +5903,75 @@ def edit_contact(contact_id):
             next_time_minute = None
             next_time_ampm = None
 
+    # Emails
+    email_messages = []
+    email_limit = 50
+    email_offset = 0
+    
+    email_dir = (request.args.get("email_dir") or "all").strip().lower()
+    email_days = (request.args.get("email_days") or "90").strip().lower()
+    email_q = (request.args.get("email_q") or "").strip()
+    email_from = (request.args.get("email_from") or "").strip()
+    
+    email_connected = False
+    email_primary_provider = None
+    
+    if getattr(current_user, "email_sync_enabled", False):
+        try:
+            email_limit = int(request.args.get("email_limit") or 50)
+        except Exception:
+            email_limit = 50
+        email_limit = max(10, min(email_limit, 200))
+    
+        try:
+            email_offset = int(request.args.get("email_offset") or 0)
+        except Exception:
+            email_offset = 0
+        email_offset = max(0, email_offset)
+    
+        # clamp/validate filters defensively
+        if email_dir not in ("all", "inbound", "outbound", "unknown"):
+            email_dir = "all"
+        if email_days not in ("all", "30", "90", "365"):
+            email_days = "90"
+        if len(email_q) > 200:
+            email_q = email_q[:200]
+        if len(email_from) > 200:
+            email_from = email_from[:200]
+    
+        from services.email_sync.read import list_messages_for_contact
+        email_messages = list_messages_for_contact(
+            conn,
+            user_id=current_user.id,
+            contact_id=contact_id,
+            limit=email_limit,
+            offset=email_offset,
+            direction=email_dir,
+            days=email_days,
+            q=email_q,
+            from_email=email_from,
+        )
+    
+        # Email Connected state (provider-agnostic)
+        cur.execute(
+            """
+            SELECT provider
+            FROM email_accounts
+            WHERE user_id = %s
+              AND sync_enabled = TRUE
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+            """,
+            (current_user.id,),
+        )
+        row = cur.fetchone()
+        
+        if row:
+            email_primary_provider = row["provider"]
+            email_connected = True
+        else:
+            email_primary_provider = None
+            email_connected = False                    
     # Transactions (top 5)
     cur.execute(
         """
@@ -5572,6 +6149,15 @@ def edit_contact(contact_id):
         activepipe_profile=activepipe_profile,
         activepipe_payload=activepipe_payload,
         contact_emails=contact_emails,
+        email_messages=email_messages, 
+        email_limit=email_limit, 
+        email_offset=email_offset,
+        email_dir=email_dir,
+        email_days=email_days,
+        email_q=email_q,
+        email_from=email_from,
+        email_connected=email_connected,
+        email_primary_provider=email_primary_provider,
     )
 
 @app.route("/contacts/<int:contact_id>/associations/add", methods=["POST"])

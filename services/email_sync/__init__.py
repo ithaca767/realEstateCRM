@@ -1,0 +1,1 @@
+from .dispatcher import sync_email_account  # noqa: F401

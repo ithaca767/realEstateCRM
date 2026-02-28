@@ -390,7 +390,7 @@ def import_last_messages_gmail(
             _insert_link(conn, user_id, email_message_id, cid, match_type, email)
             linked += 1
 
-        conn.commit()
+    conn.commit()
 
     return {
         "email_account_id": email_account_id,

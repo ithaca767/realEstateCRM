@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-3">
+
+  <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <h3 class="mb-1">Email Integrations</h3>
+      <div class="text-muted">Connect mailboxes and manage which account is default for sync.</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-sm btn-outline-secondary" href="javascript:history.back()">Back</a>
+    </div>
+  </div>
+
+  <!-- Connect -->
+  <div class="card mb-3">
+    <div class="card-header bg-primary-subtle text-dark fw-semibold">
+      Connect
+    </div>
+    <div class="card-body">
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('oauth_gmail_start') }}">Connect Gmail</a>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('oauth_outlook_start') }}">Connect Outlook</a>
+      </div>
+      <div class="text-muted small mt-2">
+        You will be redirected to the provider to authorize access.
+      </div>
+    </div>
+  </div>
+
+  <!-- Connected accounts -->
+  <div class="card">
+    <div class="card-header bg-primary-subtle text-dark fw-semibold">
+      Connected accounts
+    </div>
+
+    <div class="card-body">
+      {% if accounts and accounts|length > 0 %}
+        <div class="table-responsive">
+          <table class="table table-sm table-striped mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width:140px;">Provider</th>
+                <th>Email</th>
+                <th style="width:110px;">Default</th>
+                <th style="width:110px;">Sync</th>
+                <th style="width:200px;">Last Sync</th>
+                <th style="width:170px;" class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in accounts %}
+              <tr>
+                <td>{{ (a.provider or "")|capitalize }}</td>
+                <td>{{ a.primary_email }}</td>
+
+                <td>
+                  {% if a.is_primary %}
+                    <span class="badge bg-primary">Default</span>
+                  {% else %}
+                    <span class="text-muted">No</span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if a.sync_enabled %}
+                    <span class="badge bg-success-subtle text-dark">On</span>
+                  {% else %}
+                    <span class="badge bg-secondary-subtle text-dark">Off</span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if a.last_sync_at %}
+                    {{ a.last_sync_at }}
+                  {% else %}
+                    <span class="text-muted">Never</span>
+                  {% endif %}
+                </td>
+
+                <td class="text-end">
+                  {% if a.is_primary %}
+                    <button class="btn btn-sm btn-outline-secondary" type="button" disabled>Default</button>
+                  {% else %}
+                    <form method="post"
+                          action="{{ url_for('integrations_email_set_primary', email_account_id=a.id) }}"
+                          style="display:inline;">
+                      <button type="submit" class="btn btn-sm btn-outline-primary">Make Default</button>
+                    </form>
+                  {% endif %}
+                </td>
+
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-muted">No accounts connected yet.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
