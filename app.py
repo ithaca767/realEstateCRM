@@ -900,6 +900,20 @@ def oauth_create_state(conn, user_id: int, provider: str, redirect_path: Optiona
 @login_required
 @require_email_sync
 def oauth_outlook_start():
+    try:
+        client_id = os.getenv("MS_OAUTH_CLIENT_ID")
+        tenant_id = os.getenv("MS_OAUTH_TENANT_ID")
+        redirect_uri = os.getenv("MS_OAUTH_REDIRECT_URI")
+        secret_present = bool(os.getenv("MS_OAUTH_CLIENT_SECRET"))
+
+        app.logger.info(
+            "Outlook start config: client_id=%s tenant_id=%s redirect_uri=%s secret_present=%s",
+            ("set" if client_id else "MISSING"),
+            ("set" if tenant_id else "MISSING"),
+            (redirect_uri or "MISSING"),
+            secret_present,
+        )
+
     if not getattr(current_user, "email_sync_enabled", False):
         abort(403)
 
@@ -927,6 +941,9 @@ def oauth_outlook_start():
         "prompt": "select_account",
     }
     return redirect(MS_OAUTH_AUTH_URL + "?" + urllib.parse.urlencode(params))
+    except Exception:
+        app.logger.exception("Outlook start failed (user_id=%s)", getattr(current_user, "id", None))
+        raise    
     
 @app.route("/oauth/outlook/callback")
 @login_required
