@@ -633,10 +633,15 @@ GMAIL_SCOPES = [
     "openid",
 ]
 
-MS_OAUTH_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-MS_OAUTH_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-MS_GRAPH_ME_URL = "https://graph.microsoft.com/v1.0/me"
+MS_TENANT_ID = (os.getenv("MS_OAUTH_TENANT_ID") or "").strip()
+if not MS_TENANT_ID:
+    raise RuntimeError("MS_OAUTH_TENANT_ID is required for Outlook OAuth (single-tenant)")
 
+# Single-tenant endpoints
+MS_OAUTH_AUTH_URL = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/authorize"
+MS_OAUTH_TOKEN_URL = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/token"
+
+MS_GRAPH_ME_URL = "https://graph.microsoft.com/v1.0/me"
 MS_SCOPES = [
     "offline_access",
     "User.Read",
@@ -904,17 +909,16 @@ def oauth_outlook_start():
         if not getattr(current_user, "email_sync_enabled", False):
             abort(403)
 
-        client_id = (os.environ.get("MS_OAUTH_CLIENT_ID") or "").strip()
-        tenant_id = (os.environ.get("MS_OAUTH_TENANT_ID") or "").strip()
-        redirect_uri = (os.environ.get("MS_OAUTH_REDIRECT_URI") or "").strip()
-        secret_present = bool(os.environ.get("MS_OAUTH_CLIENT_SECRET"))
+        client_id = (os.getenv("MS_OAUTH_CLIENT_ID") or "").strip()
+        redirect_uri = (os.getenv("MS_OAUTH_REDIRECT_URI") or "").strip()
 
+        # Safe config log (no secrets)
         app.logger.info(
-            "Outlook start config: client_id=%s tenant_id=%s redirect_uri=%s secret_present=%s",
+            "Outlook start config: client_id=%s redirect_uri=%s secret_present=%s tenant_id=%s",
             ("set" if client_id else "MISSING"),
-            ("set" if tenant_id else "MISSING"),
             (redirect_uri or "MISSING"),
-            secret_present,
+            bool(os.getenv("MS_OAUTH_CLIENT_SECRET")),
+            ("set" if (os.getenv("MS_OAUTH_TENANT_ID") or "").strip() else "MISSING"),
         )
 
         if not client_id or not redirect_uri:
@@ -941,7 +945,7 @@ def oauth_outlook_start():
     except Exception:
         app.logger.exception("Outlook start failed (user_id=%s)", getattr(current_user, "id", None))
         raise
-            
+                    
 @app.route("/oauth/outlook/callback")
 @login_required
 @require_email_sync
