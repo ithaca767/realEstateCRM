@@ -774,13 +774,20 @@ def email_sync_now(contact_id: int):
         
         # Dispatch by provider (Gmail now, Outlook later)
         
+        # Optional: allow manual override from querystring
+        limit_param = (request.args.get("limit") or "").strip()
+        try:
+            limit = int(limit_param) if limit_param else 25
+        except ValueError:
+            limit = 25
+        limit = max(1, min(limit, 500))  # guardrails
+
         stats = sync_email_account(
             conn,
             user_id=current_user.id,
             email_account_id=email_account_id,
-            limit=25,
-        )
-        
+            limit=limit,
+        )        
         flash(
             f"Email sync complete ({provider}). Imported {stats.get('imported_messages', 0)} messages and created {stats.get('links_created', 0)} links.",
             "success",
