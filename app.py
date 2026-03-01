@@ -910,18 +910,22 @@ def oauth_outlook_start():
             abort(403)
 
         client_id = (os.getenv("MS_OAUTH_CLIENT_ID") or "").strip()
+        tenant_id = (os.getenv("MS_OAUTH_TENANT_ID") or "").strip()
         redirect_uri = (os.getenv("MS_OAUTH_REDIRECT_URI") or "").strip()
+        secret_present = bool(os.getenv("MS_OAUTH_CLIENT_SECRET"))
 
-        # Safe config log (no secrets)
+        auth_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize"
+
         app.logger.info(
-            "Outlook start config: client_id=%s redirect_uri=%s secret_present=%s tenant_id=%s",
+            "Outlook start config: client_id=%s tenant_id=%s redirect_uri=%s secret_present=%s auth_host=%s",
             ("set" if client_id else "MISSING"),
+            ("set" if tenant_id else "MISSING"),
             (redirect_uri or "MISSING"),
-            bool(os.getenv("MS_OAUTH_CLIENT_SECRET")),
-            ("set" if (os.getenv("MS_OAUTH_TENANT_ID") or "").strip() else "MISSING"),
+            secret_present,
+            auth_url,
         )
 
-        if not client_id or not redirect_uri:
+        if not client_id or not tenant_id or not redirect_uri:
             abort(500)
 
         conn = get_db()
@@ -940,20 +944,31 @@ def oauth_outlook_start():
             "state": state,
             "prompt": "select_account",
         }
-        return redirect(MS_OAUTH_AUTH_URL + "?" + urllib.parse.urlencode(params))
+        return redirect(auth_url + "?" + urllib.parse.urlencode(params))
 
     except Exception:
         app.logger.exception("Outlook start failed (user_id=%s)", getattr(current_user, "id", None))
         raise
-                    
+                            
 @app.route("/oauth/outlook/callback")
 @login_required
 @require_email_sync
 def oauth_outlook_callback():
+    # Safe: never log full querystring or code
     app.logger.info(
         "Outlook callback HIT (args keys=%s)",
         sorted(list(request.args.keys()))
     )
+
+    # If Microsoft sent an error, handle it first
+    error = request.args.get("error")
+    error_desc = request.args.get("error_description")
+    if error:
+        msg = f"Outlook connect failed: {error}"
+        if error_desc:
+            msg += f" - {error_desc}"
+        flash(msg, "danger")
+        return redirect(url_for("integrations_email"))
 
     try:
         received_state = request.args.get("state")
@@ -966,63 +981,49 @@ def oauth_outlook_callback():
             flash("Outlook connect failed: missing authorization code.", "danger")
             return redirect(url_for("integrations_email"))
 
-        client_id = (os.environ.get("MS_OAUTH_CLIENT_ID") or "").strip()
-        client_secret = (os.environ.get("MS_OAUTH_CLIENT_SECRET") or "").strip()
-        redirect_uri = (os.environ.get("MS_OAUTH_REDIRECT_URI") or "").strip()
-        if not client_id or not client_secret or not redirect_uri:
+        tenant_id = (os.getenv("MS_OAUTH_TENANT_ID") or "").strip()
+        client_id = (os.getenv("MS_OAUTH_CLIENT_ID") or "").strip()
+        client_secret = (os.getenv("MS_OAUTH_CLIENT_SECRET") or "").strip()
+        redirect_uri = (os.getenv("MS_OAUTH_REDIRECT_URI") or "").strip()
+
+        if not tenant_id or not client_id or not client_secret or not redirect_uri:
             flash("Outlook OAuth is not configured (missing MS_OAUTH_* env vars).", "danger")
             return redirect(url_for("integrations_email"))
 
-        # 🔒 DB-backed state validation (single-use, TTL limited)
+        # Single-tenant URLs (no /common)
+        token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+
+        # DB-backed state validation (single-use, TTL limited) for *this* user
         conn = get_db()
         try:
-            state_row = oauth_consume_state_any_user(conn, "outlook", received_state)
-            if not state_row:
+            ok = oauth_consume_state(conn, current_user.id, "outlook", received_state)
+            if not ok:
                 conn.commit()
                 flash(
                     "Outlook connect failed: invalid or expired state. Please click Connect Outlook again.",
                     "danger",
                 )
                 return redirect(url_for("integrations_email"))
-
-            user_id = state_row["user_id"]
             conn.commit()
         finally:
             conn.close()
 
-        # 🔒 Permission check via DB (cannot rely on current_user here)
-        conn = get_db()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT email_sync_enabled FROM users WHERE id = %s",
-                    (user_id,),
-                )
-                u = cur.fetchone()
-
-            if not u or not u.get("email_sync_enabled"):
-                flash(
-                    "Outlook connect failed: email sync is not enabled for this user.",
-                    "danger",
-                )
-                return redirect(url_for("integrations_email"))
-        finally:
-            conn.close()
-
-        # 🔁 Exchange authorization code for tokens
+        # Exchange authorization code for tokens
         token_resp = requests.post(
-            MS_OAUTH_TOKEN_URL,
+            token_url,
             data={
                 "client_id": client_id,
                 "client_secret": client_secret,
                 "code": code,
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
+                "scope": " ".join(MS_SCOPES),
             },
             timeout=20,
         )
 
         if token_resp.status_code != 200:
+            app.logger.error("Outlook token exchange failed: status=%s body=%s", token_resp.status_code, token_resp.text[:2000])
             flash("Outlook connect failed: token exchange failed.", "danger")
             return redirect(url_for("integrations_email"))
 
@@ -1039,7 +1040,7 @@ def oauth_outlook_callback():
         if expires_in:
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
 
-        # 📬 Fetch mailbox identity
+        # Fetch mailbox identity
         me_resp = requests.get(
             MS_GRAPH_ME_URL,
             headers={"Authorization": f"Bearer {access_token}"},
@@ -1047,84 +1048,80 @@ def oauth_outlook_callback():
         )
 
         if me_resp.status_code != 200:
+            app.logger.error("Outlook graph /me failed: status=%s body=%s", me_resp.status_code, me_resp.text[:2000])
             flash("Outlook connect failed: could not fetch /me.", "danger")
             return redirect(url_for("integrations_email"))
 
-        me = me_resp.json()
+        me = me_resp.json() or {}
         ms_user_id = (me.get("id") or "").strip()
-        primary_email = (
-            me.get("mail") or me.get("userPrincipalName") or ""
-        ).strip().lower()
+        primary_email = (me.get("mail") or me.get("userPrincipalName") or "").strip().lower()
 
         if not primary_email or not ms_user_id:
-            flash(
-                "Outlook connect failed: could not determine mailbox identity.",
-                "danger",
-            )
+            flash("Outlook connect failed: could not determine mailbox identity.", "danger")
             return redirect(url_for("integrations_email"))
 
-        # 💾 Insert or update email account
+        # Insert/update email account for the logged-in user
         conn = get_db()
         try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO email_accounts
-                  (
-                    user_id,
-                    provider,
-                    primary_email,
-                    provider_account_id,
-                    access_token_enc,
-                    refresh_token_enc,
-                    token_expires_at,
-                    sync_enabled,
-                    is_primary,
-                    created_at,
-                    updated_at
-                  )
-                VALUES
-                  (
-                    %s,
-                    'outlook',
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    TRUE,
-                    CASE
-                      WHEN NOT EXISTS (
-                        SELECT 1 FROM email_accounts
-                        WHERE user_id = %s AND is_primary = TRUE
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO email_accounts
+                      (
+                        user_id,
+                        provider,
+                        primary_email,
+                        provider_account_id,
+                        access_token_enc,
+                        refresh_token_enc,
+                        token_expires_at,
+                        sync_enabled,
+                        is_primary,
+                        created_at,
+                        updated_at
                       )
-                      THEN TRUE
-                      ELSE FALSE
-                    END,
-                    NOW(),
-                    NOW()
-                  )
-                ON CONFLICT (user_id, provider, lower(primary_email))
-                DO UPDATE SET
-                  provider_account_id = EXCLUDED.provider_account_id,
-                  access_token_enc = EXCLUDED.access_token_enc,
-                  refresh_token_enc = COALESCE(
-                      EXCLUDED.refresh_token_enc,
-                      email_accounts.refresh_token_enc
-                  ),
-                  token_expires_at = EXCLUDED.token_expires_at,
-                  updated_at = NOW();
-                """,
-                (
-                    user_id,
-                    primary_email,
-                    ms_user_id,
-                    encrypt_token(access_token),
-                    encrypt_token(refresh_token) if refresh_token else None,
-                    expires_at,
-                    user_id,
-                ),
-            )
+                    VALUES
+                      (
+                        %s,
+                        'outlook',
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        TRUE,
+                        CASE
+                          WHEN NOT EXISTS (
+                            SELECT 1 FROM email_accounts
+                            WHERE user_id = %s AND is_primary = TRUE
+                          )
+                          THEN TRUE
+                          ELSE FALSE
+                        END,
+                        NOW(),
+                        NOW()
+                      )
+                    ON CONFLICT (user_id, provider, lower(primary_email))
+                    DO UPDATE SET
+                      provider_account_id = EXCLUDED.provider_account_id,
+                      access_token_enc = EXCLUDED.access_token_enc,
+                      refresh_token_enc = COALESCE(
+                          EXCLUDED.refresh_token_enc,
+                          email_accounts.refresh_token_enc
+                      ),
+                      token_expires_at = EXCLUDED.token_expires_at,
+                      updated_at = NOW();
+                    """,
+                    (
+                        current_user.id,
+                        primary_email,
+                        ms_user_id,
+                        encrypt_token(access_token),
+                        encrypt_token(refresh_token) if refresh_token else None,
+                        expires_at,
+                        current_user.id,
+                    ),
+                )
             conn.commit()
         finally:
             conn.close()
@@ -1132,11 +1129,9 @@ def oauth_outlook_callback():
         flash("Outlook connected.", "success")
         return redirect(url_for("integrations_email"))
 
-    except Exception as e:
-        flash(
-            f"Outlook connect failed: {type(e).__name__}: {str(e)[:200]}",
-            "danger",
-        )
+    except Exception:
+        app.logger.exception("Outlook callback failed (user_id=%s)", getattr(current_user, "id", None))
+        flash("Outlook connect failed: unexpected error.", "danger")
         return redirect(url_for("integrations_email"))
                         
 @app.route("/oauth/gmail/start")
