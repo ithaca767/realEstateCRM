@@ -13981,3 +13981,48 @@ Next (Phase 10C continuation):
 
 End of Phase 10A and 10B Summary
 
+# Release 1.7 -- Email Sync Foundation
+
+**Release Date:** 2026-03-01
+
+------------------------------------------------------------------------
+
+## Release Overview
+
+Release 1.7 formalizes Phase 10 (Email Sync) as a production-ready
+feature within Ulysses CRM.
+
+------------------------------------------------------------------------
+
+## Major Features
+
+-   Outlook OAuth (tenant-aware)
+-   Gmail OAuth integration
+-   Encrypted token storage
+-   Token refresh handling
+-   Inbox and Sent ingestion
+-   Deterministic direction classification
+-   Contact-level email linking
+-   Manual sync with controlled limit override
+
+------------------------------------------------------------------------
+
+## Infrastructure Impact
+
+-   No schema-breaking changes.
+-   Email stored once, linked via relational tables.
+-   Feature gated via `email_sync_enabled`.
+
+------------------------------------------------------------------------
+
+## Forward Strategy
+
+Release 1.7 establishes the base layer for:
+
+-   Transaction-aware linking (planned)
+-   AI summarization of email threads
+-   Background sync automation
+-   Attachment metadata support
+
+Release 1.7 marks the completion of foundational email ingestion
+infrastructure.
