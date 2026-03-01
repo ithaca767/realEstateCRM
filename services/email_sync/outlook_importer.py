@@ -1,8 +1,14 @@
 # services/email_sync/outlook_importer.py
 # Phase 10D: Outlook importer v1 (manual pull, snippet + recipients, contact auto-link)
+#
+# Notes:
+# - Direction is determined primarily by the folder we fetched from (Inbox = inbound, Sent = outbound),
+#   with a strong identity-based override when we can prove it.
+# - Token refresh uses tenant-specific endpoint if MS_OAUTH_TENANT_ID is set, otherwise falls back to /common.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -21,7 +27,15 @@ from services.email_sync.gmail_importer import (
 MS_GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 MS_GRAPH_INBOX = f"{MS_GRAPH_BASE}/me/mailFolders/inbox/messages"
 MS_GRAPH_SENT = f"{MS_GRAPH_BASE}/me/mailFolders/sentitems/messages"
-MS_OAUTH_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+
+
+def _ms_tenant_id() -> str:
+    return (os.getenv("MS_OAUTH_TENANT_ID") or "").strip()
+
+
+def _ms_oauth_token_url() -> str:
+    tenant = _ms_tenant_id() or "common"
+    return f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
 
 
 def _parse_graph_dt(s: Optional[str]) -> Optional[datetime]:
@@ -40,7 +54,6 @@ def _format_message_date(dt: Optional[datetime]) -> Optional[str]:
     if not dt:
         return None
     # Match the gmail_importer style: "%Y-%m-%d %H:%M:%S%z"
-    # Ensure we have tz info; Graph should provide it
     try:
         return dt.strftime("%Y-%m-%d %H:%M:%S%z")
     except Exception:
@@ -67,6 +80,7 @@ def _extract_emails(items: Optional[list]) -> List[str]:
         _, addr = _extract_email_name(it)
         if addr:
             out.append(addr)
+
     # de-dupe preserving order
     seen = set()
     deduped: List[str] = []
@@ -78,29 +92,29 @@ def _extract_emails(items: Optional[list]) -> List[str]:
 
 
 def _ms_refresh_access_token(refresh_token: str) -> Tuple[str, int]:
-    # Uses MS_OAUTH_CLIENT_ID / MS_OAUTH_CLIENT_SECRET env vars (same as your callback)
-    import os
-
+    """
+    Uses MS_OAUTH_CLIENT_ID / MS_OAUTH_CLIENT_SECRET env vars (same as your callback).
+    Uses tenant-specific token endpoint if MS_OAUTH_TENANT_ID is set, otherwise /common.
+    """
     client_id = (os.getenv("MS_OAUTH_CLIENT_ID") or "").strip()
     client_secret = (os.getenv("MS_OAUTH_CLIENT_SECRET") or "").strip()
     if not client_id or not client_secret:
         raise RuntimeError("Missing MS_OAUTH_CLIENT_ID / MS_OAUTH_CLIENT_SECRET for refresh.")
 
     resp = requests.post(
-        MS_OAUTH_TOKEN_URL,
+        _ms_oauth_token_url(),
         data={
             "client_id": client_id,
             "client_secret": client_secret,
             "refresh_token": refresh_token,
             "grant_type": "refresh_token",
-            # scope is optional for refresh in many cases; omit to keep minimal
         },
         timeout=30,
     )
     if resp.status_code >= 400:
         raise RuntimeError(f"MS token refresh failed {resp.status_code}: {resp.text[:300]}")
 
-    data = resp.json()
+    data = resp.json() or {}
     access_token = (data.get("access_token") or "").strip()
     expires_in = int(data.get("expires_in") or 0)
     if not access_token or expires_in <= 0:
@@ -197,11 +211,19 @@ def import_last_messages_outlook(
 
     access_token = _ensure_fresh_access_token_outlook(conn, account)
 
-    # Pull from both inbox and sent so the “I emailed them” test works.
+    # Pull from both inbox and sent so we store both inbound and outbound.
     half = max(1, int(limit) // 2)
     inbox_msgs = _graph_list_messages(access_token, url=MS_GRAPH_INBOX, top=half)
     sent_msgs = _graph_list_messages(access_token, url=MS_GRAPH_SENT, top=int(limit) - half)
-    msgs = inbox_msgs + sent_msgs
+
+    # Tag each message with folder hint so direction can be reliable even when recipients are missing.
+    msgs: List[dict] = []
+    for m in inbox_msgs:
+        m["_folder_hint"] = "inbox"
+        msgs.append(m)
+    for m in sent_msgs:
+        m["_folder_hint"] = "sent"
+        msgs.append(m)
 
     imported = 0
     linked = 0
@@ -230,8 +252,16 @@ def import_last_messages_outlook(
 
         provider_thread_id = (m.get("conversationId") or m.get("internetMessageId") or "").strip() or None
 
-        direction = "unknown"
-        if primary and from_email == primary:
+        # Direction: folder default, then identity-based override if we can prove it.
+        folder_hint = (m.get("_folder_hint") or "").lower()
+        if folder_hint == "sent":
+            direction = "outbound"
+        elif folder_hint == "inbox":
+            direction = "inbound"
+        else:
+            direction = "unknown"
+
+        if primary and from_email and from_email.lower() == primary:
             direction = "outbound"
         elif primary and (primary in to_emails or primary in cc_emails):
             direction = "inbound"
