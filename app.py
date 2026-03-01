@@ -6,12 +6,15 @@ import csv
 import io
 import json
 import requests
+import smtplib
 
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except Exception:
     pass
+
+from email.message import EmailMessage
 
 from version import APP_VERSION
 from functools import wraps
@@ -677,8 +680,61 @@ def terms():
 
 @app.route("/")
 def public_home():
-    return render_template("public_home.html", hide_nav=True)
-        
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))
+    return render_template("public_home.html")
+    
+@app.post("/request-access")
+def request_access():
+    # Basic honeypot spam check
+    company = (request.form.get("company") or "").strip()
+    if company:
+        return redirect("/?cta=spam#request-access")
+
+    name = (request.form.get("name") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    brokerage = (request.form.get("brokerage") or "").strip()
+
+    if not name or not email:
+        return redirect("/?cta=fail#request-access")
+
+    # Configure via env vars so creds never appear in code or logs
+    SMTP_HOST = os.getenv("CTA_SMTP_HOST", "").strip()          # e.g. smtp.office365.com
+    SMTP_PORT = int(os.getenv("CTA_SMTP_PORT", "587"))          # usually 587
+    SMTP_USER = os.getenv("CTA_SMTP_USER", "").strip()          # a licensed mailbox user
+    SMTP_PASS = os.getenv("CTA_SMTP_PASS", "").strip()          # password (or app password if applicable)
+    TO_ADDR = "joinulysses@ithacacom.com"
+
+    # If not configured, fail gracefully
+    if not (SMTP_HOST and SMTP_USER and SMTP_PASS):
+        return redirect("/?cta=fail#request-access")
+
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = "Ulysses Early Access Request"
+        msg["From"] = SMTP_USER
+        msg["To"] = TO_ADDR
+
+        body = (
+            "New early-access request:\n\n"
+            f"Name: {name}\n"
+            f"Email: {email}\n"
+            f"Brokerage: {brokerage}\n\n"
+            "Sent from public_home request form.\n"
+        )
+        msg.set_content(body)
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+
+        return redirect("/?cta=ok#request-access")
+
+    except Exception:
+        # Do not print credentials or full connection strings
+        return redirect("/?cta=fail#request-access")
+                
 @app.route("/integrations/email")
 @login_required
 @require_email_sync
@@ -4017,7 +4073,7 @@ def logout():
     logout_user()
     return redirect(url_for("login"))
 
-@app.route("/")
+@app.route("/dashboard")
 @login_required
 def dashboard():
     today = date.today()
