@@ -669,12 +669,16 @@ def oauth_consume_state(conn, user_id: int, provider: str, state: str) -> Option
 
 @app.route("/privacy")
 def privacy():
-    return render_template("legal/privacy.html")
-    
+    return render_template("legal/privacy.html", hide_nav=True)
+
 @app.route("/terms")
 def terms():
-    return render_template("legal/terms.html")    
-    
+    return render_template("legal/terms.html", hide_nav=True)
+
+@app.route("/")
+def public_home():
+    return render_template("public_home.html", hide_nav=True)
+        
 @app.route("/integrations/email")
 @login_required
 @require_email_sync
