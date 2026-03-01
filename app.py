@@ -19,6 +19,7 @@ from datetime import date, datetime, timedelta, time, timezone
 from math import ceil
 from typing import Optional, Dict, Any
 from zoneinfo import ZoneInfo
+from version import TERMS_VERSION
 
 from cryptography.fernet import Fernet
 
@@ -665,6 +666,14 @@ def oauth_consume_state(conn, user_id: int, provider: str, state: str) -> Option
         )
         row = cur.fetchone()
     return row
+
+@app.route("/privacy")
+def privacy():
+    return render_template("legal/privacy.html")
+    
+@app.route("/terms")
+def terms():
+    return render_template("legal/terms.html")    
     
 @app.route("/integrations/email")
 @login_required
@@ -4853,6 +4862,14 @@ def accept_invite():
             return render_template("auth/accept_invite.html", token=token, invite=None)
 
         if request.method == "POST":
+    # Terms acceptance (required)
+            if not request.form.get("agree_terms"):
+                flash(
+                    "You must agree to the Terms of Service and Privacy Policy to create an account.",
+                    "danger",
+                )
+                return render_template("auth/accept_invite.html", token=token, invite=invite)
+        
             pw1 = (request.form.get("password") or "").strip()
             pw2 = (request.form.get("password_confirm") or "").strip()
             first_name = (request.form.get("first_name") or "").strip()
@@ -4898,6 +4915,9 @@ def accept_invite():
             email = invite["invited_email"]
             role = invite["role"]
             password_hash = generate_password_hash(pw1, method="pbkdf2:sha256")
+            terms_accepted_at = datetime.utcnow()
+            terms_version = TERMS_VERSION
+            terms_acceptance_ip = request.remote_addr  # optional
 
             try:
                 with conn.cursor() as cur:
@@ -4908,16 +4928,17 @@ def accept_invite():
                         flash("A user with this email already exists. Use password reset instead.", "danger")
                         return redirect(url_for("request_password_reset") + f"?email={email}")
 
-                    # 1) Create user (includes new profile fields)
+                    # 1) Create user (includes new profile fields + terms acceptance)
                     cur.execute(
                         """
                         INSERT INTO users (
                             email, password_hash,
                             first_name, last_name,
                             role, is_active, created_at,
-                            title, agent_phone, agent_website
+                            title, agent_phone, agent_website,
+                            terms_accepted_at, terms_version
                         )
-                        VALUES (%s, %s, %s, %s, %s, TRUE, NOW(), %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, TRUE, NOW(), %s, %s, %s, %s, %s)
                         RETURNING id;
                         """,
                         (
@@ -4929,6 +4950,8 @@ def accept_invite():
                             title,
                             agent_phone,
                             agent_website,
+                            terms_accepted_at,
+                            terms_version,
                         ),
                     )
                     row = cur.fetchone()
