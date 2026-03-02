@@ -3801,46 +3801,64 @@ DASHBOARD_TEMPLATE = """
 
 LOGIN_TEMPLATE = """
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-    <title>Ulysses CRM - Login</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    >
-    <style>
-      body { background-color: #6eb8f9; }
-      .login-card {
-        max-width: 420px;
-        margin: 80px auto;
-      }
-    </style>
+  <title>Ulysses CRM - Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="privacy-policy" href="/privacy">
+  <link rel="terms-of-service" href="/terms">
+
 </head>
-<body>
-<div class="container">
-  <div class="card login-card shadow-sm">
-    <div class="card-header fw-semibold">
-      Ulysses CRM Login
-    </div>
-    <div class="card-body bg-white">
-      {% if error %}
-        <div class="alert alert-danger py-2">{{ error }}</div>
-      {% endif %}
-      <form method="post">
-        <div class="mb-3">
-          <label class="form-label">Username</label>
-          <input name="username" class="form-control" autofocus>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Password</label>
-          <input name="password" type="password" class="form-control">
-        </div>
-        <button class="btn btn-primary w-100" type="submit">Sign In</button>
-      </form>
+
+<body class="app-bg">
+  <div class="login-wrap">
+    <div class="card login-card">
+      <div class="login-card-header">
+        <img
+          src="/static/ulysses-logo.svg"
+          alt="Ulysses CRM"
+          class="login-logo"
+        >
+        <p class="login-subtitle">Secure CRM for Real Estate Professionals</p>
+      </div>
+
+      <div class="login-card-body">
+        {% if error %}
+          <div class="alert alert-danger py-2 mb-3">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label">Username</label>
+            <input name="username" class="form-control" autofocus autocomplete="username">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input name="password" type="password" class="form-control" autocomplete="current-password">
+          </div>
+
+          <button class="btn btn-primary w-100" type="submit">Sign In</button>
+
+          <div class="legal-links">
+            <a href="/privacy">Privacy Policy</a>
+            &nbsp;|&nbsp;
+            <a href="/terms">Terms of Service</a>
+          </div>
+
+          <div class="tiny-note">
+            By signing in you agree to the Terms of Service.
+          </div>
+        </form>
+      </div>
     </div>
   </div>
-</div>
 </body>
 </html>
 """
@@ -4900,6 +4918,13 @@ def admin_new_invite():
 
     return render_template("auth/admin_invite_new.html", active_page="admin")
 
+@app.route("/dashboard")
+@login_required
+def dashboard_compat():
+    qs = request.query_string.decode("utf-8")
+    target = "/" + (("?" + qs) if qs else "")
+    return redirect(target, code=302)
+            
 @app.route("/accept-invite", methods=["GET", "POST"])
 def accept_invite():
     token = (request.args.get("token") or request.form.get("token") or "").strip()

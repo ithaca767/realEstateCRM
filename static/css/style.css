@@ -39,6 +39,82 @@ footer {
   z-index: auto;
 }
 
+/* Login page polish */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  position: relative;
+  z-index: 1; /* above overlay */
+}
+
+.login-card {
+  width: 100%;
+  max-width: 440px;
+  border: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+}
+
+.login-card-header {
+  background: rgba(255,255,255,0.95);
+  padding: 22px 22px 10px 22px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  text-align: center;
+}
+
+.login-logo {
+  max-height: 72px;
+}
+
+.login-subtitle {
+  margin-top: 10px;
+  margin-bottom: 0;
+  font-size: 0.95rem;
+  color: rgba(0,0,0,0.65);
+}
+
+.login-card-body {
+  background: rgba(255,255,255,0.97);
+  padding: 22px;
+}
+
+.legal-links {
+  margin-top: 14px;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.legal-links a {
+  color: rgba(0,0,0,0.7);
+  text-decoration: none;
+}
+
+.legal-links a:hover {
+  text-decoration: underline;
+}
+
+.tiny-note {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: rgba(0,0,0,0.5);
+  text-align: center;
+}
+
+.login-card .form-control {
+  border-radius: 12px;
+  padding: 12px 12px;
+}
+
+.login-card .btn {
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-weight: 600;
+}
+
 /* Card tweaks */
 .card-header {
     font-weight: 600;
