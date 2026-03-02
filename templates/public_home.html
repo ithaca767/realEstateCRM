@@ -12,7 +12,7 @@
       {% if current_user.is_authenticated %}
         <a class="btn btn-sm btn-primary" href="/dashboard">Go to App</a>
       {% else %}
-        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('login') }}">Login</a>
+        <a class="btn btn-outline-primary" href="/login">Login</a>
         <a
           class="btn btn-sm btn-success"
           href="mailto:joinulysses@ithacacom.com?subject=Ulysses%20CRM%20Early%20Access%20Request&body=Hello%2C%0D%0A%0D%0AI%27m%20interested%20in%20early%20access%20to%20Ulysses%20CRM.%0D%0A%0D%0AName%3A%20%0D%0AEmail%3A%20%0D%0ABrokerage%3A%20%0D%0APhone%20(optional)%3A%20%0D%0A%0D%0AUse%20case%20(optional)%3A%20%0D%0A%0D%0AThanks%2C%0D%0A"

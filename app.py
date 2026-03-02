@@ -677,12 +677,6 @@ def privacy():
 @app.route("/terms")
 def terms():
     return render_template("legal/terms.html", hide_nav=True)
-
-@app.route("/")
-def public_home():
-    if current_user.is_authenticated:
-        return redirect(url_for("dashboard"))
-    return render_template("public_home.html")
     
 @app.post("/request-access")
 def request_access():
@@ -4073,7 +4067,7 @@ def logout():
     logout_user()
     return redirect(url_for("login"))
 
-@app.route("/dashboard")
+@app.route("/")
 @login_required
 def dashboard():
     today = date.today()
