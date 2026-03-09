@@ -6995,8 +6995,13 @@ def edit_engagement(engagement_id):
             if fu_raw:
                 try:
                     fu_dt = datetime.fromisoformat(fu_raw)
-                    if fu_dt.tzinfo:
-                        fu_dt = fu_dt.replace(tzinfo=None)
+
+                    # datetime-local is naive local time, so attach app/user timezone
+                    if fu_dt.tzinfo is None:
+                        fu_dt = fu_dt.replace(tzinfo=get_user_tz())
+                    else:
+                        fu_dt = fu_dt.astimezone(get_user_tz())
+
                     follow_up_due_at = fu_dt
                 except ValueError:
                     follow_up_due_at = e.get("follow_up_due_at")
@@ -7006,7 +7011,7 @@ def edit_engagement(engagement_id):
             # Normal save reopens a completed follow-up unless user explicitly chose save+complete
             if request.form.get("complete_after_save") == "1":
                 follow_up_completed = True
-                follow_up_completed_at = datetime.now().replace(tzinfo=None)
+                follow_up_completed_at = datetime.now(get_user_tz())
             else:
                 follow_up_completed = False
                 follow_up_completed_at = None
@@ -7018,8 +7023,11 @@ def edit_engagement(engagement_id):
                 if fu_raw:
                     try:
                         fu_dt = datetime.fromisoformat(fu_raw)
-                        if fu_dt.tzinfo:
-                            fu_dt = fu_dt.replace(tzinfo=None)
+
+                        if fu_dt.tzinfo is None:
+                            fu_dt = fu_dt.replace(tzinfo=get_user_tz())
+                        else:
+                            fu_dt = fu_dt.astimezone(get_user_tz())
 
                         follow_up_due_at = fu_dt
 
@@ -7027,9 +7035,8 @@ def edit_engagement(engagement_id):
                         requires_follow_up = False
 
                 if follow_up_completed:
-                    follow_up_completed_at = datetime.now().replace(tzinfo=None)
-
-
+                    follow_up_completed_at = datetime.now(get_user_tz())
+                    
         # =========================================================
         # UPDATE PARENT ENGAGEMENT
         # =========================================================
@@ -7162,20 +7169,6 @@ def edit_engagement(engagement_id):
                 ),
             )
 
-            if request.form.get("complete_after_save") == "1":
-                cur.execute(
-                    """
-                    UPDATE engagements
-                    SET
-                      follow_up_completed = TRUE,
-                      follow_up_completed_at = now(),
-                      updated_at = now()
-                    WHERE id = %s
-                      AND user_id = %s
-                      AND parent_engagement_id IS NOT NULL
-                    """,
-                    (engagement_id, current_user.id),
-                )
 
         conn.commit()
         conn.close()

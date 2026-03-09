@@ -13,3 +13,4 @@ transaction_deadlines_backup.csv
 _local_scratch/
 docs/seeds/
 dev_proxy.py
+openai/
