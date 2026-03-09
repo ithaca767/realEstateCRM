@@ -13,7 +13,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 # Reuse the proven helpers + schema insert/link behavior from Gmail importer
 from services.email_sync.gmail_importer import (
@@ -163,7 +162,19 @@ def _ensure_fresh_access_token_outlook(conn, account_row: Dict[str, Any]) -> str
     return new_access
 
 
-def _graph_list_messages(access_token: str, *, url: str, top: int) -> List[dict]:
+def _graph_get_json(access_token: str, *, url: str, params: Optional[dict] = None) -> dict:
+    resp = requests.get(
+        url,
+        headers={"Authorization": f"Bearer {access_token}"},
+        params=params,
+        timeout=30,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Graph API error {resp.status_code}: {resp.text[:300]}")
+    return resp.json() or {}
+
+
+def _graph_list_messages_page(access_token: str, *, url: str, top: int) -> dict:
     params = {
         "$top": str(top),
         "$orderby": "receivedDateTime DESC",
@@ -183,17 +194,37 @@ def _graph_list_messages(access_token: str, *, url: str, top: int) -> List[dict]
             ]
         ),
     }
+    return _graph_get_json(access_token, url=url, params=params)
 
-    resp = requests.get(
-        url,
-        headers={"Authorization": f"Bearer {access_token}"},
-        params=params,
-        timeout=30,
-    )
-    if resp.status_code >= 400:
-        raise RuntimeError(f"Graph API error {resp.status_code}: {resp.text[:300]}")
-    data = resp.json() or {}
-    return data.get("value") or []
+
+def _graph_follow_nextlink(access_token: str, *, next_link: str) -> dict:
+    return _graph_get_json(access_token, url=next_link, params=None)
+
+
+def _graph_list_messages_paginated(
+    access_token: str,
+    *,
+    url: str,
+    per_page: int = 50,
+    max_messages: int = 100,
+) -> List[dict]:
+    results: List[dict] = []
+
+    data = _graph_list_messages_page(access_token, url=url, top=per_page)
+    batch = data.get("value") or []
+    results.extend(batch)
+
+    next_link = data.get("@odata.nextLink")
+
+    while next_link and len(results) < max_messages:
+        data = _graph_follow_nextlink(access_token, next_link=next_link)
+        batch = data.get("value") or []
+        if not batch:
+            break
+        results.extend(batch)
+        next_link = data.get("@odata.nextLink")
+
+    return results[:max_messages]
 
 
 def import_last_messages_outlook(
@@ -201,7 +232,7 @@ def import_last_messages_outlook(
     *,
     user_id: int,
     email_account_id: int,
-    limit: int = 25,
+    limit: int = 100,
 ) -> Dict[str, Any]:
     account = _fetch_account(conn, user_id, email_account_id)
 
@@ -213,9 +244,21 @@ def import_last_messages_outlook(
     access_token = _ensure_fresh_access_token_outlook(conn, account)
 
     # Pull from both inbox and sent so we store both inbound and outbound.
+    # Phase 10 patch: use paginated recent fetches instead of a single shallow page.
     half = max(1, int(limit) // 2)
-    inbox_msgs = _graph_list_messages(access_token, url=MS_GRAPH_INBOX, top=half)
-    sent_msgs = _graph_list_messages(access_token, url=MS_GRAPH_SENT, top=int(limit) - half)
+
+    inbox_msgs = _graph_list_messages_paginated(
+        access_token,
+        url=MS_GRAPH_INBOX,
+        per_page=min(50, half),
+        max_messages=half,
+    )
+    sent_msgs = _graph_list_messages_paginated(
+        access_token,
+        url=MS_GRAPH_SENT,
+        per_page=min(50, max(1, int(limit) - half)),
+        max_messages=int(limit) - half,
+    )
 
     # Tag each message with folder hint so direction can be reliable even when recipients are missing.
     msgs: List[dict] = []
@@ -251,7 +294,9 @@ def import_last_messages_outlook(
         recv_dt = _parse_graph_dt(m.get("receivedDateTime"))
         message_date = _format_message_date(sent_dt or recv_dt)
 
-        provider_thread_id = (m.get("conversationId") or m.get("internetMessageId") or "").strip() or None
+        provider_thread_id = (
+            (m.get("conversationId") or m.get("internetMessageId") or "").strip() or None
+        )
 
         # Direction: folder default, then identity-based override if we can prove it.
         folder_hint = (m.get("_folder_hint") or "").lower()
