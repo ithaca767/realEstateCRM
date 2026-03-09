@@ -207,14 +207,15 @@
               
                             </div>
               
-                            {% if item.get('contact_id') %}
-                              <a class="small text-decoration-none"
-                                 href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}?engagement_id={{ item['engagement_id'] }}#pane-followups">
-                                See more
-                              </a>
-                            {% else %}
-                              <span class="small text-muted">See more</span>
-                            {% endif %}
+                          {% if item.get('engagement_id') %}
+                            <a class="small text-decoration-none"
+                               href="{{ url_for('edit_engagement', engagement_id=item['engagement_id']) }}">
+                              See more
+                            </a>
+                          {% else %}
+                            <span class="small text-muted">See more</span>
+                          {% endif %}
+                          
                           </div>
               
                           <div class="text-muted small mt-1">
@@ -223,7 +224,7 @@
               
                           <div class="fw-semibold mt-1">
                             <a class="text-decoration-none"
-                               href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}?engagement_id={{ item['engagement_id'] }}#pane-followups">
+                               href="{{ url_for('edit_engagement', engagement_id=item['engagement_id']) }}">
                               {{ item.contact_name or "Unnamed Contact" }}
                             </a>
                           </div>
