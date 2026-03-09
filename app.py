@@ -10523,95 +10523,7 @@ def api_search_answer():
     finally:
         conn.close()
 
-def relink_existing_messages_for_contact(conn, user_id: int, contact_id: int) -> int:
-    """
-    Backfill email_message_links for an existing contact based on current
-    contact_emails and already-imported email_messages.
-
-    Returns the number of new link rows inserted.
-    """
-    cur = conn.cursor()
-
-    cur.execute(
-        """
-        WITH candidate_links AS (
-          SELECT
-            em.user_id,
-            em.id AS email_message_id,
-            ce.contact_id,
-            CASE
-              WHEN lower(COALESCE(em.from_email, '')) = lower(ce.email) THEN 'from'
-              WHEN EXISTS (
-                SELECT 1
-                FROM jsonb_array_elements_text(COALESCE(em.to_emails, '[]'::jsonb)) AS t(email)
-                WHERE lower(t.email) = lower(ce.email)
-              ) THEN 'to'
-              WHEN EXISTS (
-                SELECT 1
-                FROM jsonb_array_elements_text(COALESCE(em.cc_emails, '[]'::jsonb)) AS c(email)
-                WHERE lower(c.email) = lower(ce.email)
-              ) THEN 'cc'
-              ELSE 'unknown'
-            END AS match_type,
-            ce.email AS matched_email
-          FROM email_messages em
-          JOIN contact_emails ce
-            ON ce.user_id = em.user_id
-           AND ce.contact_id = %s
-          WHERE em.user_id = %s
-            AND (
-              lower(COALESCE(em.from_email, '')) = lower(ce.email)
-              OR EXISTS (
-                SELECT 1
-                FROM jsonb_array_elements_text(COALESCE(em.to_emails, '[]'::jsonb)) AS t(email)
-                WHERE lower(t.email) = lower(ce.email)
-              )
-              OR EXISTS (
-                SELECT 1
-                FROM jsonb_array_elements_text(COALESCE(em.cc_emails, '[]'::jsonb)) AS c(email)
-                WHERE lower(c.email) = lower(ce.email)
-              )
-            )
-        ),
-        deduped_links AS (
-          SELECT
-            user_id,
-            email_message_id,
-            contact_id,
-            match_type,
-            MIN(matched_email) AS matched_email
-          FROM candidate_links
-          WHERE match_type IN ('from', 'to', 'cc')
-          GROUP BY user_id, email_message_id, contact_id, match_type
-        ),
-        inserted AS (
-          INSERT INTO email_message_links (
-            user_id,
-            email_message_id,
-            contact_id,
-            match_type,
-            matched_email,
-            created_at
-          )
-          SELECT
-            user_id,
-            email_message_id,
-            contact_id,
-            match_type,
-            matched_email,
-            NOW()
-          FROM deduped_links
-          ON CONFLICT (user_id, email_message_id, contact_id, match_type) DO NOTHING
-          RETURNING id
-        )
-        SELECT COUNT(*) AS inserted_count
-        FROM inserted
-        """,
-        (contact_id, user_id),
-    )
-
-    row = cur.fetchone()
-    return int(row["inserted_count"] or 0) if row else 0
+from flask import flash
 
 @app.post("/contacts/<int:contact_id>/emails/add")
 @login_required
@@ -10647,31 +10559,18 @@ def add_contact_email(contact_id):
             """,
             (current_user.id, contact_id, email, label),
         )
-
-        inserted_email = cur.rowcount > 0
-        relinked_count = 0
-
-        if inserted_email:
-            relinked_count = relink_existing_messages_for_contact(
-                conn,
-                user_id=current_user.id,
-                contact_id=contact_id,
-            )
-
         conn.commit()
 
-        if not inserted_email:
+        if cur.rowcount == 0:
             flash("That email is already used by another contact (or already exists).", "warning")
         else:
-            if relinked_count > 0:
-                flash(f"Email added. Linked {relinked_count} existing email(s).", "success")
-            else:
-                flash("Email added.", "success")
+            flash("Email added.", "success")
 
     finally:
         conn.close()
 
     return redirect(url_for("edit_contact", contact_id=contact_id) + "#emails")
+
 
 @app.post("/contacts/<int:contact_id>/emails/<int:contact_email_id>/delete")
 @login_required
