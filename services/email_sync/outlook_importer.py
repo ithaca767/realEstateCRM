@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 # Reuse the proven helpers + schema insert/link behavior from Gmail importer
 from services.email_sync.gmail_importer import (

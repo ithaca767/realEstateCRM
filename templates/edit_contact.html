@@ -16,7 +16,7 @@
         {% if c['archived_at'] is not none %}
           <span class="badge bg-warning text-dark ms-2">Archived</span>
         {% endif %}
-        
+
         {% if c.get('contact_state') == 'inactive' %}
           <span class="badge bg-secondary ms-2">Inactive</span>
         {% endif %}
@@ -42,6 +42,7 @@
       <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
         <div style="padding:6px 0; font-size:12px; opacity:.7;">
         </div>
+
         <ul class="nav nav-tabs border-0 mb-0">
           <li class="nav-item" role="presentation">
             <button class="nav-link active d-flex align-items-center gap-2"
@@ -51,7 +52,7 @@
                     type="button"
                     role="tab">
               <span>Details</span>
-            
+
               {% if c.get("next_follow_up") %}
                 <span class="badge rounded-pill bg-danger-subtle text-danger-emphasis small opacity-75">
                   Contact follow-up
@@ -71,7 +72,7 @@
             </button>
           </li>
 
-          <li class="nav-item" role="presentation">
+          <!-- <li class="nav-item" role="presentation">
             <button class="nav-link"
                     id="tab-followups"
                     data-bs-toggle="tab"
@@ -80,7 +81,7 @@
                     role="tab">
               Follow-ups
             </button>
-          </li>
+          </li> -->
 
           {% if current_user.email_sync_enabled %}
           <li class="nav-item" role="presentation">
@@ -93,7 +94,7 @@
             </button>
           </li>
           {% endif %}
-          
+
           <li class="nav-item" role="presentation">
             <button class="nav-link"
                     id="tab-transactions"
@@ -104,6 +105,7 @@
               Transactions
             </button>
           </li>
+
           <li class="nav-item" role="presentation">
             <button class="nav-link" id="integrations-tab"
                     data-bs-toggle="tab"
@@ -113,7 +115,7 @@
                     aria-selected="false">
               Integrations
             </button>
-          </li>          
+          </li>
         </ul>
 
         <div class="ms-auto">
@@ -138,15 +140,6 @@
                                               next=(url_for('edit_contact', contact_id=c['id']) ~ '#engagements')) }}', 'New Task')">
             + Task
           </button>
-
-          <!-- <button type="button"
-                  class="btn btn-sm btn-primary"
-                  onclick="openTaskModal({
-                    contactId: {{ c['id']|int }},
-                    next: {{ (url_for('edit_contact', contact_id=c['id']) ~ '#engagements')|tojson }}
-                  });">
-            + Task
-          </button> -->
         </div>
       </div>
 
@@ -182,7 +175,8 @@
               </div>
 
               <form id="contactForm" method="post">
-              <input type="hidden" name="activepipe_enabled" value="1">
+                <input type="hidden" name="activepipe_enabled" value="1">
+
                 <div class="row g-3">
 
                   <div class="col-md-3">
@@ -423,14 +417,25 @@
                           <td>{{ d["special_date"] }}</td>
                           <td>{{ "Yes" if d["is_recurring"] else "No" }}</td>
                           <td>{{ d["notes"] or "" }}</td>
-                          <td class="text-end">
-                            <form method="post" action="{{ url_for('delete_special_date', special_date_id=d['id']) }}" class="m-0 d-inline">
-                              <button type="submit" class="btn btn-sm btn-outline-danger"
-                                      onclick="return confirm('Delete this special date?');">
-                                Delete
-                              </button>
-                            </form>
+
+                          <td class="text-end actions-col" style="width: 90px;">
+                            <div class="d-inline-flex align-items-center justify-content-end">
+                              <div class="btn-group btn-group-sm" role="group" aria-label="Row actions">
+                                <button type="button"
+                                        class="btn btn-outline-danger"
+                                        onclick="if(confirm('Delete this special date?')) document.getElementById('specialDateDeleteForm_{{ d['id'] }}').submit();">
+                                  Delete
+                                </button>
+                              </div>
+
+                              <form id="specialDateDeleteForm_{{ d['id'] }}"
+                                    method="post"
+                                    action="{{ url_for('delete_special_date', special_date_id=d['id']) }}"
+                                    class="d-none">
+                              </form>
+                            </div>
                           </td>
+
                         </tr>
                       {% endfor %}
                     </tbody>
@@ -465,7 +470,7 @@
                         <th>Relationship</th>
                         <th>Email</th>
                         <th>Phone</th>
-                        <th style="width: 90px;" class="actions-col">Actions</th>
+                        <th style="width: 140px;" class="text-end actions-col">Actions</th>
                       </tr>
                     </thead>
 
@@ -487,25 +492,32 @@
                               <span class="text-muted small">—</span>
                             {% endif %}
                           </td>
+
                           <td>{{ a.other_email or "" }}</td>
                           <td>{{ (a.other_phone or "")|phone_display }}</td>
 
-                          <td>
-                            <div class="d-flex gap-2 justify-content-end">
-                              <button type="button"
-                                      class="btn btn-sm btn-outline-secondary"
-                                      data-bs-toggle="modal"
-                                      data-bs-target="#editAssocModal{{ a.id }}">
-                                Edit
-                              </button>
+                          <td class="text-end actions-col" style="width: 140px;">
+                            <div class="d-inline-flex align-items-center justify-content-end">
+                              <div class="btn-group btn-group-sm" role="group" aria-label="Row actions">
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#editAssocModal{{ a.id }}">
+                                  Edit
+                                </button>
 
-                              <form method="POST" action="{{ url_for('delete_contact_association', contact_id=c['id'], assoc_id=a.id) }}">
-                                <input type="hidden" name="next" value="{{ request.full_path }}">
-                                <button type="submit"
-                                        class="btn btn-sm btn-outline-danger"
-                                        onclick="return confirm('Remove this association?');">
+                                <button type="button"
+                                        class="btn btn-outline-danger"
+                                        onclick="if(confirm('Remove this association?')) document.getElementById('assocRemoveForm_{{ a.id }}').submit();">
                                   Remove
                                 </button>
+                              </div>
+
+                              <form id="assocRemoveForm_{{ a.id }}"
+                                    method="post"
+                                    action="{{ url_for('delete_contact_association', contact_id=c['id'], assoc_id=a.id) }}"
+                                    class="d-none">
+                                <input type="hidden" name="next" value="{{ request.full_path }}">
                               </form>
                             </div>
                           </td>
@@ -577,17 +589,18 @@
                     <input type="text" class="form-control" id="assocSearch" placeholder="Search by name, email, or phone">
                     <div class="form-text">Type at least 2 characters, then click a result to link it.</div>
                   </div>
+
                   <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
                     <div class="small">
                       <span class="text-muted">Selected:</span>
                       <span id="assocSelectedLabel" class="fw-semibold">None</span>
                     </div>
-                  
+
                     <button type="button"
                             id="assocLinkBtn"
                             class="btn btn-sm btn-primary"
                             disabled>
-                      Link 
+                      Link
                     </button>
                   </div>
 
@@ -654,7 +667,7 @@
                 </div>
               {% endif %}
 
-              <form method="post" 
+              <form method="post"
                     action="{{ url_for('add_engagement', contact_id=c['id']) }}"
                     data-engagement-create="1">
                 <div class="row g-3 align-items-end">
@@ -724,46 +737,61 @@
                   </div>
 
                   <div class="col-12" id="followUpFields" style="display: none;">
-                    <div class="row g-3 align-items-end">
-                      <div class="col-md-3">
-                        <label class="form-label">Follow-up due date</label>
-                        <input name="follow_up_due_date" type="date" class="form-control">
-                      </div>
-
-                      <div class="col-md-2">
-                        <label class="form-label">Hour</label>
-                        <select name="follow_up_due_hour" class="form-select">
-                          <option value="">Hour</option>
-                          {% for h in range(1, 13) %}
-                            <option value="{{ h }}">{{ h }}</option>
-                          {% endfor %}
-                        </select>
-                      </div>
-
-                      <div class="col-md-2">
-                        <label class="form-label">Minute</label>
-                        <select name="follow_up_due_minute" class="form-select">
-                          <option value="">Minute</option>
-                          <option value="00">00</option>
-                          <option value="15">15</option>
-                          <option value="30">30</option>
-                          <option value="45">45</option>
-                        </select>
-                      </div>
-
-                      <div class="col-md-2">
-                        <label class="form-label">AM / PM</label>
-                        <select name="follow_up_due_ampm" class="form-select">
-                          <option value="">AM / PM</option>
-                          <option value="AM">AM</option>
-                          <option value="PM">PM</option>
-                        </select>
-                      </div>
-
-                      <div class="col-md-3">
-                        <div class="text-muted small">
-                          Tip: Use Notes for the follow-up plan and deliverable if needed.
+                    <div class="card card-body bg-light border-0">
+                      <div class="row g-3 align-items-end">
+                  
+                        <div class="col-md-3">
+                          <label class="form-label">Follow-up due date</label>
+                          <input name="follow_up_due_date" type="date" class="form-control">
                         </div>
+                  
+                        <div class="col-md-2">
+                          <label class="form-label">Hour</label>
+                          <select name="follow_up_due_hour" class="form-select">
+                            <option value="">Hour</option>
+                            {% for h in range(1, 13) %}
+                              <option value="{{ h }}">{{ h }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                  
+                        <div class="col-md-2">
+                          <label class="form-label">Minute</label>
+                          <select name="follow_up_due_minute" class="form-select">
+                            <option value="">Minute</option>
+                            <option value="00">00</option>
+                            <option value="15">15</option>
+                            <option value="30">30</option>
+                            <option value="45">45</option>
+                          </select>
+                        </div>
+                  
+                        <div class="col-md-2">
+                          <label class="form-label">AM / PM</label>
+                          <select name="follow_up_due_ampm" class="form-select">
+                            <option value="">AM / PM</option>
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                          </select>
+                        </div>
+                  
+                        <div class="col-md-3">
+                          <div class="text-muted small">
+                            This creates a linked follow-up record.
+                          </div>
+                        </div>
+                  
+                        <div class="col-12">
+                          <label class="form-label">Follow-up notes</label>
+                          <textarea name="follow_up_notes"
+                                    class="form-control"
+                                    rows="3"
+                                    placeholder="Example: Send updated CMA and confirm listing appointment"></textarea>
+                          <div class="form-text">
+                            These notes will appear in the follow-up record.
+                          </div>
+                        </div>
+                  
                       </div>
                     </div>
                   </div>
@@ -782,50 +810,51 @@
                         <label class="form-label">Summary (clean)</label>
                         <textarea name="summary_clean" class="form-control" rows="4" placeholder="Paste cleaned summary here"></textarea>
                       </div>
-                    <div class="mt-3">
-                      <button type="button" class="btn btn-outline-primary btn-sm" id="engAiSummarizeDraftBtn">
-                        AI Assist: Summarize transcript
-                      </button>
-                      <span class="ms-2 small text-muted" id="engAiDraftStatus" style="display:none;"></span>
-                    </div>
-                    
-                    <div class="card mt-3" id="engAiDraftPreviewCard" style="display:none;">
-                      <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start">
-                          <div>
-                            <h6 class="mb-1">AI Preview</h6>
-                            <div class="small text-muted">Nothing is saved unless you paste it and click Save Engagement.</div>
+
+                      <div class="mt-3">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="engAiSummarizeDraftBtn">
+                          AI Assist: Summarize transcript
+                        </button>
+                        <span class="ms-2 small text-muted" id="engAiDraftStatus" style="display:none;"></span>
+                      </div>
+
+                      <div class="card mt-3" id="engAiDraftPreviewCard" style="display:none;">
+                        <div class="card-body">
+                          <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                              <h6 class="mb-1">AI Preview</h6>
+                              <div class="small text-muted">Nothing is saved unless you paste it and click Save Engagement.</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiDraftCloseBtn">Close</button>
                           </div>
-                          <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiDraftCloseBtn">Close</button>
-                        </div>
-                    
-                        <hr>
-                    
-                        <div class="mb-3">
-                          <div class="fw-semibold">One-Sentence Summary</div>
-                          <div class="mt-1" id="engAiDraftOne" style="white-space:pre-wrap;"></div>
-                          <div class="mt-2">
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiDraftCopyOneBtn">Copy</button>
+
+                          <hr>
+
+                          <div class="mb-3">
+                            <div class="fw-semibold">One-Sentence Summary</div>
+                            <div class="mt-1" id="engAiDraftOne" style="white-space:pre-wrap;"></div>
+                            <div class="mt-2">
+                              <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiDraftCopyOneBtn">Copy</button>
+                            </div>
                           </div>
-                        </div>
-                    
-                        <div class="mb-3">
-                          <div class="fw-semibold">CRM Narrative Summary</div>
-                          <div class="mt-1" id="engAiDraftNarr" style="white-space:pre-wrap;"></div>
-                          <div class="mt-2 d-flex gap-2 flex-wrap">
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiDraftCopyNarrBtn">Copy</button>
-                            <button type="button" class="btn btn-sm btn-primary" id="engAiDraftInsertNotesBtn">Insert into Notes</button>
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="engAiDraftInsertCleanBtn">Insert into Summary (clean)</button>
+
+                          <div class="mb-3">
+                            <div class="fw-semibold">CRM Narrative Summary</div>
+                            <div class="mt-1" id="engAiDraftNarr" style="white-space:pre-wrap;"></div>
+                            <div class="mt-2 d-flex gap-2 flex-wrap">
+                              <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiDraftCopyNarrBtn">Copy</button>
+                              <button type="button" class="btn btn-sm btn-primary" id="engAiDraftInsertNotesBtn">Insert into Notes</button>
+                              <button type="button" class="btn btn-sm btn-outline-primary" id="engAiDraftInsertCleanBtn">Insert into Summary (clean)</button>
+                            </div>
                           </div>
-                        </div>
-                    
-                        <div class="mb-0" id="engAiDraftFollowWrap" style="display:none;">
-                          <div class="fw-semibold">Suggested Follow-Up Items</div>
-                          <ul class="mt-2 mb-0" id="engAiDraftFollowList"></ul>
+
+                          <div class="mb-0" id="engAiDraftFollowWrap" style="display:none;">
+                            <div class="fw-semibold">Suggested Follow-Up Items</div>
+                            <ul class="mt-2 mb-0" id="engAiDraftFollowList"></ul>
+                          </div>
                         </div>
                       </div>
-                    </div>                    
-                  </div> <!-- /#transcriptCollapse -->
+                    </div> <!-- /#transcriptCollapse -->
                   </div> <!-- /.col-12 -->
 
                   <div class="col-12">
@@ -834,308 +863,405 @@
 
                 </div>
               </form>
-              
-<script>
-  (function () {
-    const form = document.querySelector('form[data-engagement-create="1"]');
-    if (!form) return;
 
-    form.addEventListener('submit', function () {
-      const btn = document.getElementById('engagementCreateSubmit') || form.querySelector('button[type="submit"]');
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = "Saving...";
-      }
-    }, { once: true });
-  })();
-</script>
-<script>
-  (function () {
-    // Draft summarization for the "create engagement" form (no DB writes, no auto-save)
-    const form = document.querySelector('form[data-engagement-create="1"]');
-    if (!form) return;
+              <script>
+                (function () {
+                  const form = document.querySelector('form[data-engagement-create="1"]');
+                  if (!form) return;
 
-    const btn = document.getElementById("engAiSummarizeDraftBtn");
-    if (!btn) return;
+                  form.addEventListener('submit', function () {
+                    const btn = document.getElementById('engagementCreateSubmit') || form.querySelector('button[type="submit"]');
+                    if (btn) {
+                      btn.disabled = true;
+                      btn.textContent = "Saving...";
+                    }
+                  }, { once: true });
+                })();
+              </script>
 
-    // Bind once
-    if (btn.dataset.bound === "1") return;
-    btn.dataset.bound = "1";
+              <script>
+                (function () {
+                  // Draft summarization for the "create engagement" form (no DB writes, no auto-save)
+                  const form = document.querySelector('form[data-engagement-create="1"]');
+                  if (!form) return;
 
-    const statusEl = document.getElementById("engAiDraftStatus");
-    const previewCard = document.getElementById("engAiDraftPreviewCard");
-    const closeBtn = document.getElementById("engAiDraftCloseBtn");
+                  const btn = document.getElementById("engAiSummarizeDraftBtn");
+                  if (!btn) return;
 
-    const oneEl = document.getElementById("engAiDraftOne");
-    const narEl = document.getElementById("engAiDraftNarr");
+                  // Bind once
+                  if (btn.dataset.bound === "1") return;
+                  btn.dataset.bound = "1";
 
-    const followWrap = document.getElementById("engAiDraftFollowWrap");
-    const followList = document.getElementById("engAiDraftFollowList");
+                  const statusEl = document.getElementById("engAiDraftStatus");
+                  const previewCard = document.getElementById("engAiDraftPreviewCard");
+                  const closeBtn = document.getElementById("engAiDraftCloseBtn");
 
-    const copyOneBtn = document.getElementById("engAiDraftCopyOneBtn");
-    const copyNarBtn = document.getElementById("engAiDraftCopyNarrBtn");
-    const insertNotesBtn = document.getElementById("engAiDraftInsertNotesBtn");
-    const insertCleanBtn = document.getElementById("engAiDraftInsertCleanBtn");
+                  const oneEl = document.getElementById("engAiDraftOne");
+                  const narEl = document.getElementById("engAiDraftNarr");
 
-    const transcriptField = form.querySelector('textarea[name="transcript_raw"]');
-    const summaryCleanField = form.querySelector('textarea[name="summary_clean"]');
-    const notesField = form.querySelector('input[name="notes"]');
+                  const followWrap = document.getElementById("engAiDraftFollowWrap");
+                  const followList = document.getElementById("engAiDraftFollowList");
 
-    function setStatus(msg, isError) {
-      if (!statusEl) return;
-      statusEl.style.display = "inline";
-      statusEl.textContent = msg;
-      statusEl.classList.toggle("text-danger", !!isError);
-      statusEl.classList.toggle("text-muted", !isError);
-    }
+                  const copyOneBtn = document.getElementById("engAiDraftCopyOneBtn");
+                  const copyNarBtn = document.getElementById("engAiDraftCopyNarrBtn");
+                  const insertNotesBtn = document.getElementById("engAiDraftInsertNotesBtn");
+                  const insertCleanBtn = document.getElementById("engAiDraftInsertCleanBtn");
 
-    function clearStatus() {
-      if (!statusEl) return;
-      statusEl.style.display = "none";
-      statusEl.textContent = "";
-      statusEl.classList.remove("text-danger");
-      statusEl.classList.add("text-muted");
-    }
+                  const transcriptField = form.querySelector('textarea[name="transcript_raw"]');
+                  const summaryCleanField = form.querySelector('textarea[name="summary_clean"]');
+                  const notesField = form.querySelector('input[name="notes"]');
 
-    function showPreview() {
-      if (previewCard) previewCard.style.display = "block";
-    }
+                  function setStatus(msg, isError) {
+                    if (!statusEl) return;
+                    statusEl.style.display = "inline";
+                    statusEl.textContent = msg;
+                    statusEl.classList.toggle("text-danger", !!isError);
+                    statusEl.classList.toggle("text-muted", !isError);
+                  }
 
-    function hidePreview() {
-      if (previewCard) previewCard.style.display = "none";
-    }
+                  function clearStatus() {
+                    if (!statusEl) return;
+                    statusEl.style.display = "none";
+                    statusEl.textContent = "";
+                    statusEl.classList.remove("text-danger");
+                    statusEl.classList.add("text-muted");
+                  }
 
-    function safeText(v) {
-      if (v === null || v === undefined) return "";
-      return String(v);
-    }
+                  function showPreview() {
+                    if (previewCard) previewCard.style.display = "block";
+                  }
 
-    function renderFollowups(items) {
-      if (!followWrap || !followList) return;
-      followList.innerHTML = "";
+                  function hidePreview() {
+                    if (previewCard) previewCard.style.display = "none";
+                  }
 
-      if (!items || !Array.isArray(items) || items.length === 0) {
-        followWrap.style.display = "none";
-        return;
-      }
+                  function safeText(v) {
+                    if (v === null || v === undefined) return "";
+                    return String(v);
+                  }
 
-      for (const item of items) {
-        const li = document.createElement("li");
-        li.textContent = safeText(item);
-        followList.appendChild(li);
-      }
-      followWrap.style.display = "block";
-    }
+                  function renderFollowups(items) {
+                    if (!followWrap || !followList) return;
+                    followList.innerHTML = "";
 
-    async function copyToClipboard(text) {
-      try {
-        await navigator.clipboard.writeText(text);
-        setStatus("Copied.", false);
-        setTimeout(clearStatus, 1200);
-      } catch {
-        setStatus("Copy failed. You can manually select and copy.", true);
-      }
-    }
+                    if (!items || !Array.isArray(items) || items.length === 0) {
+                      followWrap.style.display = "none";
+                      return;
+                    }
 
-    function appendIntoField(field, text) {
-      if (!field) return false;
-      const insertText = (text || "").trim();
-      if (!insertText) return false;
+                    for (const item of items) {
+                      const li = document.createElement("li");
+                      li.textContent = safeText(item);
+                      followList.appendChild(li);
+                    }
+                    followWrap.style.display = "block";
+                  }
 
-      const current = field.value || "";
-      field.value = current.trim()
-        ? current.replace(/\s*$/, "\n\n") + insertText
-        : insertText;
+                  async function copyToClipboard(text) {
+                    try {
+                      await navigator.clipboard.writeText(text);
+                      setStatus("Copied.", false);
+                      setTimeout(clearStatus, 1200);
+                    } catch {
+                      setStatus("Copy failed. You can manually select and copy.", true);
+                    }
+                  }
 
-      field.focus();
-      return true;
-    }
+                  function appendIntoField(field, text) {
+                    if (!field) return false;
+                    const insertText = (text || "").trim();
+                    if (!insertText) return false;
 
-    async function summarizeDraft() {
-      const transcript = transcriptField ? (transcriptField.value || "") : "";
-      if (!transcript.trim()) {
-        setStatus("Paste transcript first.", true);
-        return;
-      }
+                    const current = field.value || "";
+                    field.value = current.trim()
+                      ? current.replace(/\s*$/, "\n\n") + insertText
+                      : insertText;
 
-      clearStatus();
-      setStatus("Summarizing…", false);
-      btn.disabled = true;
+                    field.focus();
+                    return true;
+                  }
 
-      try {
-        const resp = await fetch("/api/ai/engagements/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          // Use transcript path. This keeps it "draft" and avoids requiring an engagement_id.
-          body: JSON.stringify({ transcript: transcript, transcript_text: transcript })
-        });
+                  async function summarizeDraft() {
+                    const transcript = transcriptField ? (transcriptField.value || "") : "";
+                    if (!transcript.trim()) {
+                      setStatus("Paste transcript first.", true);
+                      return;
+                    }
 
-        const data = await resp.json();
+                    clearStatus();
+                    setStatus("Summarizing…", false);
+                    btn.disabled = true;
 
-        if (!resp.ok || !data.ok) {
-          const msg =
-            (data && data.error && data.error.message) ||
-            "AI summarization failed.";
-          setStatus(msg, true);
-          return;
-        }
+                    try {
+                      const resp = await fetch("/api/ai/engagements/summarize", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        // Use transcript path. This keeps it "draft" and avoids requiring an engagement_id.
+                        body: JSON.stringify({ transcript: transcript, transcript_text: transcript })
+                      });
 
-        // Adjust keys if your route returns different names.
-        const payload = data.data || {};
-        const one = payload.one_sentence_summary || "";
-        const narrative = payload.crm_narrative_summary || "";
-        const followups = payload.suggested_follow_up_items || [];
+                      const data = await resp.json();
 
-        oneEl.textContent = safeText(one);
-        narEl.textContent = safeText(narrative);
-        renderFollowups(followups);
+                      if (!resp.ok || !data.ok) {
+                        const msg =
+                          (data && data.error && data.error.message) ||
+                          "AI summarization failed.";
+                        setStatus(msg, true);
+                        return;
+                      }
 
-        showPreview();
-        setStatus("Preview ready.", false);
-      } catch (err) {
-        setStatus("Network error while summarizing.", true);
-      } finally {
-        btn.disabled = false;
-      }
-    }
+                      // Adjust keys if your route returns different names.
+                      const payload = data.data || {};
+                      const one = payload.one_sentence_summary || "";
+                      const narrative = payload.crm_narrative_summary || "";
+                      const followups = payload.suggested_follow_up_items || [];
 
-    btn.addEventListener("click", summarizeDraft);
+                      oneEl.textContent = safeText(one);
+                      narEl.textContent = safeText(narrative);
+                      renderFollowups(followups);
 
-    if (closeBtn) closeBtn.addEventListener("click", hidePreview);
-    if (copyOneBtn) copyOneBtn.addEventListener("click", () => copyToClipboard(oneEl.textContent || ""));
-    if (copyNarBtn) copyNarBtn.addEventListener("click", () => copyToClipboard(narEl.textContent || ""));
+                      showPreview();
+                      setStatus("Preview ready.", false);
+                    } catch (err) {
+                      setStatus("Network error while summarizing.", true);
+                    } finally {
+                      btn.disabled = false;
+                    }
+                  }
 
-    if (insertNotesBtn) {
-      insertNotesBtn.addEventListener("click", () => {
-        if (!notesField) {
-          setStatus("Could not find Notes input in the create form.", true);
-          return;
-        }
-        const ok = appendIntoField(notesField, narEl.textContent || "");
-        if (ok) setStatus("Inserted into Notes. Click Save Engagement to persist.", false);
-      });
-    }
+                  btn.addEventListener("click", summarizeDraft);
 
-    if (insertCleanBtn) {
-      insertCleanBtn.addEventListener("click", () => {
-        if (!summaryCleanField) {
-          setStatus("Could not find Summary (clean) textarea.", true);
-          return;
-        }
-        const ok = appendIntoField(summaryCleanField, narEl.textContent || "");
-        if (ok) setStatus("Inserted into Summary (clean). Click Save Engagement to persist.", false);
-      });
-    }
-  })();
-</script>
+                  if (closeBtn) closeBtn.addEventListener("click", hidePreview);
+                  if (copyOneBtn) copyOneBtn.addEventListener("click", () => copyToClipboard(oneEl.textContent || ""));
+                  if (copyNarBtn) copyNarBtn.addEventListener("click", () => copyToClipboard(narEl.textContent || ""));
+
+                  if (insertNotesBtn) {
+                    insertNotesBtn.addEventListener("click", () => {
+                      if (!notesField) {
+                        setStatus("Could not find Notes input in the create form.", true);
+                        return;
+                      }
+                      const ok = appendIntoField(notesField, narEl.textContent || "");
+                      if (ok) setStatus("Inserted into Notes. Click Save Engagement to persist.", false);
+                    });
+                  }
+
+                  if (insertCleanBtn) {
+                    insertCleanBtn.addEventListener("click", () => {
+                      if (!summaryCleanField) {
+                        setStatus("Could not find Summary (clean) textarea.", true);
+                        return;
+                      }
+                      const ok = appendIntoField(summaryCleanField, narEl.textContent || "");
+                      if (ok) setStatus("Inserted into Summary (clean). Click Save Engagement to persist.", false);
+                    });
+                  }
+                })();
+              </script>
 
               <hr>
-              
+
               <a id="engagements-table" class="d-block" style="scroll-margin-top: 90px;"></a>
 
               {% if engagements and engagements|length > 0 %}
                 <div class="table-responsive">
-                  <table class="table table-sm table-striped mb-0">
-                    <thead class="table-light sticky-top" style="top: 0; z-index: 2;">
-                      <tr>
-                        <th style="width: 170px;">When</th>
-                        <th style="width: 140px;">Type</th>
-                        <th>Details</th>
-                        <th style="width: 220px;">Follow-up / Tags</th>
-                        <th style="width: 220px;" class="text-end actions-col">Actions</th>
-                      </tr>
-                    </thead>
+                  <table class="table table-sm mb-0 engagement-log-table">
+                  <thead class="table-light sticky-top" style="top: 0; z-index: 2;">
+                    <tr>
+                      <th style="width: 170px;">When</th>
+                      <th style="width: 140px;">Type</th>
+                      <th style="width: 220px;">Follow-up</th>
+                      <th style="width: 220px;" class="text-end actions-col">Actions</th>
+                    </tr>
+                  </thead>
+
                     <tbody>
-                      {% for e in engagements %}
-                        <tr>
-                          <td class="text-muted">{{ e["occurred_at"]|fmt_dt }}</td>
-                          <td>{{ (e["engagement_type"] or "")|replace("_"," ")|title }}</td>
-              
-                          <td>
-                            {% set desc_id = "engDesc_" ~ e["id"] %}
-              
-                            <div class="eng-desc is-clamped clamp-2" id="{{ desc_id }}">
-                              {% if e["outcome"] %}
-                                <div><span class="text-muted">Outcome:</span> {{ e["outcome"] }}</div>
-                              {% endif %}
-              
-                              {% if e["notes"] %}
-                                <div>{{ e["notes"] }}</div>
-                              {% endif %}
-              
-                              {% if e["summary_clean"] %}
-                                <div class="mt-2"><span class="text-muted">Summary:</span> {{ e["summary_clean"] }}</div>
-                              {% endif %}
+                    {% for e in engagements %}
+                      {% set parent_id = e["id"] %}
+                      {% set child_list = (child_followups_by_parent.get(parent_id, []) if child_followups_by_parent is defined else []) %}
+                      {% set open_child_count = (open_child_followups_count_by_parent.get(parent_id, 0) if open_child_followups_count_by_parent is defined else 0) %}
+                      {% set collapse_id = "fuChildren_" ~ parent_id %}
+                      {% set outcome_text = ((e["outcome"] or e["notes"] or "")|trim) %}
+                    
+                      <tr class="engagement-row engagement-main-row">
+                        <td class="text-muted">{{ e["occurred_at"]|fmt_dt }}</td>
+                    
+                        <td>{{ (e["engagement_type"] or "")|replace("_"," ")|title }}</td>
+                    
+                        <td>
+                          {% if child_list|length > 0 %}
+                          <div class="followup-toggle-wrap">
+                            <button type="button"
+                                    class="btn btn-micro btn-followups-active"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#{{ collapse_id }}"
+                                    aria-expanded="false"
+                                    aria-controls="{{ collapse_id }}">
+                              Active Follow-ups
+                              <span class="badge rounded-pill ms-1">{{ open_child_count }}</span>
+                            </button>
+                          </div>
+                          {% else %}
+                            <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+                    
+                        <td class="text-end actions-col" style="width: 220px;">
+                          <div class="d-inline-flex align-items-center justify-content-end">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Row actions">
+                    
+                              <a class="btn btn-outline-primary"
+                                 href="{{ url_for('edit_engagement', engagement_id=e['id']) }}?next={{ (url_for('edit_contact', contact_id=c['id']) ~ '#engagements')|urlencode }}">
+                                Edit
+                              </a>
+                                        
+                              <button type="button"
+                                      class="btn btn-outline-danger"
+                                      onclick="if(confirm('Deleting this engagement will also delete its follow-ups. Continue?')) document.getElementById('engDeleteForm_{{ e['id'] }}').submit();">
+                                Delete
+                              </button>
+                    
                             </div>
-              
-                            {% set _details_text = ((e["outcome"] or "") ~ " " ~ (e["notes"] or "") ~ " " ~ (e["summary_clean"] or "")) %}
-                            {% if _details_text|length > 140 %}
-                              <a class="small text-decoration-none eng-see-more"
-                                 role="button"
-                                 tabindex="0"
-                                 data-eng-toggle="1"
-                                 data-target="{{ desc_id }}">
+                    
+                            <form id="engDeleteForm_{{ e['id'] }}"
+                                  method="post"
+                                  action="{{ url_for('remove_engagement', engagement_id=e['id']) }}"
+                                  class="d-none">
+                              <input type="hidden" name="next" value="{{ url_for('edit_contact', contact_id=c['id']) }}#engagements">
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    
+                      <tr class="engagement-detail-row">
+                        <td colspan="4">
+                          <div class="engagement-detail-content">
+                            <div class="engagement-outcome-label mb-1">Outcome</div>
+                    
+                            <div class="eng-outcome-clamp" id="engOutcome{{ e['id'] }}">
+                              {{ outcome_text if outcome_text else "No outcome yet." }}
+                            </div>
+                    
+                            {% if outcome_text and outcome_text|length > 140 %}
+                              <a href="javascript:void(0);"
+                                 class="small text-decoration-none"
+                                 onclick="toggleOutcome('engOutcome{{ e['id'] }}', this)">
                                 See more
                               </a>
                             {% endif %}
-                          </td>
-              
-                          <td>
-                            {% if e["requires_follow_up"] %}
-                              <div>
-                                <span class="badge bg-warning-subtle text-dark">Follow-up</span>
-              
-                                {% if e["follow_up_due_at"] %}
-                                  <div class="text-muted small mt-1">Due: {{ e["follow_up_due_at"] }}</div>
-                                {% endif %}
-              
-                                {% if e["follow_up_completed"] %}
-                                  <div class="mt-1">
-                                    <span class="badge bg-success-subtle text-dark">Completed</span>
-                                  </div>
-                                {% endif %}
-                              </div>
-                            {% endif %}
-              
-                            {# Placeholder for future “related tags” without changing behavior in v1.0 #}
-                            {# If you already have existing badges/links elsewhere, we can move them here next. #}
-                          </td>
-              
-                          <td class="text-end">
-                            <div class="d-inline-flex align-items-center justify-content-end">
-                              <div class="btn-group btn-group-sm" role="group" aria-label="Engagement actions">
-                                <a class="btn btn-outline-primary"
-                                   href="{{ url_for('edit_engagement',
-                                                    engagement_id=e['id'],
-                                                    next=(url_for('edit_contact', contact_id=c['id']) ~ '#engagements')) }}">
-                                  View / Edit
-                                </a>
-              
-                                <button type="button"
-                                        class="btn btn-outline-danger"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#deleteEngagementModal"
-                                        data-delete-url="{{ url_for('remove_engagement', engagement_id=e['id']) }}">
-                                  Delete
-                                </button>
+                          </div>
+                        </td>
+                      </tr>
+                    
+                      {% if child_list|length > 0 %}
+                        <tr class="engagement-detail-row">
+                          <td colspan="4">
+                            <div class="collapse" id="{{ collapse_id }}">
+                              <div class="eng-followups-nested">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                  <div class="text-muted small">Follow-up history</div>
+                                  <div class="text-muted small">Active: {{ open_child_count }}</div>
+                                </div>
+                    
+                                <div class="table-responsive">
+                                  <table class="table table-sm mb-0">
+                                    <tbody>
+                                      {% for fu in child_list %}
+                                        {% set fu_outcome_text = ((fu["outcome"] or fu["notes"] or "")|trim) %}
+                    
+                                        <tr>
+                                          <td style="width:170px;" class="text-muted">
+                                            {{ fu["occurred_at"]|fmt_dt }}
+                                            {% if fu["follow_up_due_at"] %}
+                                            <div class="text-muted small">
+                                              Due: <span class="followup-due-date">{{ fu["follow_up_due_at"]|fmt_dt }}</span>
+                                            </div>
+                                            {% endif %}
+                                          </td>
+                    
+                                          <td style="width:140px;">
+                                            {{ (fu["engagement_type"] or "follow_up")|replace("_"," ")|title }}
+                                          </td>
+                    
+                                          <td style="width:220px;">
+                                            {% if fu["follow_up_completed"] %}
+                                              <span class="badge bg-success">Completed</span>
+                                            {% else %}
+                                              <span class="badge bg-primary">Active</span>
+                                            {% endif %}
+                                          </td>                    
+                                          <td class="text-end actions-col" style="width:220px;">
+                                            <div class="d-inline-flex align-items-center justify-content-end">
+                                              <div class="btn-group btn-group-sm" role="group" aria-label="Row actions">
+                    
+                                                <a class="btn btn-outline-primary"
+                                                   href="{{ url_for('edit_engagement', engagement_id=fu['id']) }}?next={{ (url_for('edit_contact', contact_id=c['id']) ~ '#engagements')|urlencode }}">
+                                                  Edit
+                                                </a>
+                                        
+                                                <button type="button"
+                                                        class="btn btn-outline-danger"
+                                                        onclick="if(confirm('Delete this follow-up?')) document.getElementById('fuDeleteForm_{{ fu['id'] }}').submit();">
+                                                  Delete
+                                                </button>
+                    
+                                              </div>
+                    
+                                              <form id="fuDeleteForm_{{ fu['id'] }}"
+                                                    method="post"
+                                                    action="{{ url_for('remove_engagement', engagement_id=fu['id']) }}"
+                                                    class="d-none">
+                                                <input type="hidden" name="next" value="{{ url_for('edit_contact', contact_id=c['id']) }}#engagements">
+                                              </form>
+                                            </div>
+                                          </td>
+                                        </tr>
+                    
+                                        <tr class="engagement-detail-row">
+                                          <td colspan="4">
+                                            <div class="engagement-detail-content">
+                                              <div class="engagement-outcome-label mb-1">Outcome</div>
+                    
+                                              <div class="eng-outcome-clamp" id="fuOutcome{{ fu['id'] }}">
+                                                {{ fu_outcome_text if fu_outcome_text else "No outcome yet." }}
+                                              </div>
+                    
+                                              {% if fu_outcome_text and fu_outcome_text|length > 140 %}
+                                                <a href="javascript:void(0);"
+                                                   class="small text-decoration-none"
+                                                   onclick="toggleOutcome('fuOutcome{{ fu['id'] }}', this)">
+                                                  See more
+                                                </a>
+                                              {% endif %}
+                                            </div>
+                                          </td>
+                                        </tr>
+                    
+                                      {% endfor %}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
                             </div>
                           </td>
                         </tr>
-                      {% endfor %}
+                      {% endif %}
+                    
+                    {% endfor %}
                     </tbody>
                   </table>
+
                 {% if eng_total_pages and eng_total_pages > 1 %}
                   <nav aria-label="Engagement pages" class="p-2">
                     <ul class="pagination pagination-sm mb-0 justify-content-center">
-                
+
                       <li class="page-item {% if eng_page <= 1 %}disabled{% endif %}">
                         <a class="page-link"
                            href="{{ url_for('edit_contact', contact_id=c['id'], eng_page=eng_page-1, tx_id=request.args.get('tx_id')) }}#engagements">
                           Prev
                         </a>
                       </li>
-                
+
                       {% for p in range(1, eng_total_pages + 1) %}
                         <li class="page-item {% if p == eng_page %}active{% endif %}">
                           <a class="page-link"
@@ -1144,40 +1270,18 @@
                           </a>
                         </li>
                       {% endfor %}
-                
+
                       <li class="page-item {% if eng_page >= eng_total_pages %}disabled{% endif %}">
                         <a class="page-link"
                            href="{{ url_for('edit_contact', contact_id=c['id'], eng_page=eng_page+1, tx_id=request.args.get('tx_id')) }}#engagements">
                           Next
                         </a>
                       </li>
-                
+
                     </ul>
                   </nav>
                 {% endif %}
 
-                  <div class="modal fade" id="deleteEngagementModal" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog">
-                      <div class="modal-content">
-                        <div class="modal-header">
-                          <h5 class="modal-title">Delete engagement?</h5>
-                          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-
-                        <div class="modal-body">
-                          This will permanently delete this engagement. This cannot be undone.
-                        </div>
-
-                        <div class="modal-footer">
-                          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                          <form id="deleteEngagementForm" method="post" action="">
-                            <input type="hidden" name="next" value="{{ url_for('edit_contact', contact_id=c['id']) }}#engagements">
-                            <button type="submit" class="btn btn-danger">Delete</button>
-                          </form>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               {% else %}
                 <p class="mb-0 text-muted">No engagements logged yet.</p>
@@ -1190,13 +1294,13 @@
         <!-- /ENGAGEMENTS -->
 
         <!-- FOLLOW-UPS -->
-        <div class="tab-pane fade" id="pane-followups" role="tabpanel" aria-labelledby="tab-followups">
+        <!-- <div class="tab-pane fade" id="pane-followups" role="tabpanel" aria-labelledby="tab-followups">
 
         {% if c.get("next_follow_up") %}
           <div class="card mt-3">
             <div class="card-header d-flex justify-content-between align-items-center">
               <div class="fw-semibold">Contact follow-up</div>
-        
+
               <form method="post"
                     action="{{ url_for('contact_followup_clear', contact_id=c['id']) }}"
                     class="m-0">
@@ -1206,7 +1310,7 @@
                 </button>
               </form>
             </div>
-        
+
             <div class="card-body bg-white">
               <div class="text-muted small">Next follow-up</div>
               <div class="fw-semibold">
@@ -1261,44 +1365,48 @@
                             {% if f["summary_clean"] %}<div class="text-muted small">{{ f["summary_clean"] }}</div>{% endif %}
                           </td>
 
-                          <td class="text-end">
-                            <div class="btn-group btn-group-sm" role="group" aria-label="Follow-up actions">
-                          
-                              <a class="btn btn-outline-secondary"
-                                 href="{{ url_for('followup_calendar_ics', engagement_id=f['id']) }}"
-                                 title="Download calendar invite (.ics)">
-                                Calendar
-                              </a>
-                          
-                              <a class="btn btn-outline-primary"
-                                 href="{{ url_for('edit_engagement',
-                                                  engagement_id=f['id'],
-                                                  return_to='contact',
-                                                  return_tab='followups',
-                                                  next=url_for('edit_contact', contact_id=c['id']) ~ '#pane-followups') }}">
-                                Open
-                              </a>
-                          
+                          <!-- Corrected: wrapper + no form inside btn-group -->
+                          <td class="text-end actions-col" style="width: 220px;">
+                            <div class="d-inline-flex align-items-center justify-content-end">
+                              <div class="btn-group btn-group-sm" role="group" aria-label="Row actions">
+
+                                <a class="btn btn-outline-secondary"
+                                   href="{{ url_for('followup_calendar_ics', engagement_id=f['id']) }}"
+                                   title="Download calendar invite (.ics)">
+                                  Calendar
+                                </a>
+
+                                <a class="btn btn-outline-primary"
+                                   href="{{ url_for('edit_engagement',
+                                                    engagement_id=f['id'],
+                                                    return_to='contact',
+                                                    return_tab='followups',
+                                                    next=url_for('edit_contact', contact_id=c['id']) ~ '#pane-followups') }}">
+                                  Open
+                                </a>
+
+                                {% if not f.get("follow_up_completed") %}
+                                  <button type="button"
+                                          class="btn btn-outline-success"
+                                          onclick="document.getElementById('followupDoneForm_{{ f['id'] }}').submit();"
+                                          title="Mark follow-up done">
+                                    Done
+                                  </button>
+                                {% endif %}
+
+                              </div>
+
                               {% if not f.get("follow_up_completed") %}
-                                <button type="submit"
-                                        class="btn btn-outline-success"
-                                        form="followupDoneForm_{{ f['id'] }}"
-                                        title="Mark follow-up done">
-                                  Done
-                                </button>
+                                <form id="followupDoneForm_{{ f['id'] }}"
+                                      method="post"
+                                      action="{{ url_for('engagement_followup_done', engagement_id=f['id']) }}"
+                                      class="d-none">
+                                  <input type="hidden" name="next" value="{{ url_for('edit_contact', contact_id=c['id']) }}#pane-followups">
+                                </form>
                               {% endif %}
-                          
                             </div>
-                          
-                            {% if not f.get("follow_up_completed") %}
-                              <form id="followupDoneForm_{{ f['id'] }}"
-                                    method="post"
-                                    action="{{ url_for('engagement_followup_done', engagement_id=f['id']) }}"
-                                    class="d-none">
-                                <input type="hidden" name="next" value="{{ url_for('edit_contact', contact_id=c['id']) }}#pane-followups">
-                              </form>
-                            {% endif %}
                           </td>
+
                         </tr>
                       {% endfor %}
                     </tbody>
@@ -1311,13 +1419,13 @@
             </div>
           </div>
 
-        </div>
+        </div> -->
         <!-- /FOLLOW-UPS -->
 
         <!-- Emails -->
         {% if current_user.email_sync_enabled %}
         <div class="tab-pane fade" id="emails" role="tabpanel" aria-labelledby="emails-tab">
-        
+
           <style>
             .email-snippet {
               white-space: nowrap;
@@ -1326,7 +1434,7 @@
               max-width: 980px;
             }
           </style>
-        
+
           <!-- Emails Overview / Integrations -->
           <div class="card mt-3">
             <div class="card-body">
@@ -1352,14 +1460,14 @@
               </div>
             </div>
           </div>
-        
+
           <!-- Contact email addresses -->
           <div class="card mt-3">
             <div class="card-header bg-primary-subtle text-dark fw-semibold">
               Contact email addresses
             </div>
             <div class="card-body">
-        
+
               {% if contact_emails and contact_emails|length > 0 %}
                 <div class="table-responsive">
                   <table class="table table-sm table-striped mb-0 align-middle">
@@ -1367,7 +1475,7 @@
                       <tr>
                         <th>Email</th>
                         <th>Label</th>
-                        <th style="width: 1%;"></th>
+                        <th style="width: 110px;" class="text-end actions-col">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1375,13 +1483,26 @@
                       <tr>
                         <td>{{ ce.email }}</td>
                         <td class="text-muted">{{ ce.label or "Unlabeled" }}</td>
-                        <td class="text-end">
-                          <form method="post"
-                                action="{{ url_for('delete_contact_email', contact_id=c.id, contact_email_id=ce.id) }}"
-                                style="display:inline;">
-                            <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
-                          </form>
+
+                        <!-- Corrected: button group standard -->
+                        <td class="text-end actions-col" style="width: 110px;">
+                          <div class="d-inline-flex align-items-center justify-content-end">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Row actions">
+                              <button type="button"
+                                      class="btn btn-outline-danger"
+                                      onclick="if(confirm('Remove this email address?')) document.getElementById('ceRemoveForm_{{ ce.id }}').submit();">
+                                Remove
+                              </button>
+                            </div>
+
+                            <form id="ceRemoveForm_{{ ce.id }}"
+                                  method="post"
+                                  action="{{ url_for('delete_contact_email', contact_id=c.id, contact_email_id=ce.id) }}"
+                                  class="d-none">
+                            </form>
+                          </div>
                         </td>
+
                       </tr>
                       {% endfor %}
                     </tbody>
@@ -1392,9 +1513,9 @@
                   No email addresses saved yet. Add one to link messages.
                 </div>
               {% endif %}
-        
+
               <hr>
-        
+
               <form method="post" action="{{ url_for('add_contact_email', contact_id=c.id) }}" class="row g-2">
                 <div class="col-md-6">
                   <input type="email" name="email" class="form-control form-control-sm"
@@ -1408,60 +1529,60 @@
                   <button class="btn btn-sm btn-primary" type="submit">Add</button>
                 </div>
               </form>
-        
+
             </div>
           </div>
-        
+
           <!-- Email Messages -->
           <div class="card mt-3">
             <div class="card-header bg-primary-subtle text-dark fw-semibold">
               Email messages
             </div>
-        
+
             <div class="card-body">
-        
+
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <div class="text-muted small">Messages linked to this contact</div>
-        
+
                 <form method="get"
                       action="{{ url_for('edit_contact', contact_id=c.id) }}"
                       class="d-flex gap-2 align-items-center">
-        
+
                   <input type="hidden" name="email_offset" value="0">
                   <input type="hidden" name="email_limit" value="{{ email_limit }}">
-        
+
                   <select name="email_dir" class="form-select form-select-sm" style="width: 140px;">
                     <option value="all" {% if email_dir == "all" %}selected{% endif %}>All</option>
                     <option value="inbound" {% if email_dir == "inbound" %}selected{% endif %}>Inbound</option>
                     <option value="outbound" {% if email_dir == "outbound" %}selected{% endif %}>Outbound</option>
                     <option value="unknown" {% if email_dir == "unknown" %}selected{% endif %}>Unknown</option>
                   </select>
-        
+
                   <select name="email_days" class="form-select form-select-sm" style="width: 140px;">
                     <option value="90" {% if email_days == "90" %}selected{% endif %}>Last 90 days</option>
                     <option value="30" {% if email_days == "30" %}selected{% endif %}>Last 30 days</option>
                     <option value="365" {% if email_days == "365" %}selected{% endif %}>Last 365 days</option>
                     <option value="all" {% if email_days == "all" %}selected{% endif %}>All time</option>
                   </select>
-        
+
                   <input type="text" name="email_from" value="{{ email_from or '' }}"
                          class="form-control form-control-sm"
                          placeholder="From contains"
                          style="width: 160px;">
-        
+
                   <input type="text" name="email_q" value="{{ email_q or '' }}"
                          class="form-control form-control-sm"
                          placeholder="Subject or body"
                          style="width: 200px;">
-        
-                  <div class="btn-group btn-group-sm" role="group">
+
+                  <div class="btn-group btn-group-sm" role="group" aria-label="Email filters">
                     <button type="submit" class="btn btn-outline-primary">Apply</button>
-        
+
                     <a class="btn btn-outline-secondary"
                        href="{{ url_for('edit_contact', contact_id=c.id) }}#emails">
                       Reset
                     </a>
-        
+
                     <a class="btn btn-outline-primary"
                        href="{{ url_for('email_sync_now', contact_id=c.id) }}#emails">
                       Sync Now
@@ -1469,7 +1590,7 @@
                   </div>
                 </form>
               </div>
-        
+
               <div class="table-responsive">
                 <table class="table table-sm table-striped mb-0 align-middle">
                   <thead class="table-light">
@@ -1482,12 +1603,12 @@
                       <th style="width:110px;">Actions</th>
                     </tr>
                   </thead>
-        
+
                   <tbody>
                     {% for m in email_messages %}
                     <tr>
                       <td>{{ m.message_date_display or m.message_date or "" }}</td>
-        
+
                       <td>
                         {% if m.direction == "inbound" %}
                           <span class="badge bg-success-subtle text-dark">Inbound</span>
@@ -1497,7 +1618,7 @@
                           <span class="badge bg-secondary-subtle text-dark">Unknown</span>
                         {% endif %}
                       </td>
-        
+
                       <td>
                         {% if m.provider %}
                           <span class="badge bg-light text-dark border">
@@ -1507,9 +1628,9 @@
                           <span class="text-muted">—</span>
                         {% endif %}
                       </td>
-        
+
                       <td>{{ m.from_email or "" }}</td>
-        
+
                       <td>
                         {% if m.link_count and m.link_count > 0 %}
                           <a href="{{ url_for('email_message_detail', message_id=m.id, contact_id=c.id) }}#links">
@@ -1519,7 +1640,7 @@
                           <span class="text-muted">0</span>
                         {% endif %}
                       </td>
-        
+
                       <td>
                         <a class="btn btn-sm btn-outline-primary"
                            href="{{ url_for('email_message_detail', message_id=m.id, contact_id=c.id) }}#emails">
@@ -1527,7 +1648,7 @@
                         </a>
                       </td>
                     </tr>
-        
+
                     <tr>
                       <td colspan="6" class="pt-0 pb-3">
                         <div class="fw-semibold">
@@ -1541,7 +1662,7 @@
                       </td>
                     </tr>
                     {% endfor %}
-        
+
                     {% if not email_messages %}
                     <tr>
                       <td colspan="6" class="text-muted">No messages yet.</td>
@@ -1550,12 +1671,14 @@
                   </tbody>
                 </table>
               </div>
-        
+
             </div>
           </div>
-        
+
         </div>
         {% endif %}
+        <!-- /Emails -->
+
         <!-- TRANSACTIONS -->
         <div class="tab-pane fade" id="pane-transactions" role="tabpanel" aria-labelledby="tab-transactions">
 
@@ -1773,13 +1896,13 @@
 
         <!-- Integrations Tab Pane -->
         <div class="tab-pane fade" id="integrations" role="tabpanel" aria-labelledby="integrations-tab">
-        
+
           <div class="card mt-3">
             <div class="card-header bg-primary-subtle text-dark fw-semibold d-flex justify-content-between align-items-center">
-        
+
               <div class="d-flex align-items-baseline gap-3">
                 <div>ActivePipe</div>
-        
+
                 <div class="text-muted" style="font-size: 0.875rem;">
                   Exported:
                   {{ activepipe_profile.last_exported_at|fmt_date
@@ -1792,23 +1915,23 @@
                      else "Never" }}
                 </div>
               </div>
-        
+
               <div class="d-flex gap-2">
                 <a class="btn btn-sm btn-outline-primary"
                    href="{{ url_for('activepipe_export_contact_csv', contact_id=c['id']) }}?mode=basic">
                   Download CSV (Basic)
                 </a>
-                
+
                 <a class="btn btn-sm btn-outline-secondary"
                    href="{{ url_for('activepipe_export_contact_csv', contact_id=c['id']) }}?mode=extended">
                   Download CSV (Extended)
                 </a>
               </div>
-        
+
             </div>
-        
+
             <div class="card-body">
-        
+
               <!-- Practical field -->
               <div class="row g-3">
                 <div class="col-md-6">
@@ -1819,9 +1942,9 @@
                   <div class="form-text">Separate tags with semicolons.</div>
                 </div>
               </div>
-        
+
               <hr class="my-4">
-        
+
               <!-- Advanced fields (Ulysses-stored; may not map in ActivePipe) -->
               <div class="accordion" id="activepipeAdvancedAccordion">
                 <div class="accordion-item">
@@ -1832,194 +1955,194 @@
                       Advanced ActivePipe Fields (stored in Ulysses only)
                     </button>
                   </h2>
-        
+
                   <div id="apAdvancedCollapse" class="accordion-collapse collapse"
                        aria-labelledby="apAdvancedHeading" data-bs-parent="#activepipeAdvancedAccordion">
                     <div class="accordion-body">
-        
+
                       <div class="text-muted small mb-3">
                         These fields are stored in Ulysses for future integration work. They may not map in ActivePipe imports today.
                       </div>
-        
+
                       <!-- Subscription + Status -->
                       <div class="row g-3">
-        
+
                         <div class="col-md-3">
                           <label class="form-label">Status</label>
                           <input class="form-control" name="ap_status" form="contactForm"
                                  value="{{ activepipe_payload.get('status','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-3">
                           <label class="form-label">SMS Status</label>
                           <input class="form-control" name="ap_sms_status" form="contactForm"
                                  value="{{ activepipe_payload.get('sms_status','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-3">
                           <label class="form-label">Subscribed At</label>
                           <input class="form-control" name="ap_subscribed_at" form="contactForm"
                                  value="{{ activepipe_payload.get('subscribed_at','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-3">
                           <label class="form-label">Unsubscribed At</label>
                           <input class="form-control" name="ap_unsubscribed_at" form="contactForm"
                                  value="{{ activepipe_payload.get('unsubscribed_at','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-6">
                           <label class="form-label">Unsubscribe Reason</label>
                           <input class="form-control" name="ap_unsubscribed_reason" form="contactForm"
                                  value="{{ activepipe_payload.get('unsubscribed_reason','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-3">
                           <label class="form-label">Latest Interaction</label>
                           <input class="form-control" name="ap_latest_interaction" form="contactForm"
                                  value="{{ activepipe_payload.get('latest_interaction','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-3">
                           <label class="form-label">Modified At</label>
                           <input class="form-control" name="ap_modified_at" form="contactForm"
                                  value="{{ activepipe_payload.get('modified_at','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-6">
                           <label class="form-label">Source</label>
                           <input class="form-control" name="ap_source" form="contactForm"
                                  value="{{ activepipe_payload.get('source','') if activepipe_payload else '' }}">
                         </div>
-        
+
                       </div>
-        
+
                       <hr class="my-4">
-        
+
                       <!-- Preferences Section -->
                       <div class="fw-semibold mb-3">Preferences</div>
-        
+
                       <div class="row g-3">
-        
+
                         <div class="col-md-4">
                           <label class="form-label">Buyer Type</label>
                           <input class="form-control" name="ap_buyertype" form="contactForm"
                                  value="{{ activepipe_payload.get('buyertype','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-4">
                           <label class="form-label">Locations</label>
                           <input class="form-control" name="ap_locations" form="contactForm"
                                  value="{{ activepipe_payload.get('locations','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-4">
                           <label class="form-label">Property Type</label>
                           <input class="form-control" name="ap_propertytype" form="contactForm"
                                  value="{{ activepipe_payload.get('propertytype','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-4">
                           <label class="form-label">Category</label>
                           <input class="form-control" name="ap_category" form="contactForm"
                                  value="{{ activepipe_payload.get('category','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-4">
                           <label class="form-label">Listing Type</label>
                           <input class="form-control" name="ap_listingtype" form="contactForm"
                                  value="{{ activepipe_payload.get('listingtype','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <!-- Beds / Baths -->
                         <div class="col-md-2">
                           <label class="form-label">Min Beds</label>
                           <input class="form-control" name="ap_minbeds" form="contactForm"
                                  value="{{ activepipe_payload.get('minbeds','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-2">
                           <label class="form-label">Max Beds</label>
                           <input class="form-control" name="ap_maxbeds" form="contactForm"
                                  value="{{ activepipe_payload.get('maxbeds','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-2">
                           <label class="form-label">Min Baths</label>
                           <input class="form-control" name="ap_minbaths" form="contactForm"
                                  value="{{ activepipe_payload.get('minbaths','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-2">
                           <label class="form-label">Max Baths</label>
                           <input class="form-control" name="ap_maxbaths" form="contactForm"
                                  value="{{ activepipe_payload.get('maxbaths','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <!-- Price -->
                         <div class="col-md-3">
                           <label class="form-label">Min Price</label>
                           <input class="form-control" name="ap_minprice" form="contactForm"
                                  value="{{ activepipe_payload.get('minprice','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-3">
                           <label class="form-label">Max Price</label>
                           <input class="form-control" name="ap_maxprice" form="contactForm"
                                  value="{{ activepipe_payload.get('maxprice','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <!-- Parking -->
                         <div class="col-md-2">
                           <label class="form-label">Min Parking</label>
                           <input class="form-control" name="ap_minparking" form="contactForm"
                                  value="{{ activepipe_payload.get('minparking','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-2">
                           <label class="form-label">Max Parking</label>
                           <input class="form-control" name="ap_maxparking" form="contactForm"
                                  value="{{ activepipe_payload.get('maxparking','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <!-- Land Size -->
                         <div class="col-md-3">
                           <label class="form-label">Min Land Size</label>
                           <input class="form-control" name="ap_minlandsize" form="contactForm"
                                  value="{{ activepipe_payload.get('minlandsize','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-3">
                           <label class="form-label">Max Land Size</label>
                           <input class="form-control" name="ap_maxlandsize" form="contactForm"
                                  value="{{ activepipe_payload.get('maxlandsize','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <!-- Building Size -->
                         <div class="col-md-3">
                           <label class="form-label">Min Building Size</label>
                           <input class="form-control" name="ap_minbuildingsize" form="contactForm"
                                  value="{{ activepipe_payload.get('minbuildingsize','') if activepipe_payload else '' }}">
                         </div>
-        
+
                         <div class="col-md-3">
                           <label class="form-label">Max Building Size</label>
                           <input class="form-control" name="ap_maxbuildingsize" form="contactForm"
                                  value="{{ activepipe_payload.get('maxbuildingsize','') if activepipe_payload else '' }}">
                         </div>
-        
+
                       </div>
-        
+
                     </div>
                   </div>
                 </div>
               </div>
-        
+
               <div class="mt-4 d-flex gap-2">
                 <button type="submit" class="btn btn-primary" form="contactForm">
                   Save Contact
                 </button>
-        
+
                 <button type="submit"
                         class="btn btn-outline-danger"
                         name="ap_clear"
@@ -2028,17 +2151,17 @@
                   Clear ActivePipe Fields
                 </button>
               </div>
-        
+
             </div>
           </div>
-        
+
           <div class="mt-3 text-muted small text-center">
             ActivePipe is a third-party marketing platform. Ulysses CRM is not affiliated with or endorsed by ActivePipe.
           </div>
-        
+
         </div> <!-- /integrations tab-pane -->
         <!-- /Integrations End -->
-        
+
       </div> <!-- /tab-content -->
 
     </div> <!-- /outer card-body -->
@@ -2052,14 +2175,14 @@
   (function () {
     if (window.__assocModalInit) return;
     window.__assocModalInit = true;
-  
+
     const currentContactId = {{ c['id']|int }};
-  
+
     const searchInput = document.getElementById("assocSearch");
     const resultsEl = document.getElementById("assocSearchResults");
     const relTypeEl = document.getElementById("assocRelationshipType");
     const relTypeCreateEl = document.getElementById("assocRelationshipTypeCreate");
-  
+
     const selectedLabelEl = document.getElementById("assocSelectedLabel");
     const linkBtn = document.getElementById("assocLinkBtn");
 
@@ -2068,10 +2191,10 @@
     const createBtn = document.getElementById("assocCreateSubmit");
 
     if (!searchInput || !resultsEl || !relTypeEl || !relTypeCreateEl) return;
-  
+
     let selectedId = null;
     let selectedName = "";
-  
+
     function syncRelationshipType() {
       relTypeCreateEl.value = relTypeEl.value || "";
     }
@@ -2102,6 +2225,7 @@
       // Initialize on load
       updateCreateBtn();
     }
+
     // Prevent double-submit + show progress on Create and Link
     if (createForm && createBtn) {
       createForm.addEventListener("submit", (e) => {
@@ -2112,10 +2236,10 @@
           return;
         }
         createForm.dataset.submitting = "1";
-    
+
         // Ensure hidden relationship_type is up to date
         relTypeCreateEl.value = relTypeEl.value || "";
-    
+
         createBtn.disabled = true;
         createBtn.textContent = "Saving Association...";
       });
@@ -2124,11 +2248,11 @@
     function setSelected(id, name) {
       selectedId = id;
       selectedName = name || "";
-    
+
       if (selectedLabelEl) {
         selectedLabelEl.textContent = selectedName || "None";
       }
-    
+
       if (linkBtn) {
         if (selectedId) {
           linkBtn.disabled = false;
@@ -2139,64 +2263,64 @@
         }
       }
     }
-  
+
     // Link button submits only when you explicitly click it
     if (linkBtn) {
       linkBtn.addEventListener("click", () => {
         if (linkBtn.dataset.submitting === "1") return;
         if (!selectedId) return;
-     
+
         const relLabel = (relTypeEl.value || "").trim();
         const relText = relLabel ? ` as "${relLabel}"` : "";
         const ok = confirm(`Link ${selectedName}${relText}?\n\nThis relationship will appear on both contacts.`);
         if (!ok) return;
-  
+
         const form = document.createElement("form");
         form.method = "POST";
         form.action = `/contacts/${currentContactId}/associations/add`;
-  
+
         const next = document.createElement("input");
         next.type = "hidden";
         next.name = "next";
         next.value = {{ request.full_path|tojson }};
-  
+
         const related = document.createElement("input");
         related.type = "hidden";
         related.name = "related_contact_id";
         related.value = selectedId;
-  
+
         const rel = document.createElement("input");
         rel.type = "hidden";
         rel.name = "relationship_type";
         rel.value = relTypeEl.value || "";
-  
+
         form.appendChild(next);
         form.appendChild(related);
         form.appendChild(rel);
-  
+
         document.body.appendChild(form);
-      
+
         linkBtn.dataset.submitting = "1";
         linkBtn.disabled = true;
         linkBtn.textContent = "Saving Association...";
-      
+
         form.submit();
       });
     }
-  
+
     let timer = null;
-  
+
     async function doSearch(q) {
       if (!q || q.trim().length < 2) {
         resultsEl.innerHTML = "";
         return;
       }
-  
+
       const resp = await fetch(`/contacts/search?q=${encodeURIComponent(q.trim())}`);
       const data = await resp.json();
-  
+
       resultsEl.innerHTML = "";
-  
+
       if (!data || data.length === 0) {
         const empty = document.createElement("div");
         empty.className = "list-group-item text-muted";
@@ -2204,144 +2328,144 @@
         resultsEl.appendChild(empty);
         return;
       }
-  
+
       data.forEach(item => {
         if (String(item.id) === String(currentContactId)) return;
-  
+
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "list-group-item list-group-item-action";
-  
+
         const meta = [item.email, item.phone].filter(Boolean).join(" · ");
         btn.innerHTML = `
           <div class="fw-semibold">${item.name}</div>
           <div class="text-muted small">${meta}</div>
         `;
-  
+
         btn.addEventListener("click", () => {
           setSelected(item.id, item.name);
           resultsEl.querySelectorAll(".active").forEach(el => el.classList.remove("active"));
           btn.classList.add("active");
         });
-  
+
         resultsEl.appendChild(btn);
       });
     }
-  
+
     searchInput.addEventListener("input", () => {
       clearTimeout(timer);
       timer = setTimeout(() => doSearch(searchInput.value), 250);
     });
-  
+
     // Initialize selected display
     setSelected(null, "");
   })();
 </script>
 
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      if (window.location.hash) {
-        let hash = window.location.hash.replace("#", "");
-        if (hash === "followups") hash = "pane-followups";
-        if (hash === "email") hash = "emails";
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    if (window.location.hash) {
+      let hash = window.location.hash.replace("#", "");
+      if (hash === "followups") hash = "pane-followups";
+      if (hash === "email") hash = "emails";
 
-        const btnByTarget = document.querySelector(
-          '[data-bs-toggle="tab"][data-bs-target="#' + hash + '"]'
-        );
-        if (btnByTarget) {
-          new bootstrap.Tab(btnByTarget).show();
-          return;
-        }
-
-        const map = {
-          details: "tab-details",
-          engagements: "tab-engagements",
-          followups: "tab-followups",
-          "pane-followups": "tab-followups",
-          transactions: "tab-transactions",
-          emails: "emails-tab",
-        };
-        
-        const btnId = map[hash];
-        if (btnId) {
-          const btn = document.getElementById(btnId);
-          if (btn) new bootstrap.Tab(btn).show();
-          return;
-        }
+      const btnByTarget = document.querySelector(
+        '[data-bs-toggle="tab"][data-bs-target="#' + hash + '"]'
+      );
+      if (btnByTarget) {
+        new bootstrap.Tab(btnByTarget).show();
+        return;
       }
 
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("tx_id")) {
-        const btn = document.getElementById("tab-transactions");
+      const map = {
+        details: "tab-details",
+        engagements: "tab-engagements",
+        followups: "tab-followups",
+        "pane-followups": "tab-followups",
+        transactions: "tab-transactions",
+        emails: "emails-tab",
+      };
+
+      const btnId = map[hash];
+      if (btnId) {
+        const btn = document.getElementById(btnId);
         if (btn) new bootstrap.Tab(btn).show();
+        return;
       }
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tx_id")) {
+      const btn = document.getElementById("tab-transactions");
+      if (btn) new bootstrap.Tab(btn).show();
+    }
+  });
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var cb = document.getElementById("requiresFollowUp");
+    var box = document.getElementById("followUpFields");
+    if (!cb || !box) return;
+
+    function sync() {
+      box.style.display = cb.checked ? "" : "none";
+    }
+
+    cb.addEventListener("change", sync);
+    sync();
+  });
+</script>
+
+<script>
+  (function () {
+    const contactForm = document.getElementById("contactForm");
+    if (!contactForm) return;
+
+    let isDirty = false;
+
+    contactForm.addEventListener("input", function (e) {
+      const t = e.target;
+      if (!t) return;
+      if (t.tagName === "BUTTON") return;
+      isDirty = true;
     });
-  </script>
 
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      var cb = document.getElementById("requiresFollowUp");
-      var box = document.getElementById("followUpFields");
-      if (!cb || !box) return;
-
-      function sync() {
-        box.style.display = cb.checked ? "" : "none";
-      }
-
-      cb.addEventListener("change", sync);
-      sync();
+    contactForm.addEventListener("submit", function () {
+      isDirty = false;
     });
-  </script>
 
-  <script>
-    (function () {
-      const contactForm = document.getElementById("contactForm");
-      if (!contactForm) return;
+    function guardIfDirty(e) {
+      if (!isDirty) return;
 
-      let isDirty = false;
+      const ok = window.confirm(
+        "You have unsaved changes to this contact. Click Cancel to go back and save first. If you continue, your unsaved changes will be lost."
+      );
 
-      contactForm.addEventListener("input", function (e) {
-        const t = e.target;
-        if (!t) return;
-        if (t.tagName === "BUTTON") return;
-        isDirty = true;
-      });
-
-      contactForm.addEventListener("submit", function () {
-        isDirty = false;
-      });
-
-      function guardIfDirty(e) {
-        if (!isDirty) return;
-
-        const ok = window.confirm(
-          "You have unsaved changes to this contact. Click Cancel to go back and save first. If you continue, your unsaved changes will be lost."
-        );
-
-        if (!ok) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
+      if (!ok) {
+        e.preventDefault();
+        e.stopPropagation();
       }
+    }
 
-      document.querySelectorAll(".js-secondary-submit").forEach(function (el) {
-        el.addEventListener("click", guardIfDirty);
-      });
+    document.querySelectorAll(".js-secondary-submit").forEach(function (el) {
+      el.addEventListener("click", guardIfDirty);
+    });
 
-      document.querySelectorAll("form").forEach(function (f) {
-        if (f === contactForm) return;
-        f.addEventListener("submit", guardIfDirty);
-      });
-    })();
-  </script>
- 
-  <script>
+    document.querySelectorAll("form").forEach(function (f) {
+      if (f === contactForm) return;
+      f.addEventListener("submit", guardIfDirty);
+    });
+  })();
+</script>
+
+<script>
   document.addEventListener("DOMContentLoaded", function () {
     const params = new URLSearchParams(window.location.search);
     const engPage = params.get("eng_page");
-  
+
     if (!engPage) return;
-  
+
     // Wait for the tab activation logic to run, then scroll the table into view.
     setTimeout(function () {
       const el = document.getElementById("engagements-table");
@@ -2350,24 +2474,9 @@
       }
     }, 80);
   });
-  </script>
+</script>
 
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      var modalEl = document.getElementById("deleteEngagementModal");
-      if (!modalEl) return;
-
-      modalEl.addEventListener("show.bs.modal", function (event) {
-        var btn = event.relatedTarget;
-        if (!btn) return;
-
-        var url = btn.getAttribute("data-delete-url") || "";
-        var form = document.getElementById("deleteEngagementForm");
-        if (form) form.setAttribute("action", url);
-      });
-    });
-  </script>
-  <script>
+<script>
   document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function (btn) {
       btn.addEventListener("shown.bs.tab", function () {
@@ -2379,27 +2488,27 @@
     });
   });
 </script>
+
 <script>
-(function () {
-  const params = new URLSearchParams(window.location.search);
-  const engagementId = params.get("engagement_id");
-  if (!engagementId) return;
+  (function () {
+    const params = new URLSearchParams(window.location.search);
+    const engagementId = params.get("engagement_id");
+    if (!engagementId) return;
 
-  // Only do this when user intends to land on followups
-  if (window.location.hash !== "#pane-followups") return;
+    // Only do this when user intends to land on followups
+    if (window.location.hash !== "#pane-followups") return;
 
-  window.setTimeout(() => {
-    const row = document.getElementById(`fu-${engagementId}`);
-    if (!row) return;
+    window.setTimeout(() => {
+      const row = document.getElementById(`fu-${engagementId}`);
+      if (!row) return;
 
-    row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // Brief highlight without fighting existing table-* classes
-    row.classList.add("followup-flash");
-    window.setTimeout(() => row.classList.remove("followup-flash"), 1500);
-  }, 150);
-})();
+      // Brief highlight without fighting existing table-* classes
+      row.classList.add("followup-flash");
+      window.setTimeout(() => row.classList.remove("followup-flash"), 1500);
+    }, 150);
+  })();
 </script>
-
 
 {% endblock %}

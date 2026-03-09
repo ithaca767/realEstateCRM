@@ -1,3 +1,4 @@
+```css
 /* Global CRM styles */
 
 body {
@@ -40,6 +41,7 @@ footer {
 }
 
 /* Login page polish */
+
 .login-wrap {
   min-height: 100vh;
   display: flex;
@@ -47,7 +49,7 @@ footer {
   justify-content: center;
   padding: 32px 16px;
   position: relative;
-  z-index: 1; /* above overlay */
+  z-index: 1;
 }
 
 .login-card {
@@ -115,33 +117,65 @@ footer {
   font-weight: 600;
 }
 
+/* Login page version badge */
+
+.login-version {
+  position: fixed;
+  top: 12px;
+  right: 18px;
+  font-size: 0.85rem;
+  color: rgba(0,0,0,0.55);
+  z-index: 2;
+  font-weight: 500;
+}
+
 /* Card tweaks */
+
 .card-header {
-    font-weight: 600;
+  font-weight: 600;
 }
 
 /* Form spacing */
+
 .form-section {
-    margin-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
 }
 
 /* Buttons */
+
 .btn-primary {
-    font-weight: 500;
+  font-weight: 500;
+}
+
+.btn-micro {
+  padding: 0.12rem 0.40rem;
+  font-size: 0.78rem;
+  line-height: 1.1;
+  border-radius: 0.40rem;
 }
 
 /* Placeholder text styling */
+
 .placeholder-box {
-    padding: 2rem;
-    background: #ffffff;
-    border: 1px dashed #ccc;
-    border-radius: 6px;
-    text-align: center;
-    color: #777;
+  padding: 2rem;
+  background: #ffffff;
+  border: 1px dashed #ccc;
+  border-radius: 6px;
+  text-align: center;
+  color: #777;
 }
+
 /* Open House legal footer */
-.openhouse-footer-legal { margin-top: 14px; }
-.openhouse-legal-link { font-size: 14px; text-decoration: underline; }
+
+.openhouse-footer-legal {
+  margin-top: 14px;
+}
+
+.openhouse-legal-link {
+  font-size: 14px;
+  text-decoration: underline;
+}
+
 .openhouse-sothebys-disclosure {
   margin-top: 10px;
   font-size: 13px;
@@ -159,88 +193,20 @@ tr.tx-selected {
   border-left: 5px solid #000dfc;
 }
 
-a.tx-address {
-  display: inline-block;
-  max-width: 260px;   /* tweak as needed */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: bottom;
-}
+/* Table layout control */
 
-/* Make the table respect fixed column widths */
 .tx-table {
   table-layout: fixed;
   width: 100%;
 }
 
-/* Address takes remaining space and truncates */
-.tx-col-address {
-  width: auto;
-}
-
-a.tx-address {
-  display: block;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Keep action buttons visible */
 .tx-col-actions {
-  width: 92px; /* tweak: 80–110 depending on your button text */
+  width: 92px;
   white-space: nowrap;
 }
 
-.btn-link:hover {
-  text-decoration: underline;
-}
+/* Prevent action button wrapping */
 
-/* Engagement text clamp + toggle */
-.eng-desc {
-  white-space: normal;
-  word-break: break-word;
-}
-
-.eng-desc.is-clamped {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.eng-desc.clamp-2 { -webkit-line-clamp: 2; }
-.eng-desc.clamp-3 { -webkit-line-clamp: 3; }
-
-.eng-see-more {
-  cursor: pointer;
-  user-select: none;
-}
-
-.past-client-dot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background-color: #6f42c1;
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 800;
-  line-height: 1;
-  vertical-align: text-top;
-}
-
-html:focus-within {
-  scroll-behavior: smooth;
-}
-
-#active-contacts {
-  scroll-margin-top: 80px;
-}
-
-/* v1.0 UI polish: keep action buttons from wrapping in table action columns */
 .actions-col {
   white-space: nowrap;
   width: 1%;
@@ -255,53 +221,146 @@ html:focus-within {
   white-space: nowrap;
 }
 
-/* Allow POST forms inside Bootstrap btn-groups without breaking borders */
-.btn-group.task-actions > form {
-  display: contents;
+/* Engagement table */
+
+.engagement-log-table {
+  --eng-row-bg: #f5f6f8;
+  --eng-border: #dfe3e8;
+  table-layout: fixed;
+  width: 100%;
 }
 
-.nav-tabs .nav-link.text-muted {
+.engagement-log-table > tbody > tr.engagement-row > td {
+  background: var(--eng-row-bg);
+  vertical-align: middle;
+  border-top: 1px solid var(--eng-border);
+}
+
+/* Follow-ups button */
+
+.engagement-log-table .btn-followups-active {
+  --bs-btn-color: #b45309;
+  --bs-btn-bg: transparent;
+  --bs-btn-border-color: #f59e0b;
+
+  --bs-btn-hover-color: #92400e;
+  --bs-btn-hover-bg: rgba(245,158,11,0.08);
+  --bs-btn-hover-border-color: #f59e0b;
+
+  --bs-btn-active-color: #92400e;
+  --bs-btn-active-bg: rgba(245,158,11,0.12);
+  --bs-btn-active-border-color: #f59e0b;
+
+  min-width: 132px;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(245,158,11,0.25);
+}
+
+.engagement-log-table .btn-followups-active .badge {
+  background: rgba(245,158,11,0.18) !important;
+  color: #92400e !important;
+  font-weight: 700;
+  font-size: .72rem;
+}
+
+/* ---------------------------------------------------- */
+/* Phase 11 – Follow-up History (clean unified rules) */
+/* ---------------------------------------------------- */
+
+.followup-list-card .card-header {
+  background: #f8f9fa;
+}
+
+.followup-list-card .card-body {
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+.followup-history-item {
+  padding: 0.45rem 0.25rem;
+  border-top: 1px solid var(--eng-border, #dfe3e8);
+  transition: background-color 0.12s ease;
+}
+
+.followup-history-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.followup-history-item:last-child {
+  padding-bottom: 0;
+}
+
+.followup-history-item:hover {
+  background-color: #f8f9fb;
+}
+
+.followup-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.followup-history-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  overflow: hidden;
+}
+
+.followup-history-meta {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.followup-history-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: #6c757d;
 }
 
-.nav-tabs .nav-link.text-muted.active {
-  color: var(--bs-nav-tabs-link-active-color);
+.followup-history-actions {
+  flex: 0 0 auto;
+  min-width: 170px;
+}
+
+.followup-history-actions .btn {
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+}
+
+.followup-complete-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.3em 0.5em;
+  line-height: 1.1;
+}
+
+.followup-complete-time {
+  margin-top: 0.2rem;
+  line-height: 1.1;
+}
+
+.followup-due-date {
+  font-weight: 600;
+  color: #1f2d3d;
 }
 
 .env-banner {
   position: relative;
-  z-index: 2; /* above overlay, same layer as navbar */
-  background: #fff3cd;
-  color: #664d03;
-  border-bottom: 1px solid #ffe69c;
-}
-
-.followup-flash {
-  outline: 2px solid rgba(13, 110, 253, 0.55);
-  outline-offset: -2px;
-}
-
-/* Task description clamp (shared) */
-.task-desc {
-  white-space: normal;
-  word-break: break-word;
-}
-
-.task-desc.is-clamped {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.task-desc.clamp-2 { -webkit-line-clamp: 2; }
-.task-desc.clamp-3 { -webkit-line-clamp: 3; }
-
-/* Smaller "See more" link for tasks */
-.task-see-more {
-  font-size: 0.85rem;
-  color: #0d6efd;
-}
-
-.task-see-more:hover {
-  text-decoration: underline;
+  z-index: 2;
+  background: #ffe8a1;
+  color: #7a5300;
+  border-bottom: 1px solid #e0b200;
+  font-weight: 600;
+  text-align: center;
+  padding: 6px 0;
+  letter-spacing: .03em;
 }

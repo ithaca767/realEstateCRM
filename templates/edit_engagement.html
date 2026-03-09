@@ -1,154 +1,522 @@
 {% extends "base.html" %}
-{% block title %}View / Edit Engagement - Ulysses CRM{% endblock %}
+
+{% block title %}
+  {% if e.get("parent_engagement_id") %}
+    Engagement Follow-up - Ulysses CRM
+  {% else %}
+    View / Edit Engagement - Ulysses CRM
+  {% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="container py-4" style="max-width: 900px;">
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-      <h2 class="mb-0">View / Edit Engagement</h2>
-      <div class="text-muted small">Update the engagement details, notes, and transcript fields.</div>
-    </div>
-      <a class="btn btn-outline-secondary"
-         href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements">
-        Back
-      </a>
-    </div>
+  {% if e.get("parent_engagement_id") %}
 
-  <div class="card">
-    <div class="card-body bg-white">
-      <form method="post">
-        <input type="hidden" name="next" value="{{ next_url or next or (url_for('edit_contact', contact_id=e['contact_id']) ~ '#engagements') }}">
-        <input type="hidden" name="return_tab" value="{{ return_tab }}">
-        <input type="hidden" name="return_to" value="{{ return_to }}">
-    <div id="engEditRoot" data-engagement-id="{{ e['id'] }}"></div>
+    {% set follow_subhead = (e['outcome'] or '')|trim %}
+    {% if not follow_subhead %}
+      {% if e.get('occurred_at') %}
+        {% set follow_subhead = "Engagement dated " ~ (e['occurred_at']|fmt_dt) %}
+      {% else %}
+        {% set follow_subhead = "Engagement follow-up" %}
+      {% endif %}
+    {% endif %}
 
-        <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label">Type</label>
-            {% set t = e["engagement_type"] or "call" %}
-            <select name="engagement_type" class="form-select" required>
-              <option value="call" {{ "selected" if t=="call" else "" }}>Phone Call</option>
-              <option value="text" {{ "selected" if t=="text" else "" }}>Text Message</option>
-              <option value="email" {{ "selected" if t=="email" else "" }}>Email</option>
-              <option value="meeting" {{ "selected" if t=="meeting" else "" }}>Meeting</option>
-              <option value="open_house" {{ "selected" if t=="open_house" else "" }}>Open house</option>
-              <option value="other" {{ "selected" if t=="other" else "" }}>Other</option>
-            </select>
-          </div>
+    <div class="d-flex justify-content-between align-items-start mb-3">
+      <div>
+        <h2 class="mb-0">Engagement Follow-up</h2>
+        <div class="text-muted small">{{ follow_subhead }}</div>
+      </div>
 
-          <div class="col-md-4">
-            <label class="form-label">Occurred at</label>
-            <input type="datetime-local"
-                   name="occurred_at"
-                   class="form-control"
-                   value="{{ e['occurred_at'].strftime('%Y-%m-%dT%H:%M') if e['occurred_at'] else '' }}">
-          </div>
+      <div class="text-end">
+        <div class="d-inline-flex align-items-center justify-content-end">
+          <div class="btn-group btn-group-sm" role="group" aria-label="Follow-up actions">
+            <a class="btn btn-outline-secondary"
+               href="{{ url_for('followup_calendar_ics', engagement_id=e['id']) }}">
+              Download .ics
+            </a>
 
-          <div class="col-md-4">
-            <label class="form-label">Outcome</label>
-            <input name="outcome" class="form-control" value="{{ e['outcome'] or '' }}">
-          </div>
-          
-          <div class="col-md-4">
-            <label class="form-label">Requires follow-up</label>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" name="requires_follow_up"
-                     {% if e.get("requires_follow_up") %}checked{% endif %}>
-              <label class="form-check-label">Yes</label>
-            </div>
-          </div>
-          
-          <div class="col-md-4">
-            <label class="form-label">Follow-up due at</label>
-            <input type="datetime-local"
-                   name="follow_up_due_at"
-                   class="form-control"
-                   value="{{ e['follow_up_due_at'].strftime('%Y-%m-%dT%H:%M') if e.get('follow_up_due_at') else '' }}">
-          </div>
-          
-          <div class="col-md-4">
-            <label class="form-label">Follow-up completed</label>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" name="follow_up_completed"
-                     {% if e.get("follow_up_completed") %}checked{% endif %}>
-              <label class="form-check-label">Done</label>
-            </div>
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Notes</label>
-            <textarea name="notes" class="form-control" rows="4">{{ e['notes'] or '' }}</textarea>
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Transcript (raw)</label>
-            <textarea name="transcript_raw" class="form-control" rows="6">{{ e['transcript_raw'] or '' }}</textarea>
-          </div>
-          
-          <div class="col-12">
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-              <button type="button" class="btn btn-outline-primary btn-sm" id="engAiSummarizeExistingBtn">
-                AI Assist: Summarize this engagement
-              </button>
-              <span class="small text-muted" id="engAiExistingStatus" style="display:none;"></span>
-            </div>
-          
-            <div class="card mt-3" id="engAiExistingPreviewCard" style="display:none;">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                  <div>
-                    <h6 class="mb-1">AI Preview</h6>
-                    <div class="small text-muted">Nothing is saved unless you paste it and click Save changes.</div>
-                  </div>
-                  <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCloseBtn">Close</button>
-                </div>
-          
-                <hr>
-          
-                <div class="mb-3">
-                  <div class="fw-semibold">One-Sentence Summary</div>
-                  <div class="mt-1" id="engAiExistingOne" style="white-space:pre-wrap;"></div>
-                  <div class="mt-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCopyOneBtn">Copy</button>
-                  </div>
-                </div>
-          
-                <div class="mb-3">
-                  <div class="fw-semibold">CRM Narrative Summary</div>
-                  <div class="mt-1" id="engAiExistingNarr" style="white-space:pre-wrap;"></div>
-                  <div class="mt-2 d-flex gap-2 flex-wrap">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCopyNarrBtn">Copy</button>
-                    <button type="button" class="btn btn-sm btn-primary" id="engAiExistingInsertNotesBtn">Insert into Notes</button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="engAiExistingInsertCleanBtn">Insert into Summary (clean)</button>
-                  </div>
-                </div>
-          
-                <div class="mb-0" id="engAiExistingFollowWrap" style="display:none;">
-                  <div class="fw-semibold">Suggested Follow-Up Items</div>
-                  <ul class="mt-2 mb-0" id="engAiExistingFollowList"></ul>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Summary (clean)</label>
-            <textarea name="summary_clean" class="form-control" rows="5">{{ e['summary_clean'] or '' }}</textarea>
-          </div>
-
-          <div class="col-12 d-flex justify-content-end gap-2">
             <a class="btn btn-outline-secondary"
                href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements">
-              Cancel
+              Back
             </a>
-            <button class="btn btn-success" type="submit">Save changes</button>
           </div>
         </div>
 
-      </form>
+        <form id="followupDoneForm_{{ e['id'] }}"
+              method="post"
+              action="{{ url_for('engagement_followup_done', engagement_id=e['id']) }}"
+              class="d-none">
+          <input type="hidden" name="next" value="{{ url_for('edit_engagement', engagement_id=e['id']) }}">
+        </form>
+      </div>
     </div>
-  </div>
+    {% if e.get("follow_up_completed") %}
+      <div class="alert alert-success d-flex justify-content-between align-items-start mb-3">
+        <div>
+          <div class="fw-semibold">This Follow-up Has Been Completed</div>
+          <div class="small">
+            {% if e.get("follow_up_completed_at") %}
+              Completed on {{ e["follow_up_completed_at"]|fmt_dt }}.
+            {% endif %}
+            Editing and saving this follow-up will <strong>reopen it as active</strong>.
+          </div>
+        </div>
+        <span class="badge bg-success">Completed</span>
+      </div>
+    {% endif %}
+  {% else %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h2 class="mb-0">View / Edit Engagement</h2>
+        <div class="text-muted small">Update engagement details, notes, transcript, and summary.</div>
+      </div>
+
+      <div class="d-inline-flex align-items-center justify-content-end">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Engagement actions">
+          <a class="btn btn-outline-secondary"
+             href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements">
+            Back
+          </a>
+        </div>
+      </div>
+    </div>
+
+  {% endif %}
+
+  <form method="post" id="engagementEditForm">
+    <input type="hidden" name="next" value="{{ next_url or next or (url_for('edit_contact', contact_id=e['contact_id']) ~ '#engagements') }}">
+    <input type="hidden" name="return_tab" value="{{ return_tab }}">
+    <input type="hidden" name="return_to" value="{{ return_to }}">
+
+    <div id="engEditRoot" data-engagement-id="{{ e['id'] }}"></div>
+
+    <div class="row g-3">
+
+      {% if e.get("parent_engagement_id") %}
+
+        <div class="col-12">
+          <div class="card card-soft mt-3">
+            <div class="card-header bg-primary-subtle text-dark fw-semibold">
+              Follow-up Details
+            </div>
+            <div class="card-body">
+
+              <div class="p-3 rounded border bg-light mb-4">
+                <div class="small text-muted text-uppercase fw-semibold mb-2">Related Engagement</div>
+
+                <div class="fw-semibold mb-1">
+                  Connected to:
+                  {% if parent_engagement %}
+                    <a href="{{ url_for('edit_engagement', engagement_id=parent_engagement['id']) }}?next={{ request.full_path|urlencode }}"
+                       class="text-decoration-none">
+                      {{ (parent_engagement['engagement_type'] or '')|replace('_',' ')|title }}
+                      {% if parent_engagement.get('occurred_at') %} · {{ parent_engagement['occurred_at']|fmt_dt }}{% endif %}
+                    </a>
+                  {% else %}
+                    <a href="{{ url_for('edit_engagement', engagement_id=e['parent_engagement_id']) }}?next={{ request.full_path|urlencode }}"
+                       class="text-decoration-none">
+                      View related engagement
+                    </a>
+                  {% endif %}
+                </div>
+
+                {% if parent_engagement %}
+                  {% set related_text = (parent_engagement['summary_clean'] or parent_engagement['notes'] or parent_engagement['outcome'] or '')|trim %}
+                {% else %}
+                  {% set related_text = "" %}
+                {% endif %}
+
+
+                <div class="text-muted small"
+                     style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">
+                  {{ related_text if related_text else "No related engagement details available yet." }}
+                </div>
+
+                {% if parent_engagement and parent_engagement.get('follow_up_due_at') %}
+                  <div class="mt-2 small text-muted">
+                    Due: {{ parent_engagement['follow_up_due_at']|fmt_dt }}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div class="row g-3 align-items-end">
+              
+                <div class="col-md-3">
+                  <label class="form-label">Type</label>
+                  {% set t = e["engagement_type"] or "call" %}
+                  <select name="engagement_type" class="form-select" required>
+                    <option value="call" {{ "selected" if t=="call" else "" }}>Phone Call</option>
+                    <option value="text" {{ "selected" if t=="text" else "" }}>Text Message</option>
+                    <option value="email" {{ "selected" if t=="email" else "" }}>Email</option>
+                    <option value="meeting" {{ "selected" if t=="meeting" else "" }}>Meeting</option>
+                    <option value="open_house" {{ "selected" if t=="open_house" else "" }}>Open house</option>
+                    <option value="other" {{ "selected" if t=="other" else "" }}>Other</option>
+                  </select>
+                </div>
+              
+                <div class="col-md-3">
+                  <label class="form-label">Occurred at</label>
+                  <input type="datetime-local"
+                         name="occurred_at"
+                         class="form-control"
+                         value="{{ e['occurred_at'].strftime('%Y-%m-%dT%H:%M') if e['occurred_at'] else '' }}">
+                </div>
+              
+                <div class="col-md-3">
+                  <label class="form-label">Follow-up due at</label>
+                  <input type="datetime-local"
+                         name="follow_up_due_at"
+                         class="form-control"
+                         value="{{ e['follow_up_due_at'].strftime('%Y-%m-%dT%H:%M') if e.get('follow_up_due_at') else '' }}">
+                </div>
+              
+                <div class="col-md-3">
+                  <label class="form-label">Outcome</label>
+                  <input name="outcome" class="form-control" value="{{ e['outcome'] or '' }}">
+                </div>
+              
+              </div>
+
+              <hr class="my-4">
+
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="h6 mb-0">Follow-up Content</h3>
+              </div>
+
+              <div class="row g-3">
+
+                <div class="col-12">
+                  <label class="form-label">Notes</label>
+                  <textarea name="notes" class="form-control" rows="4">{{ e['notes'] or '' }}</textarea>
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label">Transcript (raw)</label>
+                  <textarea name="transcript_raw" class="form-control" rows="6">{{ e['transcript_raw'] or '' }}</textarea>
+                </div>
+
+                <div class="col-12">
+                  <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                    <label class="form-label mb-0">Summary (clean)</label>
+
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                      <button type="button" class="btn btn-outline-primary btn-sm" id="engAiSummarizeExistingBtn">
+                        AI Assist
+                      </button>
+                      <span class="small text-muted" id="engAiExistingStatus" style="display:none;"></span>
+                    </div>
+                  </div>
+
+                  <textarea name="summary_clean" class="form-control mt-2" rows="5">{{ e['summary_clean'] or '' }}</textarea>
+
+                  <div class="card mt-3" id="engAiExistingPreviewCard" style="display:none;">
+                    <div class="card-body">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                          <h6 class="mb-1">AI Preview</h6>
+                          <div class="small text-muted">Nothing is saved unless you paste it and click Save changes.</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCloseBtn">Close</button>
+                      </div>
+
+                      <hr>
+
+                      <div class="mb-3">
+                        <div class="fw-semibold">One-Sentence Summary</div>
+                        <div class="mt-1" id="engAiExistingOne" style="white-space:pre-wrap;"></div>
+                        <div class="mt-2">
+                          <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCopyOneBtn">Copy</button>
+                        </div>
+                      </div>
+
+                      <div class="mb-3">
+                        <div class="fw-semibold">CRM Narrative Summary</div>
+                        <div class="mt-1" id="engAiExistingNarr" style="white-space:pre-wrap;"></div>
+                        <div class="mt-2 d-flex gap-2 flex-wrap">
+                          <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCopyNarrBtn">Copy</button>
+                          <button type="button" class="btn btn-sm btn-primary" id="engAiExistingInsertNotesBtn">Insert into Notes</button>
+                          <button type="button" class="btn btn-sm btn-outline-primary" id="engAiExistingInsertCleanBtn">Insert into Summary (clean)</button>
+                        </div>
+                      </div>
+
+                      <div class="mb-0" id="engAiExistingFollowWrap" style="display:none;">
+                        <div class="fw-semibold">Suggested Follow-Up Items</div>
+                        <ul class="mt-2 mb-0" id="engAiExistingFollowList"></ul>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 d-flex justify-content-end gap-2 mt-3">
+          <a class="btn btn-outline-secondary"
+             href="{{ url_for('edit_engagement', engagement_id=e['parent_engagement_id']) }}?next={{ request.full_path|urlencode }}">
+            Cancel Edit
+          </a>
+        
+          <button class="btn btn-outline-primary" type="submit">
+            Save changes
+          </button>
+        
+          {% if not e.get("follow_up_completed") %}
+            <button class="btn btn-success"
+                    type="submit"
+                    name="complete_after_save"
+                    value="1">
+              Save and Complete
+            </button>
+          {% endif %}
+        </div>
+
+      {% else %}
+
+        <div class="col-12">
+          <div class="card card-soft mt-3">
+            <div class="card-header bg-primary-subtle text-dark fw-semibold">
+              Engagement Details
+            </div>
+            <div class="card-body">
+              <div class="row g-3 align-items-end">
+
+                <div class="col-md-4">
+                  <label class="form-label">Type</label>
+                  {% set t = e["engagement_type"] or "call" %}
+                  <select name="engagement_type" class="form-select" required>
+                    <option value="call" {{ "selected" if t=="call" else "" }}>Phone Call</option>
+                    <option value="text" {{ "selected" if t=="text" else "" }}>Text Message</option>
+                    <option value="email" {{ "selected" if t=="email" else "" }}>Email</option>
+                    <option value="meeting" {{ "selected" if t=="meeting" else "" }}>Meeting</option>
+                    <option value="open_house" {{ "selected" if t=="open_house" else "" }}>Open house</option>
+                    <option value="other" {{ "selected" if t=="other" else "" }}>Other</option>
+                  </select>
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Occurred at</label>
+                  <input type="datetime-local"
+                         name="occurred_at"
+                         class="form-control"
+                         value="{{ e['occurred_at'].strftime('%Y-%m-%dT%H:%M') if e['occurred_at'] else '' }}">
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Outcome</label>
+                  <input name="outcome" class="form-control" value="{{ e['outcome'] or '' }}">
+                </div>
+
+              </div>
+
+              <hr class="my-4">
+
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="h6 mb-0">Engagement Content</h3>
+              </div>
+
+              <div class="row g-3">
+
+                <div class="col-12">
+                  <label class="form-label">Notes</label>
+                  <textarea name="notes" class="form-control" rows="4">{{ e['notes'] or '' }}</textarea>
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label">Transcript (raw)</label>
+                  <textarea name="transcript_raw" class="form-control" rows="6">{{ e['transcript_raw'] or '' }}</textarea>
+                </div>
+
+                <div class="col-12">
+                  <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                    <label class="form-label mb-0">Summary (clean)</label>
+
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                      <button type="button" class="btn btn-outline-primary btn-sm" id="engAiSummarizeExistingBtn">
+                        AI Assist
+                      </button>
+                      <span class="small text-muted" id="engAiExistingStatus" style="display:none;"></span>
+                    </div>
+                  </div>
+
+                  <textarea name="summary_clean" class="form-control mt-2" rows="5">{{ e['summary_clean'] or '' }}</textarea>
+
+                  <div class="card mt-3" id="engAiExistingPreviewCard" style="display:none;">
+                    <div class="card-body">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                          <h6 class="mb-1">AI Preview</h6>
+                          <div class="small text-muted">Nothing is saved unless you paste it and click Save changes.</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCloseBtn">Close</button>
+                      </div>
+
+                      <hr>
+
+                      <div class="mb-3">
+                        <div class="fw-semibold">One-Sentence Summary</div>
+                        <div class="mt-1" id="engAiExistingOne" style="white-space:pre-wrap;"></div>
+                        <div class="mt-2">
+                          <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCopyOneBtn">Copy</button>
+                        </div>
+                      </div>
+
+                      <div class="mb-3">
+                        <div class="fw-semibold">CRM Narrative Summary</div>
+                        <div class="mt-1" id="engAiExistingNarr" style="white-space:pre-wrap;"></div>
+                        <div class="mt-2 d-flex gap-2 flex-wrap">
+                          <button type="button" class="btn btn-sm btn-outline-secondary" id="engAiExistingCopyNarrBtn">Copy</button>
+                          <button type="button" class="btn btn-sm btn-primary" id="engAiExistingInsertNotesBtn">Insert into Notes</button>
+                          <button type="button" class="btn btn-sm btn-outline-primary" id="engAiExistingInsertCleanBtn">Insert into Summary (clean)</button>
+                        </div>
+                      </div>
+
+                      <div class="mb-0" id="engAiExistingFollowWrap" style="display:none;">
+                        <div class="fw-semibold">Suggested Follow-Up Items</div>
+                        <ul class="mt-2 mb-0" id="engAiExistingFollowList"></ul>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        {% if not e.get("parent_engagement_id") or child_followups %}
+          <div class="col-12">
+            <div class="card card-soft followup-list-card">
+              <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <span class="fw-semibold text-dark">Follow-ups</span>
+
+                {% if not e.get("parent_engagement_id") %}
+                  <button type="button"
+                          class="btn btn-outline-primary btn-sm"
+                          onclick="document.getElementById('addFollowupForm_{{ e['id'] }}').submit();">
+                    Add Follow-up
+                  </button>
+                {% endif %}
+              </div>
+
+              <div class="card-body">
+                {% if child_followups %}
+                  {% for fu in child_followups %}
+
+                    {% set fu_text = (fu['summary_clean'] or fu['notes'] or fu['outcome'] or '')|trim %}
+
+                    <div class="followup-history-item">
+                      <div class="followup-history-row">
+
+                        <div class="followup-history-main">
+                          <span class="followup-history-meta fw-semibold">
+                            {{ (fu['engagement_type'] or '')|replace('_',' ')|title }}
+                            {% if fu.get('occurred_at') %}
+                              · {{ fu['occurred_at']|fmt_dt }}
+                            {% endif %}
+                          </span>
+
+                          <span class="followup-history-summary text-muted">
+                            {{ fu_text if fu_text else "No details yet." }}
+                          </span>
+                        </div>
+
+                        <div class="followup-history-actions text-end">
+                          <div class="d-flex justify-content-end align-items-center gap-2">
+                            <a class="btn btn-outline-primary btn-sm"
+                               href="{{ url_for('edit_engagement', engagement_id=fu['id']) }}">
+                              Open
+                            </a>
+
+                            {% if fu.get("follow_up_completed") %}
+                              <span class="badge bg-success followup-complete-badge">Completed</span>
+                            {% else %}
+                              <button type="button"
+                                      class="btn btn-outline-success btn-sm"
+                                      onclick="document.getElementById('followupDoneForm_{{ fu['id'] }}').submit();">
+                                Done
+                              </button>
+                            {% endif %}
+                          </div>
+
+                          {% if fu.get("follow_up_completed") and fu.get("follow_up_completed_at") %}
+                            <div class="small text-muted followup-complete-time">
+                              {{ fu["follow_up_completed_at"]|fmt_dt }}
+                            </div>
+                          {% endif %}
+                        </div>
+
+                      </div>
+                    </div>
+
+                    <form id="followupDoneForm_{{ fu['id'] }}"
+                          method="post"
+                          action="{{ url_for('engagement_followup_done', engagement_id=fu['id']) }}"
+                          class="d-none">
+                    </form>
+                  {% endfor %}
+                {% else %}
+                  <div class="text-muted small">No follow-ups yet.</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endif %}
+
+        <div class="col-12 d-flex justify-content-end gap-2 mt-3">
+          <a class="btn btn-outline-secondary"
+             href="{{ url_for('edit_contact', contact_id=e['contact_id']) }}#engagements">
+            Cancel Edit
+          </a>
+          <button class="btn btn-success" type="submit">Save changes</button>
+        </div>
+
+      {% endif %}
+
+    </div>
+  </form>
+
+  {% if e.get("parent_engagement_id") and not e.get("follow_up_completed") %}
+    <div class="modal fade" id="completeConfirmModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Unsaved changes</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            You made changes to this follow-up. What would you like to do?
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+              Cancel
+            </button>
+            <button type="button" class="btn btn-outline-primary" id="completeWithoutSavingBtn">
+              Mark Complete Without Saving
+            </button>
+            <button type="button" class="btn btn-primary" id="saveAndCompleteBtn">
+              Save and Mark Complete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if not e.get("parent_engagement_id") %}
+    <form id="addFollowupForm_{{ e['id'] }}"
+          method="post"
+          action="{{ url_for('add_engagement_followup', engagement_id=e['id']) }}"
+          class="d-none">
+    </form>
+  {% endif %}
 
 </div>
 
@@ -163,7 +531,6 @@
     const btn = document.getElementById("engAiSummarizeExistingBtn");
     if (!btn) return;
 
-    // Bind once
     if (btn.dataset.bound === "1") return;
     btn.dataset.bound = "1";
 
@@ -183,6 +550,7 @@
     const insertCleanBtn = document.getElementById("engAiExistingInsertCleanBtn");
 
     const notesField = document.querySelector('textarea[name="notes"]');
+    const transcriptField = document.querySelector('textarea[name="transcript_raw"]');
     const summaryCleanField = document.querySelector('textarea[name="summary_clean"]');
 
     function setStatus(msg, isError) {
@@ -247,6 +615,13 @@
 
     async function summarizeExisting() {
       clearStatus();
+
+      const transcriptText = (transcriptField?.value || "").trim();
+      if (!transcriptText) {
+        setStatus("Please paste transcript or notes first.", true);
+        return;
+      }
+
       setStatus("Summarizing…", false);
       btn.disabled = true;
 
@@ -254,7 +629,10 @@
         const resp = await fetch("/api/ai/engagements/summarize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ engagement_id: engagementId })
+          body: JSON.stringify({
+            engagement_id: engagementId,
+            transcript: transcriptText
+          })
         });
 
         const data = await resp.json();
@@ -311,4 +689,68 @@
   })();
 </script>
 
+{% if e.get("parent_engagement_id") and not e.get("follow_up_completed") %}
+<script>
+  (function () {
+    const form = document.getElementById("engagementEditForm");
+    const markCompleteBtn = document.getElementById("markCompleteBtn");
+    const doneForm = document.getElementById("followupDoneForm_{{ e['id'] }}");
+    const modalEl = document.getElementById("completeConfirmModal");
+    const saveAndCompleteBtn = document.getElementById("saveAndCompleteBtn");
+    const completeWithoutSavingBtn = document.getElementById("completeWithoutSavingBtn");
+
+    if (!form || !markCompleteBtn || !doneForm) return;
+
+    let isDirty = false;
+
+    form.querySelectorAll("input, textarea, select").forEach((el) => {
+      el.addEventListener("input", () => { isDirty = true; });
+      el.addEventListener("change", () => { isDirty = true; });
+    });
+
+    let modal = null;
+    if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+      modal = new window.bootstrap.Modal(modalEl);
+    }
+
+    markCompleteBtn.addEventListener("click", function () {
+      if (isDirty && modal) {
+        modal.show();
+      } else if (isDirty && !modal) {
+        const proceed = window.confirm(
+          "You have unsaved changes. Press OK to mark complete without saving, or Cancel to stay on the page."
+        );
+        if (proceed) {
+          doneForm.submit();
+        }
+      } else {
+        doneForm.submit();
+      }
+    });
+
+    if (completeWithoutSavingBtn) {
+      completeWithoutSavingBtn.addEventListener("click", function () {
+        if (modal) modal.hide();
+        doneForm.submit();
+      });
+    }
+
+    if (saveAndCompleteBtn) {
+      saveAndCompleteBtn.addEventListener("click", function () {
+        const existing = form.querySelector('input[name="complete_after_save"]');
+        if (!existing) {
+          const hidden = document.createElement("input");
+          hidden.type = "hidden";
+          hidden.name = "complete_after_save";
+          hidden.value = "1";
+          form.appendChild(hidden);
+        }
+        if (modal) modal.hide();
+        form.submit();
+      });
+    }
+  })();
+</script>
+{% endif %}
+  
 {% endblock %}
