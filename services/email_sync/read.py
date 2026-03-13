@@ -68,6 +68,7 @@ def list_messages_for_contact(
             em.id,
             em.message_date,
             em.direction,
+            em.provider,
             em.subject,
             em.snippet,
             em.from_email,

@@ -32,6 +32,7 @@ from services.ai_guard import ensure_ai_allowed_and_reset_if_needed, increment_a
 
 from services.email_sync.gmail_importer import import_last_messages_gmail
 from services.email_sync.dispatcher import sync_email_account
+from services.email_sync.read import list_messages_for_contact
 
 from engagements import list_engagements_for_contact
 from engagements import insert_engagement
@@ -6082,10 +6083,23 @@ def edit_contact(contact_id):
             email_connected = False
             email_primary_provider = None
             
-        # Load messages (existing logic)
-        # NOTE: keep your existing message query here as-is in your codebase
-        # (omitted from this snippet if it already exists below in your app.py)
-
+        # Load linked email messages for this contact
+        try:
+            email_messages = list_messages_for_contact(
+                conn,
+                user_id=current_user.id,
+                contact_id=contact_id,
+                limit=email_limit,
+                offset=email_offset,
+                direction=email_dir,
+                days=email_days,
+                q=email_q,
+                from_email=email_from,
+            )
+        except Exception:
+            conn.rollback()
+            email_messages = []
+            
     # -------------------------
     # Interactions tab (existing)
     # -------------------------
