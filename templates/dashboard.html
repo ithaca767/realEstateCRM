@@ -164,141 +164,140 @@
           
             <!-- Card 1: Today's Snapshot -->
             <div class="col-12 col-lg-4">
-            <!-- Today's Snapshot -->
-            <div class="card mb-3" id="todays-snapshot">
-              <div class="card-header d-flex justify-content-between align-items-center">
-                <div>
-                  <div class="fw-semibold">Today’s Snapshot</div>
-                  <div class="text-muted dash-secondary d-none d-lg-block">
-                    Quick hits for {{ today|fmt_date }}
+              <!-- Today's Snapshot -->
+              <div class="card mb-3" id="todays-snapshot">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <div>
+                    <div class="fw-semibold">Today’s Snapshot</div>
+                    <div class="text-muted dash-secondary d-none d-lg-block">
+                      Quick hits for {{ today|fmt_date }}
+                    </div>
+                  </div>
+                  <div class="d-flex gap-2">
+                    <a class="btn btn-sm btn-outline-primary text-nowrap"
+                       href="{{ url_for('tasks_new') }}">
+                      <span class="d-inline d-sm-none">Add</span>
+                      <span class="d-none d-sm-inline">Add Task</span>
+                    </a>
                   </div>
                 </div>
-                <div class="d-flex gap-2">
-                  <a class="btn btn-sm btn-outline-primary text-nowrap"
-                     href="{{ url_for('tasks_new') }}">
-                    <span class="d-inline d-sm-none">Add</span>
-                    <span class="d-none d-sm-inline">Add Task</span>
-                  </a>
-                </div>
-              </div>
             
-              <div class="card-body bg-white">
+                <div class="card-body bg-white">
+                  {% if snapshot_items and snapshot_items|length > 0 %}
+                    <div class="mt-2">
               
-                {% if snapshot_items and snapshot_items|length > 0 %}
-                  <div class="mt-2">
+                      {% for item in snapshot_items %}
               
-                    {% for item in snapshot_items %}
-              
-                      {% if item.item_type == "followup" %}
-                        <div class="dash-snap-item">
-              
-                          <div class="d-flex justify-content-between align-items-center">
-                            <div class="d-flex align-items-center gap-2">
-              
-                              <span class="badge bg-warning-subtle text-warning-emphasis">Followup</span>
-              
-                              {% if item.snap_status == "overdue" %}
-                                <span class="badge bg-danger-subtle text-danger-emphasis">
-                                  Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
-                                </span>
-                              {% else %}
-                                <span class="badge bg-primary-subtle text-primary-emphasis">Due today</span>
-                              {% endif %}
-              
-                            </div>
-              
+                        {% if item.item_type == "followup" %}
                           {% if item.get('engagement_id') %}
-                            <a class="small text-decoration-none"
+                            <a class="dash-snap-item text-decoration-none d-block"
                                href="{{ url_for('edit_engagement', engagement_id=item['engagement_id']) }}">
-                              See more
+                              <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center gap-2">
+                                  <span class="badge bg-warning-subtle text-warning-emphasis">Followup</span>
+              
+                                  {% if item.snap_status == "overdue" %}
+                                    <span class="badge bg-danger-subtle text-danger-emphasis">
+                                      Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
+                                    </span>
+                                  {% else %}
+                                    <span class="badge bg-primary-subtle text-primary-emphasis">Due today</span>
+                                  {% endif %}
+                                </div>
+                              </div>
+              
+                              <div class="text-muted small mt-1">
+                                {{ item.get("follow_up_due_at")|fmt_dt }}
+                              </div>
+              
+                              <div class="fw-semibold mt-1 text-dark">
+                                {{ item.contact_name or "Unnamed Contact" }}
+                              </div>
+              
+                              {% if item.snippet %}
+                                <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
+                              {% endif %}
                             </a>
                           {% else %}
-                            <span class="small text-muted">See more</span>
-                          {% endif %}
-                          
-                          </div>
+                            <div class="dash-snap-item">
+                              <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center gap-2">
+                                  <span class="badge bg-warning-subtle text-warning-emphasis">Followup</span>
               
-                          <div class="text-muted small mt-1">
-                            {{ item.get("follow_up_due_at")|fmt_dt }}
-                          </div>
+                                  {% if item.snap_status == "overdue" %}
+                                    <span class="badge bg-danger-subtle text-danger-emphasis">
+                                      Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
+                                    </span>
+                                  {% else %}
+                                    <span class="badge bg-primary-subtle text-primary-emphasis">Due today</span>
+                                  {% endif %}
+                                </div>
+                              </div>
               
-                          <div class="fw-semibold mt-1">
-                            <a class="text-decoration-none"
-                               href="{{ url_for('edit_engagement', engagement_id=item['engagement_id']) }}">
-                              {{ item.contact_name or "Unnamed Contact" }}
-                            </a>
-                          </div>
+                              <div class="text-muted small mt-1">
+                                {{ item.get("follow_up_due_at")|fmt_dt }}
+                              </div>
               
-                          {% if item.snippet %}
-                            <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
-                          {% endif %}
+                              <div class="fw-semibold mt-1">
+                                {{ item.contact_name or "Unnamed Contact" }}
+                              </div>
               
-                        </div>
-              
-                      {% elif item.item_type == "task" %}
-                        <div class="dash-snap-item">
-              
-                          <div class="d-flex justify-content-between align-items-center">
-                            <div class="d-flex align-items-center gap-2">
-              
-                              <span class="badge bg-info-subtle text-info-emphasis">Task</span>
-              
-                              {% if item.snap_status == "overdue" %}
-                                <span class="badge bg-danger-subtle text-danger-emphasis">
-                                  Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
-                                </span>
-                              {% else %}
-                                <span class="badge bg-primary-subtle text-primary-emphasis">Due today</span>
+                              {% if item.snippet %}
+                                <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
                               {% endif %}
-              
-                            </div>
-              
-                            <a class="small text-decoration-none"
-                               href="{{ url_for('tasks_view', task_id=item['task_id']) }}">
-                              See more
-                            </a>
-                          </div>
-              
-                          {% if item.get("due_ts") %}
-                            <div class="text-muted small mt-1">
-                              {{ item.get("due_ts")|fmt_dt }}
                             </div>
                           {% endif %}
               
-                          <div class="fw-semibold mt-1">{{ item.title or "Task" }}</div>
+                        {% elif item.item_type == "task" %}
+                          <a class="dash-snap-item text-decoration-none d-block"
+                             href="{{ url_for('tasks_view', task_id=item['task_id']) }}">
               
-                          {% if item.contact_name %}
-                            <div class="text-muted small">
-                              {% if item.contact_id %}
-                                <a class="text-decoration-none"
-                                   href="{{ url_for('edit_contact', contact_id=item['contact_id']) }}#engagements">
-                                  {{ item.contact_name }}
-                                </a>
-                              {% else %}
+                            <div class="d-flex justify-content-between align-items-center">
+                              <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-info-subtle text-info-emphasis">Task</span>
+              
+                                {% if item.snap_status == "overdue" %}
+                                  <span class="badge bg-danger-subtle text-danger-emphasis">
+                                    Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
+                                  </span>
+                                {% else %}
+                                  <span class="badge bg-primary-subtle text-primary-emphasis">Due today</span>
+                                {% endif %}
+                              </div>
+                            </div>
+              
+                            {% if item.get("due_ts") %}
+                              <div class="text-muted small mt-1">
+                                {{ item.get("due_ts")|fmt_dt }}
+                              </div>
+                            {% endif %}
+              
+                            <div class="fw-semibold mt-1 text-dark">{{ item.title or "Task" }}</div>
+              
+                            {% if item.contact_name %}
+                              <div class="text-muted small mt-1">
                                 {{ item.contact_name }}
-                              {% endif %}
-                            </div>
-                          {% endif %}
+                              </div>
+                            {% endif %}
               
-                          {% if item.snippet %}
-                            <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
-                          {% endif %}
+                            {% if item.snippet %}
+                              <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
+                            {% endif %}
               
-                        </div>
-                      {% endif %}
+                          </a>
+                        {% endif %}
               
-                    {% endfor %}
+                      {% endfor %}
               
-                  </div>
+                    </div>
               
-                  {{ dash_pager(dash_page, has_prev_snapshot, has_more_snapshot, "todays-snapshot") }}
+                    {{ dash_pager(dash_page, has_prev_snapshot, has_more_snapshot, "todays-snapshot") }}
               
-                {% else %}
-                  <div class="text-muted mt-2">Nothing due today.</div>
-                {% endif %}
-              
-              </div>
-            </div>    {# /Today’s Snapshot card #}
+                  {% else %}
+                    <div class="text-muted mt-2">Nothing due today.</div>
+                  {% endif %}
+                </div>
+              </div>    {# /Today’s Snapshot card #}
             </div>
           
             <!-- Card 2: Active Contacts (compact) -->
@@ -314,7 +313,6 @@
                   <a class="btn btn-sm btn-outline-primary" href="{{ url_for('contacts') }}">Contacts</a>
                 </div>
             
-                {# IMPORTANT: make body a flex column so the list can fill remaining height #}
                 <div class="card-body bg-white">
                   {% if active_contacts and active_contacts|length > 0 %}
                     <div class="list-group list-group-flush">
@@ -346,7 +344,6 @@
                               </div>
                             </div>
                 
-                            <span class="text-muted small">Open</span>
                           </div>
                         </a>
                       {% endfor %}
@@ -387,12 +384,10 @@
                           <div class="d-flex justify-content-between align-items-start">
                             <div class="me-2">
                               <div class="d-flex align-items-center gap-2 flex-wrap">
-                                {# Transaction type badge #}
                                 <span class="badge {{ tx_type_badge_class.get(t.transaction_type_key, 'bg-secondary') }}">
                                   {{ t.transaction_type_label }}
                                 </span>
                 
-                                {# Status badge #}
                                 <span class="badge {{ tx_badge_class.get(t.status, 'bg-secondary') }}">
                                   {{ tx_status_label.get(t.status, t.status) }}
                                 </span>
@@ -411,10 +406,10 @@
                 
                             <div class="text-end">
                               {% if t.get('expected_close_date') %}
-                                <div class="small text-muted">Close</div>
+                                <div class="small text-muted text-nowrap">Expected Close</div>
                                 <div class="small">{{ t['expected_close_date']|fmt_date }}</div>
                               {% else %}
-                                <div class="small text-muted">Open</div>
+                                <div class="small text-muted text-nowrap">In Progress</div>
                               {% endif %}
                             </div>
                           </div>
@@ -433,7 +428,7 @@
           
           </div>
         </div>
-
+        
         <!-- Follow-ups tab -->
         <div class="tab-pane fade" id="followups" role="tabpanel" aria-labelledby="followups-tab">
         

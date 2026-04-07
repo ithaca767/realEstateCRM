@@ -376,3 +376,12 @@ tr.tx-selected {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.dash-snap-item {
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.dash-snap-item:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
