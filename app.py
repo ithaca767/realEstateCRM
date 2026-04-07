@@ -7467,7 +7467,12 @@ def tasks_list():
         for t in tasks:
             due_local = _task_due_local(t)
             t["due_local"] = due_local
-            t["is_overdue"] = bool(due_local and due_local < now_local)
+            t["is_overdue"] = bool(
+                due_local
+                and due_local < now_local
+                and t.get("status") not in ("completed", "canceled")
+            )
+            
         # ---- /Overdue computation ----
 
         # Build contact_id -> display_name map for UI polish
@@ -7849,28 +7854,8 @@ def tasks_view(task_id):
                 engagement["summary_display"] = summary
 
         elif task.get("contact_id"):
-            cur.execute(
-                """
-                SELECT
-                    id,
-                    engagement_type,
-                    occurred_at,
-                    summary_clean,
-                    notes
-                FROM engagements
-                WHERE contact_id = %s AND user_id = %s
-                ORDER BY occurred_at DESC, id DESC
-                LIMIT 10
-                """,
-                (task["contact_id"], current_user.id),
-            )
-            engagements = cur.fetchall() or []
-            for e in engagements:
-                summary = (e.get("summary_clean") or "").strip()
-                if not summary:
-                    summary = (e.get("notes") or "").strip()
-                e["summary_display"] = summary
-
+            engagements = []
+            
         # Professionals: show selected only (no global list on task view)
         professional = None
         professionals = []

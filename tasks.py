@@ -143,6 +143,14 @@ def update_task(cur, user_id: int, task_id: int, data: Dict[str, Any]) -> None:
     status = data.get("status") or "open"
     if status not in TASK_STATUSES:
         raise ValueError("Invalid status")
+    
+    if status == "snoozed":
+        raise ValueError("Use the Snooze action to snooze a task.")
+
+    # Only the dedicated snooze action should maintain snoozed_until
+    snoozed_until = data.get("snoozed_until")
+    if status != "snoozed":
+        snoozed_until = None
 
     cur.execute(
         """
@@ -159,6 +167,7 @@ def update_task(cur, user_id: int, task_id: int, data: Dict[str, Any]) -> None:
           priority = %s,
           due_date = %s,
           due_at = %s,
+          snoozed_until = %s,
           updated_at = NOW()
         WHERE user_id = %s AND id = %s
         """,
@@ -174,23 +183,26 @@ def update_task(cur, user_id: int, task_id: int, data: Dict[str, Any]) -> None:
             data.get("priority"),
             data.get("due_date"),
             data.get("due_at"),
+            snoozed_until,
             user_id,
             task_id,
         ),
     )
 
-
 def complete_task(cur, user_id: int, task_id: int) -> None:
     cur.execute(
         """
         UPDATE tasks
-        SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+        SET
+          status = 'completed',
+          completed_at = NOW(),
+          snoozed_until = NULL,
+          updated_at = NOW()
         WHERE user_id = %s AND id = %s
         """,
         (user_id, task_id),
     )
-
-
+    
 def snooze_task(cur, user_id: int, task_id: int, snoozed_until) -> None:
     cur.execute(
         """
@@ -217,12 +229,16 @@ def cancel_task(cur, user_id: int, task_id: int) -> None:
     cur.execute(
         """
         UPDATE tasks
-        SET status = 'canceled', canceled_at = NOW(), updated_at = NOW()
+        SET
+          status = 'canceled',
+          canceled_at = NOW(),
+          snoozed_until = NULL,
+          updated_at = NOW()
         WHERE user_id = %s AND id = %s
         """,
         (user_id, task_id),
     )
-
+    
 def delete_task(cur, user_id: int, task_id: int) -> bool:
     cur.execute(
         """

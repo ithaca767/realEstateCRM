@@ -21,7 +21,9 @@
     + Add New Task
   </button>
 </div>
-
+<div class="text-danger small">
+  DEBUG STATUS: {{ status }}
+</div>
 <div class="card mt-3">
   <div class="card-body">
 
@@ -68,10 +70,9 @@
                   
                     <div class="d-none d-md-block mt-1">
                       <div id="taskDescDesktop_{{ t.id }}"
-                           class="task-desc text-muted small {% if is_long %}is-clamped clamp-3{% endif %}">
+                           class="task-desc text-muted small {% if is_long %}is-clamped{% endif %}">
                         {{ full }}
-                      </div>
-                  
+                      </div>                  
                       {% if is_long %}
                         <button type="button"
                                 class="btn btn-link p-0 text-decoration-none task-see-more"
@@ -81,7 +82,8 @@
                         </button>
                       {% endif %}
                     </div>
-                  {% endif %}                  <div class="d-md-none mt-2">
+                  {% endif %}                  
+                  <div class="d-md-none mt-2">
                   
                     {% set badge_class = "bg-secondary" %}
                     {% if t.status == "open" %}{% set badge_class = "bg-primary" %}{% endif %}
@@ -115,23 +117,22 @@
                     {% if t.description %}
                       {% set full = t.description|string %}
                       {% set is_long = (full|length > 140) %}
-                  
+                    
                       <div class="mt-2 small text-muted">
                         <div id="taskDesc_{{ t.id }}" class="task-desc {% if is_long %}is-clamped{% endif %}">
                           {{ full }}
                         </div>
-                  
+                    
                         {% if is_long %}
                         <button type="button"
                                 class="btn btn-link p-0 text-decoration-none task-see-more"
                                 data-desc-toggle="1"
-                                data-target="taskDescDesktop_{{ t.id }}">
+                                data-target="taskDesc_{{ t.id }}">
                           See more
                         </button>
                         {% endif %}
                       </div>
-                    {% endif %}
-                  
+                    {% endif %}                  
                   </div>
 
                   {% if t.contact_id %}
@@ -327,17 +328,13 @@ document.addEventListener("click", function (e) {
   const el = document.getElementById(id);
   if (!el) return;
 
-  if (el.classList.contains("is-clamped") || el.classList.contains("is-clamped-4")) {
+  const isClamped = el.classList.contains("is-clamped");
+
+  if (isClamped) {
     el.classList.remove("is-clamped");
-    el.classList.remove("is-clamped-4");
     btn.textContent = "See less";
   } else {
-    // Restore appropriate clamp type
-    if (el.classList.contains("task-desc-desktop")) {
-      el.classList.add("is-clamped-4");
-    } else {
-      el.classList.add("is-clamped");
-    }
+    el.classList.add("is-clamped");
     btn.textContent = "See more";
   }
 });

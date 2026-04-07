@@ -364,3 +364,15 @@ tr.tx-selected {
   padding: 6px 0;
   letter-spacing: .03em;
 }
+
+.task-desc {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.task-desc.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

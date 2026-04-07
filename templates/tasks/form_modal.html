@@ -15,7 +15,7 @@
     <div class="col-md-4">
       <label class="form-label">Status</label>
       <select name="status" class="form-select">
-        {% for s in statuses %}
+        {% for s in statuses if s != 'snoozed' %}
           <option value="{{ s }}" {% if task and task.status == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>
         {% endfor %}
       </select>

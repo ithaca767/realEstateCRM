@@ -262,18 +262,20 @@
             Cancel Edit
           </a>
         
-          <button class="btn btn-outline-primary" type="submit">
-            Save changes
-          </button>
         
           {% if not e.get("follow_up_completed") %}
-            <button class="btn btn-success"
+            <button class="btn btn-outline-success"
                     type="submit"
                     name="complete_after_save"
                     value="1">
               Save and Complete
             </button>
           {% endif %}
+
+          <button class="btn btn-primary" type="submit">
+            Save changes
+          </button>
+          
         </div>
 
       {% else %}
