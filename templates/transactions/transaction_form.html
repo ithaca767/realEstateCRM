@@ -282,37 +282,54 @@
                           {% endif %}
                         </td>
 
-                        <td class="text-end">
-                          <div class="d-inline-flex gap-1">
-
-                            <form method="post" action="{{ url_for('toggle_transaction_deadline', deadline_id=d['id']) }}">
-                              {% if next_url %}
-                                <input type="hidden" name="next" value="{{ next_url }}">
-                              {% endif %}
-                              <button type="submit" class="btn btn-sm btn-outline-primary">
-                                {% if d['is_done'] %}Mark Pending{% else %}Mark Done{% endif %}
+                        <td class="text-end actions-col">
+                          <div class="d-inline-flex align-items-center justify-content-end">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Deadline actions">
+                        
+                              <button type="submit"
+                                      form="deadlineToggleForm_{{ d['id'] }}"
+                                      class="btn btn-outline-primary">
+                                {% if d['is_done'] %}Pending{% else %}Done{% endif %}
                               </button>
-                            </form>
-
-                            <button
-                              class="btn btn-sm btn-outline-secondary"
-                              type="button"
-                              data-bs-toggle="collapse"
-                              data-bs-target="#editDeadline{{ d['id'] }}"
-                            >
-                              Edit
-                            </button>
-
-                            <form method="post" action="{{ url_for('delete_transaction_deadline', deadline_id=d['id']) }}">
-                              {% if next_url %}
-                                <input type="hidden" name="next" value="{{ next_url }}">
-                              {% endif %}
-                              <button type="submit" class="btn btn-sm btn-outline-danger">
+                        
+                              <button
+                                class="btn btn-outline-secondary"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#editDeadline{{ d['id'] }}"
+                                aria-expanded="false"
+                                aria-controls="editDeadline{{ d['id'] }}"
+                              >
+                                Edit
+                              </button>
+                        
+                              <button type="submit"
+                                      form="deadlineDeleteForm_{{ d['id'] }}"
+                                      class="btn btn-outline-danger"
+                                      onclick="return confirm('Delete this deadline? This cannot be undone.');">
                                 Delete
                               </button>
-                            </form>
-
+                        
+                            </div>
                           </div>
+                        
+                          <form id="deadlineToggleForm_{{ d['id'] }}"
+                                method="post"
+                                action="{{ url_for('toggle_transaction_deadline', deadline_id=d['id']) }}"
+                                class="d-none">
+                            {% if next_url %}
+                              <input type="hidden" name="next" value="{{ next_url }}">
+                            {% endif %}
+                          </form>
+                        
+                          <form id="deadlineDeleteForm_{{ d['id'] }}"
+                                method="post"
+                                action="{{ url_for('delete_transaction_deadline', deadline_id=d['id']) }}"
+                                class="d-none">
+                            {% if next_url %}
+                              <input type="hidden" name="next" value="{{ next_url }}">
+                            {% endif %}
+                          </form>
                         </td>
                       </tr>
 

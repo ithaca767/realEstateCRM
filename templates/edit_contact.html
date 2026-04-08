@@ -1138,16 +1138,18 @@
                           <div class="engagement-detail-content">
                             <div class="engagement-outcome-label mb-1">Outcome</div>
                     
-                            <div class="eng-outcome-clamp" id="engOutcome{{ e['id'] }}">
+                            <div id="engOutcome{{ e['id'] }}"
+                                 class="eng-outcome-clamp{% if outcome_text and outcome_text|length > 140 %} is-clamped{% endif %}">
                               {{ outcome_text if outcome_text else "No outcome yet." }}
                             </div>
-                    
+                            
                             {% if outcome_text and outcome_text|length > 140 %}
-                              <a href="javascript:void(0);"
-                                 class="small text-decoration-none"
-                                 onclick="toggleOutcome('engOutcome{{ e['id'] }}', this)">
+                              <button type="button"
+                                      class="btn btn-link p-0 small text-decoration-none"
+                                      data-desc-toggle="1"
+                                      data-target="engOutcome{{ e['id'] }}">
                                 See more
-                              </a>
+                              </button>
                             {% endif %}
                           </div>
                         </td>
@@ -1222,17 +1224,19 @@
                                             <div class="engagement-detail-content">
                                               <div class="engagement-outcome-label mb-1">Outcome</div>
                     
-                                              <div class="eng-outcome-clamp" id="fuOutcome{{ fu['id'] }}">
-                                                {{ fu_outcome_text if fu_outcome_text else "No outcome yet." }}
-                                              </div>
-                    
-                                              {% if fu_outcome_text and fu_outcome_text|length > 140 %}
-                                                <a href="javascript:void(0);"
-                                                   class="small text-decoration-none"
-                                                   onclick="toggleOutcome('fuOutcome{{ fu['id'] }}', this)">
-                                                  See more
-                                                </a>
-                                              {% endif %}
+                                                <div id="fuOutcome{{ fu['id'] }}"
+                                                     class="eng-outcome-clamp{% if fu_outcome_text and fu_outcome_text|length > 140 %} is-clamped{% endif %}">
+                                                  {{ fu_outcome_text if fu_outcome_text else "No outcome yet." }}
+                                                </div>
+                                                
+                                                {% if fu_outcome_text and fu_outcome_text|length > 140 %}
+                                                  <button type="button"
+                                                          class="btn btn-link p-0 small text-decoration-none"
+                                                          data-desc-toggle="1"
+                                                          data-target="fuOutcome{{ fu['id'] }}">
+                                                    See more
+                                                  </button>
+                                                {% endif %}
                                             </div>
                                           </td>
                                         </tr>
@@ -2509,6 +2513,27 @@
       window.setTimeout(() => row.classList.remove("followup-flash"), 1500);
     }, 150);
   })();
+</script>
+
+<script>
+document.addEventListener("click", function (e) {
+  const btn = e.target.closest('[data-desc-toggle="1"]');
+  if (!btn) return;
+
+  const id = btn.getAttribute("data-target");
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  const isClamped = el.classList.contains("is-clamped");
+
+  if (isClamped) {
+    el.classList.remove("is-clamped");
+    btn.textContent = "See less";
+  } else {
+    el.classList.add("is-clamped");
+    btn.textContent = "See more";
+  }
+});
 </script>
 
 {% endblock %}

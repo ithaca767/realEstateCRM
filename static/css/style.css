@@ -385,3 +385,15 @@ tr.tx-selected {
 .dash-snap-item:hover {
   background-color: rgba(0, 0, 0, 0.03);
 }
+
+.eng-outcome-clamp {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.eng-outcome-clamp.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

@@ -11786,7 +11786,7 @@ def global_search():
         if t == "contact":
             return url_for("edit_contact", contact_id=obj_id)
         if t == "engagement":
-            return (url_for("edit_contact", contact_id=contact_id) + "#engagements") if contact_id else ""
+            return url_for("edit_engagement", engagement_id=obj_id)
         if t == "transaction":
             return url_for("edit_transaction", transaction_id=obj_id)
         if t == "professional":
@@ -11818,8 +11818,7 @@ def global_search():
         for c in results.get("contacts", []):
             c["url"] = url_for("edit_contact", contact_id=c["id"])
         for e in results.get("engagements", []):
-            cid = e.get("contact_id")
-            e["url"] = url_for("edit_contact", contact_id=cid) + "#engagements" if cid else ""
+            e["url"] = url_for("edit_engagement", engagement_id=e["id"])
         for tx in results.get("transactions", []):
             tx["url"] = url_for("edit_transaction", transaction_id=tx["id"])
         for p in results.get("professionals", []):
@@ -11829,8 +11828,7 @@ def global_search():
             for r in ai_results.get("contacts", []):
                 r["url"] = url_for("edit_contact", contact_id=r["id"])
             for r in ai_results.get("engagements", []):
-                cid = r.get("contact_id")
-                r["url"] = url_for("edit_contact", contact_id=cid) + "#engagements" if cid else ""
+                r["url"] = url_for("edit_engagement", engagement_id=r["id"])
             for r in ai_results.get("transactions", []):
                 r["url"] = url_for("edit_transaction", transaction_id=r["id"])
             for r in ai_results.get("professionals", []):
