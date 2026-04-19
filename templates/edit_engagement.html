@@ -13,10 +13,10 @@
 
   {% if e.get("parent_engagement_id") %}
 
-    {% set follow_subhead = (e['outcome'] or '')|trim %}
+    {% set follow_subhead = (e['notes'] or e['outcome'] or e['summary_clean'] or '')|trim %}
     {% if not follow_subhead %}
       {% if e.get('occurred_at') %}
-        {% set follow_subhead = "Engagement dated " ~ (e['occurred_at']|fmt_dt) %}
+        {% set follow_subhead = ((e['engagement_type'] or '')|replace('_',' ')|title) ~ " · " ~ (e['occurred_at']|fmt_dt) %}
       {% else %}
         {% set follow_subhead = "Engagement follow-up" %}
       {% endif %}
@@ -109,10 +109,16 @@
                 <div class="fw-semibold mb-1">
                   Connected to:
                   {% if parent_engagement %}
+                    {% set parent_label = (parent_engagement['notes'] or parent_engagement['outcome'] or parent_engagement['summary_clean'] or '')|trim %}
+                    
                     <a href="{{ url_for('edit_engagement', engagement_id=parent_engagement['id']) }}?next={{ request.full_path|urlencode }}"
                        class="text-decoration-none">
-                      {{ (parent_engagement['engagement_type'] or '')|replace('_',' ')|title }}
-                      {% if parent_engagement.get('occurred_at') %} · {{ parent_engagement['occurred_at']|fmt_dt }}{% endif %}
+                      {% if parent_label %}
+                        {{ parent_label }}
+                      {% else %}
+                        {{ (parent_engagement['engagement_type'] or '')|replace('_',' ')|title }}
+                        {% if parent_engagement.get('occurred_at') %} · {{ parent_engagement['occurred_at']|fmt_dt }}{% endif %}
+                      {% endif %}
                     </a>
                   {% else %}
                     <a href="{{ url_for('edit_engagement', engagement_id=e['parent_engagement_id']) }}?next={{ request.full_path|urlencode }}"
@@ -123,11 +129,10 @@
                 </div>
 
                 {% if parent_engagement %}
-                  {% set related_text = (parent_engagement['summary_clean'] or parent_engagement['notes'] or parent_engagement['outcome'] or '')|trim %}
+                  {% set related_text = (parent_engagement['notes'] or parent_engagement['outcome'] or parent_engagement['summary_clean'] or '')|trim %}
                 {% else %}
                   {% set related_text = "" %}
                 {% endif %}
-
 
                 <div class="text-muted small"
                      style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">
@@ -158,7 +163,7 @@
               
                 <div class="col-md-3">
                   <label class="form-label">Occurred at</label>
-                  <input type="datetime-lo  cal"
+                  <input type="datetime-local"
                          name="occurred_at"
                          class="form-control"
                          value="{{ e['occurred_at'].strftime('%Y-%m-%dT%H:%M') if e['occurred_at'] else '' }}">
@@ -251,33 +256,82 @@
                 </div>
 
               </div>
+        <div id="nextFollowupFields" class="mt-4" style="display:none;">
+          <div class="card">
+            <div class="card-header bg-warning-subtle text-dark fw-semibold">
+              Next Step
+            </div>
+            <div class="card-body">
+              <div class="row g-3 align-items-end">
 
+                <div class="col-md-4">
+                  <label class="form-label">Type</label>
+                  <select name="next_engagement_type" class="form-select">
+                    <option value="call">Phone Call</option>
+                    <option value="text">Text Message</option>
+                    <option value="email">Email</option>
+                    <option value="meeting">Meeting</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Due At</label>
+                  <input type="datetime-local"
+                         name="next_follow_up_due_at"
+                         class="form-control">
+                </div>
+
+                <div class="col-md-12">
+                  <label class="form-label">Notes</label>
+                  <textarea name="next_notes" class="form-control" rows="3"></textarea>
+                </div>
+
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="col-12 d-flex justify-content-end gap-2 mt-3">
-          <a class="btn btn-outline-secondary"
-             href="{{ url_for('edit_engagement', engagement_id=e['parent_engagement_id']) }}?next={{ request.full_path|urlencode }}">
-            Cancel Edit
-          </a>
-        
-        
-          {% if not e.get("follow_up_completed") %}
-            <button class="btn btn-outline-success"
-                    type="submit"
-                    name="complete_after_save"
-                    value="1">
-              Save and Complete
-            </button>
-          {% endif %}
+        <div class="mt-4 pt-3 border-top">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div class="d-inline-flex align-items-center gap-2">
+              <label class="form-check-label mb-0" for="create_next_followup">
+                Add Another Follow-up on Save
+              </label>
+              <input class="form-check-input mt-0"
+                     type="checkbox"
+                     id="create_next_followup"
+                     name="create_next_followup"
+                     value="1">
+            </div>
 
-          <button class="btn btn-primary" type="submit">
-            Save changes
-          </button>
-          
+            <div class="btn-group btn-group-sm" role="group" aria-label="Follow-up edit actions">
+              <a class="btn btn-outline-secondary"
+                 href="{{ url_for('edit_engagement', engagement_id=e['parent_engagement_id']) }}?next={{ request.full_path|urlencode }}">
+                Cancel Edit
+              </a>
+
+              <button class="btn btn-outline-primary" type="submit">
+                Save Changes
+              </button>
+
+              {% if not e.get("follow_up_completed") %}
+                <button class="btn btn-outline-success"
+                        type="submit"
+                        name="complete_after_save"
+                        value="1">
+                  Save and Complete
+                </button>
+              {% endif %}
+            </div>
+          </div>
         </div>
 
+            </div>
+            
+          </div>
+        </div>
+        
       {% else %}
 
         <div class="col-12">
@@ -412,7 +466,7 @@
                 {% if child_followups %}
                   {% for fu in child_followups %}
 
-                    {% set fu_text = (fu['summary_clean'] or fu['notes'] or fu['outcome'] or '')|trim %}
+                    {% set fu_text = (fu['notes'] or fu['outcome'] or fu['summary_clean'] or '')|trim %}
 
                     <div class="followup-history-item">
                       <div class="followup-history-row">
@@ -768,6 +822,18 @@
         form.submit();
       });
     }
+  })();
+</script>
+<script>
+  (function () {
+    const checkbox = document.getElementById("create_next_followup");
+    const fields = document.getElementById("nextFollowupFields");
+
+    if (!checkbox || !fields) return;
+
+    checkbox.addEventListener("change", function () {
+      fields.style.display = this.checked ? "block" : "none";
+    });
   })();
 </script>
 {% endif %}

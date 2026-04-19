@@ -6999,55 +6999,58 @@ def edit_engagement(engagement_id):
         # -------------------------
         requires_follow_up = (request.form.get("requires_follow_up") == "on")
         follow_up_completed = (request.form.get("follow_up_completed") == "on")
-
+        
+        complete_after_save = request.form.get("complete_after_save") == "1"
+        complete_and_add_next = request.form.get("complete_and_add_next") == "1"
+        
         follow_up_due_at = None
         follow_up_completed_at = None
-
+        
         if is_child:
             fu_raw = (request.form.get("follow_up_due_at") or "").strip()
-
+        
             if fu_raw:
                 try:
                     fu_dt = datetime.fromisoformat(fu_raw)
-
+        
                     # datetime-local is naive local time, so attach app/user timezone
                     if fu_dt.tzinfo is None:
                         fu_dt = fu_dt.replace(tzinfo=get_user_tz())
                     else:
                         fu_dt = fu_dt.astimezone(get_user_tz())
-
+        
                     follow_up_due_at = fu_dt
                 except ValueError:
                     follow_up_due_at = e.get("follow_up_due_at")
             else:
                 follow_up_due_at = None
-
+        
             # Normal save reopens a completed follow-up unless user explicitly chose save+complete
-            if request.form.get("complete_after_save") == "1":
+            if complete_after_save or complete_and_add_next:
                 follow_up_completed = True
                 follow_up_completed_at = datetime.now(get_user_tz())
             else:
                 follow_up_completed = False
                 follow_up_completed_at = None
-
+        
         else:
             if requires_follow_up:
                 fu_raw = (request.form.get("follow_up_due_at") or "").strip()
-
+        
                 if fu_raw:
                     try:
                         fu_dt = datetime.fromisoformat(fu_raw)
-
+        
                         if fu_dt.tzinfo is None:
                             fu_dt = fu_dt.replace(tzinfo=get_user_tz())
                         else:
                             fu_dt = fu_dt.astimezone(get_user_tz())
-
+        
                         follow_up_due_at = fu_dt
-
+        
                     except ValueError:
                         requires_follow_up = False
-
+        
                 if follow_up_completed:
                     follow_up_completed_at = datetime.now(get_user_tz())
                     
@@ -7183,7 +7186,60 @@ def edit_engagement(engagement_id):
                 ),
             )
 
+            # --------------------------------
+            # Create next follow-up (chain)
+            # --------------------------------
+            create_next = request.form.get("create_next_followup") == "1"
 
+            next_type = (request.form.get("next_engagement_type") or "call").strip()
+            next_notes = (request.form.get("next_notes") or "").strip() or None
+            next_due_raw = (request.form.get("next_follow_up_due_at") or "").strip()
+
+            next_due = None
+
+            if next_due_raw:
+                try:
+                    next_dt = datetime.fromisoformat(next_due_raw)
+
+                    if next_dt.tzinfo is None:
+                        next_dt = next_dt.replace(tzinfo=get_user_tz())
+                    else:
+                        next_dt = next_dt.astimezone(get_user_tz())
+
+                    next_due = next_dt
+                except ValueError:
+                    next_due = None
+
+            # Only create if checkbox is checked and due date exists
+            if create_next and next_due:
+                cur.execute(
+                    """
+                    INSERT INTO engagements
+                    (
+                      user_id,
+                      contact_id,
+                      parent_engagement_id,
+                      engagement_type,
+                      occurred_at,
+                      notes,
+                      requires_follow_up,
+                      follow_up_due_at,
+                      follow_up_completed,
+                      created_at,
+                      updated_at
+                    )
+                    VALUES
+                    (%s,%s,%s,%s,now(),%s,TRUE,%s,FALSE,now(),now())
+                    """,
+                    (
+                        current_user.id,
+                        e["contact_id"],
+                        e["parent_engagement_id"],
+                        next_type,
+                        next_notes,
+                        next_due,
+                    ),
+                )
         conn.commit()
         conn.close()
 
@@ -7192,8 +7248,6 @@ def edit_engagement(engagement_id):
         return redirect(
             url_for("edit_contact", contact_id=e["contact_id"]) + "#engagements"
         )
-
-
     # =========================================================
     # GET UI STATE
     # =========================================================
