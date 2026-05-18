@@ -14554,3 +14554,62 @@ System is now:
 - Standardized
 - Ready for AI personalization layer
 
+
+# CANON Addendum – Phase 12A/12B AI Transcription
+
+## Phase 12A
+Implemented standalone `/transcriptions` utility page for temporary audio transcription and AI-assisted CRM summarization.
+
+Key principles:
+- no automatic persistence
+- no audio retention
+- transcript must be manually inserted/saved
+- transcription feeds existing AI Assist pipeline
+
+Workflow:
+
+```text
+Upload Audio
+→ Transcribe
+→ Transcript Preview
+→ AI Assist
+→ Manual Save
+```
+
+## Phase 12B
+Added engagement-page transcription modal to `edit_engagement.html`.
+
+Modal behavior:
+- upload audio
+- call `/api/ai/transcribe`
+- preview transcript
+- insert or append into `transcript_raw`
+- use existing AI Assist flow
+- save manually
+
+No background processing.
+No auto-save.
+No DB writes until user clicks Save changes.
+
+## Add-On Strategy
+
+Long-term gating:
+
+```sql
+users.transcription_enabled BOOLEAN DEFAULT FALSE
+```
+
+Temporary gating may reuse:
+- ai_enabled
+- ai_premium_enabled
+
+## Future Direction
+
+Keep BOTH:
+- standalone `/transcriptions`
+- engagement-page transcription modal
+
+Future enhancement:
+- professional conversation logging using separate `professional_engagements` table
+
+

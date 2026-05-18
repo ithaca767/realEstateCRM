@@ -142,6 +142,13 @@
             </li>
 
             <li>
+              <a class="dropdown-item {% if active_page == 'transcriptions' %}active{% endif %}"
+                 href="{{ url_for('transcriptions') }}">
+                AI Transcription
+              </a>
+            </li>
+
+            <li>
               <a class="dropdown-item" href="{{ calendar_feed_url }}" target="_blank" rel="noopener">
                 Calendar Feed
               </a>

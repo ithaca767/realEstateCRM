@@ -7,6 +7,7 @@ import io
 import json
 import requests
 import smtplib
+import tempfile
 
 try:
     from dotenv import load_dotenv
@@ -94,9 +95,27 @@ from urllib.parse import urlparse, urljoin
 
 from werkzeug.security import generate_password_hash
 from werkzeug.security import check_password_hash
+from werkzeug.utils import secure_filename
 
 import psycopg2
 from psycopg2.extras import RealDictCursor, DictCursor
+
+# =========================
+# AI / Transcription Config
+# =========================
+
+ALLOWED_TRANSCRIPTION_EXTENSIONS = {
+    "mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm"
+}
+
+MAX_TRANSCRIPTION_UPLOAD_MB = 25
+
+
+def allowed_transcription_file(filename):
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in ALLOWED_TRANSCRIPTION_EXTENSIONS
+    )
 
 app = Flask(__name__)
 
@@ -296,6 +315,156 @@ def api_ai_engagements_summarize():
         except Exception:
             pass
 
+@app.route("/api/ai/transcribe", methods=["POST"])
+@login_required
+def api_ai_transcribe():
+    """
+    User-initiated audio transcription.
+    No audio is retained.
+    No transcript is saved automatically.
+    """
+    audio_file = request.files.get("audio_file")
+
+    if not audio_file or audio_file.filename == "":
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "invalid_request",
+                "message": "Please choose an audio file."
+            }
+        }), 400
+
+    if not allowed_transcription_file(audio_file.filename):
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "unsupported_file_type",
+                "message": "Unsupported audio file type."
+            }
+        }), 400
+
+    filename = secure_filename(audio_file.filename)
+    suffix = os.path.splitext(filename)[1]
+
+    temp_path = None
+    conn = get_db()
+
+    try:
+        # Reuse existing AI guard and counters.
+        usage = ensure_ai_allowed_and_reset_if_needed(conn, current_user.id)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            audio_file.save(temp_file.name)
+            temp_path = temp_file.name
+
+        file_size = os.path.getsize(temp_path)
+        max_bytes = MAX_TRANSCRIPTION_UPLOAD_MB * 1024 * 1024
+
+        if file_size > max_bytes:
+            conn.rollback()
+            return jsonify({
+                "ok": False,
+                "error": {
+                    "code": "file_too_large",
+                    "message": f"Audio file must be {MAX_TRANSCRIPTION_UPLOAD_MB} MB or smaller."
+                }
+            }), 413
+
+        try:
+            from services.openai_client import (
+                call_transcription_model,
+                OpenAIMissingDependencyError,
+            )
+        except Exception:
+            conn.rollback()
+            return jsonify({
+                "ok": False,
+                "error": {
+                    "code": "ai_unavailable",
+                    "message": "AI is unavailable on this server."
+                }
+            }), 503
+
+        try:
+            transcript = call_transcription_model(
+                file_path=temp_path,
+                filename=filename,
+            )
+        except OpenAIMissingDependencyError:
+            conn.rollback()
+            return jsonify({
+                "ok": False,
+                "error": {
+                    "code": "ai_dependency_missing",
+                    "message": "AI is unavailable on this server."
+                }
+            }), 503
+
+        increment_ai_usage_on_success(conn, current_user.id, add_spend_cents=0)
+        conn.commit()
+
+        return jsonify({
+            "ok": True,
+            "data": {
+                "transcript": transcript,
+                "usage": {
+                    "daily_requests_used": usage.daily_requests_used + 1,
+                    "daily_request_limit": usage.daily_request_limit,
+                    "monthly_spend_cents": usage.monthly_spend_cents,
+                    "monthly_cap_cents": usage.monthly_cap_cents,
+                }
+            }
+        }), 200
+
+    except AIGuardError as e:
+        conn.rollback()
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": e.code,
+                "message": e.message
+            }
+        }), 403
+
+    except Exception as e:
+        conn.rollback()
+        app.logger.exception(
+            "AI transcription failed (user_id=%s)",
+            getattr(current_user, "id", None),
+        )
+
+        error_text = str(e)
+
+        if "Empty transcription" in error_text:
+            error_code = "empty_transcription"
+            error_message = (
+                "No speech was detected in the audio file. "
+                "Please try a clearer or longer recording."
+            )
+        else:
+            error_code = "transcription_failed"
+            error_message = "Transcription failed. Please check audio file and try again."
+
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": error_code,
+                "message": error_message
+            }
+        }), 500
+
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                app.logger.warning("Could not delete temporary transcription file.")
+
+        try:
+            conn.close()
+        except Exception:
+            pass
+            
 # --- Security & session config ---
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
@@ -8950,11 +9119,31 @@ def edit_professional(prof_id):
     professional = cur.fetchone()
     if not professional:
         abort(404)
-
+    
+    cur.execute(
+        """
+        SELECT
+            id,
+            conversation_type,
+            occurred_at,
+            notes,
+            transcript_raw,
+            summary_clean,
+            created_at,
+            updated_at
+        FROM professional_engagements
+        WHERE professional_id = %s
+          AND user_id = %s
+        ORDER BY occurred_at DESC NULLS LAST, id DESC
+        """,
+        (prof_id, current_user.id),
+    )
+    professional_conversations = cur.fetchall()
     return render_template(
         "edit_professional.html",
         professional=professional,
-        active_page="professionals"
+        active_page="professionals",
+        professional_conversations=professional_conversations,
     )
 
 @app.route("/professionals/<int:prof_id>/delete", methods=["POST"])
@@ -8975,6 +9164,170 @@ def delete_professional(prof_id):
     flash("Professional deleted.", "info")
     return redirect(url_for("professionals"))
 
+@app.route("/professionals/<int:prof_id>/conversations/add", methods=["POST"])
+@login_required
+def add_professional_conversation(prof_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT id
+            FROM professionals
+            WHERE id = %s AND user_id = %s
+            """,
+            (prof_id, current_user.id),
+        )
+        if not cur.fetchone():
+            abort(404)
+
+        conversation_type = (request.form.get("conversation_type") or "call").strip()
+        occurred_at_raw = (request.form.get("occurred_at") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+        transcript_raw = (request.form.get("transcript_raw") or "").strip()
+        summary_clean = (request.form.get("summary_clean") or "").strip()
+
+        occurred_at = None
+        if occurred_at_raw:
+            occurred_at = datetime.fromisoformat(occurred_at_raw)
+            if occurred_at.tzinfo is None:
+                occurred_at = occurred_at.replace(tzinfo=get_user_tz())
+
+        cur.execute(
+            """
+            INSERT INTO professional_engagements (
+                user_id,
+                professional_id,
+                conversation_type,
+                occurred_at,
+                notes,
+                transcript_raw,
+                summary_clean,
+                created_at,
+                updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+            RETURNING id
+            """,
+            (
+                current_user.id,
+                prof_id,
+                conversation_type,
+                occurred_at,
+                notes,
+                transcript_raw,
+                summary_clean,
+            ),
+        )
+        
+        new_conversation = cur.fetchone()
+        conn.commit()
+        
+        return redirect(
+            url_for(
+                "edit_professional_conversation",
+                conversation_id=new_conversation["id"]
+            )
+        )
+
+        conn.commit()
+        flash("Professional conversation saved.", "success")
+        return redirect(url_for("edit_professional", prof_id=prof_id) + "#conversations")
+
+    except Exception as e:
+        conn.rollback()
+        app.logger.exception("Add professional conversation failed")
+        flash(f"Could not save professional conversation: {e}", "danger")
+        return redirect(url_for("edit_professional", prof_id=prof_id) + "#conversations")
+
+    finally:
+        conn.close()
+
+@app.route("/professional-conversations/<int:conversation_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_professional_conversation(conversation_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT
+                pe.*,
+                p.name AS professional_name,
+                p.company AS professional_company
+            FROM professional_engagements pe
+            JOIN professionals p
+              ON p.id = pe.professional_id
+             AND p.user_id = pe.user_id
+            WHERE pe.id = %s
+              AND pe.user_id = %s
+            """,
+            (conversation_id, current_user.id),
+        )
+        conversation = cur.fetchone()
+
+        if not conversation:
+            abort(404)
+
+        if request.method == "POST":
+            conversation_type = (request.form.get("conversation_type") or "call").strip()
+            occurred_at_raw = (request.form.get("occurred_at") or "").strip()
+            notes = (request.form.get("notes") or "").strip()
+            transcript_raw = (request.form.get("transcript_raw") or "").strip()
+            summary_clean = (request.form.get("summary_clean") or "").strip()
+
+            occurred_at = None
+            if occurred_at_raw:
+                occurred_at = datetime.fromisoformat(occurred_at_raw)
+                if occurred_at.tzinfo is None:
+                    occurred_at = occurred_at.replace(tzinfo=get_user_tz())
+
+            cur.execute(
+                """
+                UPDATE professional_engagements
+                SET conversation_type = %s,
+                    occurred_at = %s,
+                    notes = %s,
+                    transcript_raw = %s,
+                    summary_clean = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+                  AND user_id = %s
+                """,
+                (
+                    conversation_type,
+                    occurred_at,
+                    notes,
+                    transcript_raw,
+                    summary_clean,
+                    conversation_id,
+                    current_user.id,
+                ),
+            )
+
+            conn.commit()
+            flash("Professional conversation updated.", "success")
+            return redirect(
+                url_for("edit_professional", prof_id=conversation["professional_id"]) + "#conversations"
+            )
+
+        return render_template(
+            "edit_professional_conversation.html",
+            conversation=conversation,
+            active_page="professionals",
+        )
+
+    except Exception as e:
+        conn.rollback()
+        app.logger.exception("Edit professional conversation failed")
+        flash(f"Could not update professional conversation: {e}", "danger")
+        return redirect(url_for("professionals"))
+
+    finally:
+        conn.close()
+                
 @app.route("/seller/<int:contact_id>", methods=["GET", "POST"])
 @login_required
 def seller_profile(contact_id):
@@ -10431,6 +10784,13 @@ def newsletter_signup(public_token):
 
     return redirect(url_for("newsletter_thanks", public_token=public_token))
 
+@app.route("/transcriptions")
+@login_required
+def transcriptions():
+    return render_template(
+        "transcriptions.html",
+        active_page="transcriptions",
+    )
 
 @app.route("/newsletter/thanks/<public_token>")
 def newsletter_thanks(public_token):

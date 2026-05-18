@@ -179,7 +179,43 @@ def call_embeddings_model(text: str):
         return resp.data[0].embedding
     except Exception as e:
         raise OpenAIEmbeddingsUnavailableError(str(e)) from e
-        
+
+def call_transcription_model(*, file_path: str, filename: str) -> str:
+    """
+    Transcribe an uploaded audio file.
+    Does not log audio or transcript content.
+    Caller is responsible for deleting any temporary file.
+    """
+    cfg = get_openai_config()
+    client = _get_openai_client(cfg.api_key)
+
+    model = (
+        os.getenv("OPENAI_MODEL_TRANSCRIBE", "").strip()
+        or "gpt-4o-mini-transcribe"
+    )
+
+    try:
+        with open(file_path, "rb") as audio_file:
+            resp = client.audio.transcriptions.create(
+                model=model,
+                file=(filename, audio_file),
+                timeout=cfg.timeout_seconds,
+            )
+
+        text = (getattr(resp, "text", "") or "").strip()
+        if not text:
+            raise OpenAIUpstreamError("Empty transcription from OpenAI")
+
+        return text
+
+    except Exception as e:
+        msg = str(e).lower()
+        if "timeout" in msg:
+            raise OpenAITimeoutError("OpenAI transcription request timed out") from e
+        if isinstance(e, OpenAIMissingDependencyError):
+            raise
+        raise OpenAIUpstreamError("OpenAI transcription request failed") from e
+                
 # services/openai_client.py (additions)
 
 def get_answer_model_name() -> str:

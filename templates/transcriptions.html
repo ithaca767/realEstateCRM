@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}AI Transcription - Ulysses CRM{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">AI Transcription</h2>
+    <div class="text-muted small">
+      Upload audio, create an editable transcript, then summarize it for CRM use.
+    </div>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-body">
+
+    <div class="alert alert-light border small mb-3">
+      AI transcription runs only when you click Transcribe Audio.
+      Audio is processed temporarily and is not saved by Ulysses.
+      Review and edit the transcript before using it.
+    </div>
+
+    <form id="transcriptionForm" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label for="audio_file" class="form-label">Audio file</label>
+        <input
+          class="form-control"
+          type="file"
+          id="audio_file"
+          name="audio_file"
+          accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
+          required
+        >
+        <div class="form-text">
+          Supported: mp3, mp4, mpeg, mpga, m4a, wav, webm. Maximum 25 MB.
+        </div>
+      </div>
+
+      <div class="btn-group btn-group-sm" role="group" aria-label="Transcription actions">
+        <button type="submit" class="btn btn-outline-primary" id="transcribeBtn">
+          Transcribe Audio
+        </button>
+      </div>
+
+      <span class="small text-muted ms-2" id="transcriptionStatus" style="display:none;"></span>
+    </form>
+
+    <div id="transcriptWrap" style="display:none;" class="mt-4">
+      <hr>
+
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+          <h3 class="h6 mb-0">Transcript</h3>
+          <div class="text-muted small">Edit before copying or summarizing.</div>
+        </div>
+      </div>
+
+      <textarea id="transcriptText" class="form-control" rows="14"></textarea>
+
+      <div class="mt-3">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Transcript actions">
+          <button type="button" class="btn btn-outline-secondary" id="copyTranscriptBtn">
+            Copy Transcript
+          </button>
+
+          <button type="button" class="btn btn-outline-primary" id="summarizeTranscriptBtn">
+            Summarize Transcript
+          </button>
+        </div>
+
+        <span class="small text-muted ms-2" id="summaryStatus" style="display:none;"></span>
+      </div>
+
+      <div class="card mt-3" id="summaryPreviewCard" style="display:none;">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h6 class="mb-1">AI Preview</h6>
+              <div class="small text-muted">
+                Nothing is saved automatically. Copy or paste into an engagement when ready.
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="closeSummaryPreviewBtn">
+              Close
+            </button>
+          </div>
+
+          <hr>
+
+          <div class="mb-3">
+            <div class="fw-semibold">One-Sentence Summary</div>
+            <div class="mt-1" id="summaryOne" style="white-space:pre-wrap;"></div>
+            <div class="mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="copyOneBtn">
+                Copy
+              </button>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <div class="fw-semibold">CRM Narrative Summary</div>
+            <div class="mt-1" id="summaryNarrative" style="white-space:pre-wrap;"></div>
+            <div class="mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="copyNarrativeBtn">
+                Copy
+              </button>
+            </div>
+          </div>
+
+          <div class="mb-0" id="followupWrap" style="display:none;">
+            <div class="fw-semibold">Suggested Follow-Up Items</div>
+            <ul class="mt-2 mb-0" id="followupList"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    const form = document.getElementById("transcriptionForm");
+    const fileInput = document.getElementById("audio_file");
+    const transcribeBtn = document.getElementById("transcribeBtn");
+    const transcriptionStatus = document.getElementById("transcriptionStatus");
+
+    const transcriptWrap = document.getElementById("transcriptWrap");
+    const transcriptText = document.getElementById("transcriptText");
+
+    const copyTranscriptBtn = document.getElementById("copyTranscriptBtn");
+    const summarizeTranscriptBtn = document.getElementById("summarizeTranscriptBtn");
+    const summaryStatus = document.getElementById("summaryStatus");
+
+    const summaryPreviewCard = document.getElementById("summaryPreviewCard");
+    const closeSummaryPreviewBtn = document.getElementById("closeSummaryPreviewBtn");
+
+    const summaryOne = document.getElementById("summaryOne");
+    const summaryNarrative = document.getElementById("summaryNarrative");
+    const followupWrap = document.getElementById("followupWrap");
+    const followupList = document.getElementById("followupList");
+
+    const copyOneBtn = document.getElementById("copyOneBtn");
+    const copyNarrativeBtn = document.getElementById("copyNarrativeBtn");
+
+    function setStatus(el, msg, isError) {
+      if (!el) return;
+      el.style.display = "inline";
+      el.textContent = msg;
+      el.classList.toggle("text-danger", !!isError);
+      el.classList.toggle("text-muted", !isError);
+    }
+
+    function clearStatus(el) {
+      if (!el) return;
+      el.style.display = "none";
+      el.textContent = "";
+      el.classList.remove("text-danger");
+      el.classList.add("text-muted");
+    }
+
+    function safeText(v) {
+      return (v === null || v === undefined) ? "" : String(v);
+    }
+
+    async function copyToClipboard(text, statusEl) {
+      try {
+        await navigator.clipboard.writeText(text || "");
+        setStatus(statusEl, "Copied.", false);
+        setTimeout(() => clearStatus(statusEl), 1200);
+      } catch {
+        setStatus(statusEl, "Copy failed. Select and copy manually.", true);
+      }
+    }
+
+    function renderFollowups(items) {
+      followupList.innerHTML = "";
+
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        followupWrap.style.display = "none";
+        return;
+      }
+
+      for (const item of items) {
+        const li = document.createElement("li");
+        li.textContent = safeText(item);
+        followupList.appendChild(li);
+      }
+
+      followupWrap.style.display = "block";
+    }
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      clearStatus(transcriptionStatus);
+      clearStatus(summaryStatus);
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        setStatus(transcriptionStatus, "Please choose an audio file.", true);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("audio_file", fileInput.files[0]);
+
+      transcribeBtn.disabled = true;
+      setStatus(transcriptionStatus, "Transcribing...", false);
+
+      try {
+        const resp = await fetch("/api/ai/transcribe", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || !data.ok) {
+          const msg =
+            data?.error?.message ||
+            "Transcription failed.";
+          setStatus(transcriptionStatus, msg, true);
+          return;
+        }
+
+        transcriptText.value = data.data.transcript || "";
+        transcriptWrap.style.display = "block";
+        setStatus(transcriptionStatus, "Transcript ready.", false);
+
+      } catch {
+        setStatus(transcriptionStatus, "Network error while transcribing.", true);
+      } finally {
+        transcribeBtn.disabled = false;
+      }
+    });
+
+    copyTranscriptBtn.addEventListener("click", function () {
+      copyToClipboard(transcriptText.value || "", transcriptionStatus);
+    });
+
+    summarizeTranscriptBtn.addEventListener("click", async function () {
+      clearStatus(summaryStatus);
+
+      const transcript = (transcriptText.value || "").trim();
+      if (!transcript) {
+        setStatus(summaryStatus, "Transcript is empty.", true);
+        return;
+      }
+
+      summarizeTranscriptBtn.disabled = true;
+      setStatus(summaryStatus, "Summarizing...", false);
+
+      try {
+        const resp = await fetch("/api/ai/engagements/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transcript: transcript
+          })
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || !data.ok) {
+          const msg =
+            data?.error?.message ||
+            "Summarization failed.";
+          setStatus(summaryStatus, msg, true);
+          return;
+        }
+
+        const payload = data.data || {};
+
+        summaryOne.textContent = safeText(payload.one_sentence_summary);
+        summaryNarrative.textContent = safeText(payload.crm_narrative_summary);
+        renderFollowups(payload.suggested_follow_up_items || []);
+
+        summaryPreviewCard.style.display = "block";
+        setStatus(summaryStatus, "Preview ready.", false);
+
+      } catch {
+        setStatus(summaryStatus, "Network error while summarizing.", true);
+      } finally {
+        summarizeTranscriptBtn.disabled = false;
+      }
+    });
+
+    closeSummaryPreviewBtn.addEventListener("click", function () {
+      summaryPreviewCard.style.display = "none";
+    });
+
+    copyOneBtn.addEventListener("click", function () {
+      copyToClipboard(summaryOne.textContent || "", summaryStatus);
+    });
+
+    copyNarrativeBtn.addEventListener("click", function () {
+      copyToClipboard(summaryNarrative.textContent || "", summaryStatus);
+    });
+  })();
+</script>
+{% endblock %}

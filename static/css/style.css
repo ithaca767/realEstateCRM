@@ -397,3 +397,12 @@ tr.tx-selected {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.eng-desc.is-clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: normal;
+    word-break: break-word;
+}

@@ -803,8 +803,21 @@
 
                     <div class="collapse mt-3" id="transcriptCollapse">
                       <div class="mb-2">
-                        <label class="form-label">Transcript (raw)</label>
-                        <textarea name="transcript_raw" class="form-control" rows="5" placeholder="Paste full transcript here"></textarea>
+                        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                          <label class="form-label mb-0">Transcript (raw)</label>
+                      
+                          <button type="button"
+                                  class="btn btn-outline-secondary btn-sm"
+                                  data-bs-toggle="modal"
+                                  data-bs-target="#engTranscriptionModal">
+                            Upload Audio / Transcribe
+                          </button>
+                        </div>
+                      
+                        <textarea name="transcript_raw"
+                                  class="form-control mt-2"
+                                  rows="5"
+                                  placeholder="Paste full transcript here"></textarea>
                       </div>
                       <div>
                         <label class="form-label">Summary (clean)</label>
@@ -907,7 +920,11 @@
                   const insertNotesBtn = document.getElementById("engAiDraftInsertNotesBtn");
                   const insertCleanBtn = document.getElementById("engAiDraftInsertCleanBtn");
 
-                  const transcriptField = form.querySelector('textarea[name="transcript_raw"]');
+                  const createForm = document.querySelector('form[data-engagement-create="1"]');
+                  const transcriptField = createForm
+                    ? createForm.querySelector('textarea[name="transcript_raw"]')
+                    : document.querySelector('textarea[name="transcript_raw"]');
+  
                   const summaryCleanField = form.querySelector('textarea[name="summary_clean"]');
                   const notesField = form.querySelector('input[name="notes"]');
 
@@ -2171,6 +2188,77 @@
     </div> <!-- /outer card-body -->
   </div> <!-- /outer card -->
 
+<!-- Transcript modal -->
+<div class="modal fade" id="engTranscriptionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title">Upload Audio / Transcribe</h5>
+          <div class="text-muted small">
+            Audio is processed temporarily and is not saved by Ulysses.
+          </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="alert alert-light border small">
+          Transcription runs only when you click Transcribe Audio.
+          Review the transcript before inserting it into this engagement.
+          Nothing is saved until you click Save changes.
+        </div>
+
+        <form id="engTranscriptionForm" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label for="engAudioFile" class="form-label">Audio file</label>
+            <input
+              class="form-control"
+              type="file"
+              id="engAudioFile"
+              name="audio_file"
+              accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
+              required
+            >
+            <div class="form-text">
+              Supported: mp3, mp4, mpeg, mpga, m4a, wav, webm. Maximum 25 MB.
+            </div>
+          </div>
+
+          <div class="btn-group btn-group-sm" role="group" aria-label="Transcription modal actions">
+            <button type="submit" class="btn btn-outline-primary" id="engTranscribeBtn">
+              Transcribe Audio
+            </button>
+          </div>
+
+          <span class="small text-muted ms-2" id="engTranscriptionStatus" style="display:none;"></span>
+        </form>
+
+        <div id="engTranscriptPreviewWrap" class="mt-4" style="display:none;">
+          <hr>
+
+          <label class="form-label">Transcript Preview</label>
+          <textarea id="engTranscriptPreview" class="form-control" rows="10"></textarea>
+
+          <div class="mt-3">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Transcript insert actions">
+              <button type="button" class="btn btn-outline-primary" id="insertTranscriptBtn">
+                Insert into Transcript
+              </button>
+
+              <button type="button" class="btn btn-outline-secondary" id="appendTranscriptBtn">
+                Append to Existing Transcript
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -2534,6 +2622,126 @@ document.addEventListener("click", function (e) {
     btn.textContent = "See more";
   }
 });
+</script>
+
+<script>
+  (function () {
+    const form = document.getElementById("engTranscriptionForm");
+    if (!form) return;
+
+    const fileInput = document.getElementById("engAudioFile");
+    const transcribeBtn = document.getElementById("engTranscribeBtn");
+    const statusEl = document.getElementById("engTranscriptionStatus");
+
+    const previewWrap = document.getElementById("engTranscriptPreviewWrap");
+    const previewText = document.getElementById("engTranscriptPreview");
+
+    const insertBtn = document.getElementById("insertTranscriptBtn");
+    const appendBtn = document.getElementById("appendTranscriptBtn");
+
+    const transcriptField = document.querySelector('textarea[name="transcript_raw"]');
+    const modalEl = document.getElementById("engTranscriptionModal");
+
+    function setStatus(msg, isError) {
+      if (!statusEl) return;
+      statusEl.style.display = "inline";
+      statusEl.textContent = msg;
+      statusEl.classList.toggle("text-danger", !!isError);
+      statusEl.classList.toggle("text-muted", !isError);
+    }
+
+    function clearStatus() {
+      if (!statusEl) return;
+      statusEl.style.display = "none";
+      statusEl.textContent = "";
+      statusEl.classList.remove("text-danger");
+      statusEl.classList.add("text-muted");
+    }
+
+    function closeModal() {
+      if (!modalEl || !window.bootstrap) return;
+      const modal = window.bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    }
+
+    function insertTranscript(mode) {
+      if (!transcriptField || !previewText) return;
+
+      const newText = (previewText.value || "").trim();
+      if (!newText) {
+        setStatus("Transcript preview is empty.", true);
+        return;
+      }
+
+      if (mode === "append") {
+        const existing = (transcriptField.value || "").trim();
+        transcriptField.value = existing
+          ? existing + "\n\n" + newText
+          : newText;
+      } else {
+        transcriptField.value = newText;
+      }
+
+      transcriptField.focus();
+      setStatus("Inserted. Click Save changes to persist.", false);
+      closeModal();
+    }
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      clearStatus();
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        setStatus("Please choose an audio file.", true);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("audio_file", fileInput.files[0]);
+
+      transcribeBtn.disabled = true;
+      setStatus("Transcribing...", false);
+
+      try {
+        const resp = await fetch("/api/ai/transcribe", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || !data.ok) {
+          const msg =
+            data?.error?.message ||
+            "Transcription failed.";
+          setStatus(msg, true);
+          return;
+        }
+
+        previewText.value = data.data.transcript || "";
+        previewWrap.style.display = "block";
+        setStatus("Transcript ready.", false);
+
+      } catch {
+        setStatus("Network error while transcribing.", true);
+      } finally {
+        transcribeBtn.disabled = false;
+      }
+    });
+
+    if (insertBtn) {
+      insertBtn.addEventListener("click", function () {
+        insertTranscript("replace");
+      });
+    }
+
+    if (appendBtn) {
+      appendBtn.addEventListener("click", function () {
+        insertTranscript("append");
+      });
+    }
+  })();
 </script>
 
 {% endblock %}
