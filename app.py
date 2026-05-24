@@ -108,7 +108,7 @@ ALLOWED_TRANSCRIPTION_EXTENSIONS = {
     "mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm"
 }
 
-MAX_TRANSCRIPTION_UPLOAD_MB = 25
+MAX_TRANSCRIPTION_UPLOAD_MB = 50
 
 
 def allowed_transcription_file(filename):
@@ -119,10 +119,14 @@ def allowed_transcription_file(filename):
 
 app = Flask(__name__)
 
+app.config["MAX_CONTENT_LENGTH"] = (
+    MAX_TRANSCRIPTION_UPLOAD_MB * 1024 * 1024
+)
+
 @app.template_filter("phone_display")
 def phone_display_filter(v):
     return format_phone_display(v or "")
-
+    
 @app.context_processor
 def inject_app_globals():
     return {
