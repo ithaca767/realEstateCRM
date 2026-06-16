@@ -480,11 +480,14 @@ tr.tx-selected {
 }
 
 .eng-followup-child-summary {
+  min-width: 0;
+}
+
+.eng-followup-child-summary-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .eng-followup-child-actions {
   text-align: right;
 }

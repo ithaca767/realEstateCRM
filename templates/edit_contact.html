@@ -1230,7 +1230,15 @@
                                       </div>
                               
                                       <div class="eng-followup-child-summary">
-                                        {{ fu_outcome_text if fu_outcome_text else "No outcome yet." }}
+                                        <div class="eng-followup-child-summary-text">
+                                          {{ fu_outcome_text if fu_outcome_text else "No outcome yet." }}
+                                        </div>
+                                      
+                                        {% if fu["updated_at"] %}
+                                          <div class="small text-muted mt-1">
+                                            Last updated: {{ fu["updated_at"]|fmt_dt }}
+                                          </div>
+                                        {% endif %}
                                       </div>
                               
                                       <div class="eng-followup-child-actions">

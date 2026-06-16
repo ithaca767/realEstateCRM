@@ -6133,7 +6133,8 @@ def edit_contact(contact_id):
               requires_follow_up,
               follow_up_due_at,
               follow_up_completed,
-              follow_up_completed_at
+              follow_up_completed_at,
+              updated_at
             FROM engagements
             WHERE user_id = %s
               AND contact_id = %s
