@@ -1106,21 +1106,36 @@
                         <td>{{ (e["engagement_type"] or "")|replace("_"," ")|title }}</td>
                     
                         <td>
-                          {% if child_list|length > 0 %}
                           <div class="followup-toggle-wrap">
-                            <button type="button"
-                                    class="btn btn-micro btn-followups-active"
-                                    data-bs-toggle="collapse"
-                                    data-bs-target="#{{ collapse_id }}"
-                                    aria-expanded="false"
-                                    aria-controls="{{ collapse_id }}">
-                              Active Follow-ups
-                              <span class="badge rounded-pill ms-1">{{ open_child_count }}</span>
-                            </button>
+                            <div class="btn-group btn-group-sm engagement-followup-group"
+                                 role="group"
+                                 aria-label="Follow-up actions">
+                        
+                              <button type="button"
+                                      class="btn btn-outline-warning engagement-followup-status"
+                                      {% if child_list|length > 0 %}
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#{{ collapse_id }}"
+                                        aria-expanded="false"
+                                        aria-controls="{{ collapse_id }}"
+                                      {% else %}
+                                        disabled
+                                      {% endif %}>
+                                Follow-ups ({{ open_child_count }} Active)
+                                </span>
+                              </button>
+                        
+                              <form method="post"
+                                    action="{{ url_for('add_engagement_followup', engagement_id=e['id']) }}"
+                                    class="btn-group btn-group-sm m-0"
+                                    role="group">
+                                <button type="submit" class="btn btn-outline-success">
+                                  Add Follow-up
+                                </button>
+                              </form>
+                        
+                            </div>
                           </div>
-                          {% else %}
-                            <span class="text-muted">—</span>
-                          {% endif %}
                         </td>
                     
                         <td class="text-end actions-col" style="width: 220px;">
@@ -1177,90 +1192,70 @@
                           <td colspan="4">
                             <div class="collapse" id="{{ collapse_id }}">
                               <div class="eng-followups-nested">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                  <div class="text-muted small">Follow-up history</div>
-                                  <div class="text-muted small">Active: {{ open_child_count }}</div>
+                                <div class="text-muted small fw-semibold mb-2">
+                                  Follow-up History
+                                  {% if open_child_count %}
+                                    <span class="ms-2 badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                                      Active {{ open_child_count }}
+                                    </span>
+                                  {% endif %}
                                 </div>
-                    
-                                <div class="table-responsive">
-                                  <table class="table table-sm mb-0">
-                                    <tbody>
-                                      {% for fu in child_list %}
-                                        {% set fu_outcome_text = ((fu["outcome"] or fu["notes"] or "")|trim) %}
-                    
-                                        <tr>
-                                          <td style="width:170px;" class="text-muted">
-                                            {{ fu["occurred_at"]|fmt_dt }}
-                                            {% if fu["follow_up_due_at"] %}
-                                            <div class="text-muted small">
-                                              Due: <span class="followup-due-date">{{ fu["follow_up_due_at"]|fmt_dt }}</span>
-                                            </div>
-                                            {% endif %}
-                                          </td>
-                    
-                                          <td style="width:140px;">
-                                            {{ (fu["engagement_type"] or "follow_up")|replace("_"," ")|title }}
-                                          </td>
-                    
-                                          <td style="width:220px;">
-                                            {% if fu["follow_up_completed"] %}
-                                              <span class="badge bg-success">Completed</span>
-                                            {% else %}
-                                              <span class="badge bg-primary">Active</span>
-                                            {% endif %}
-                                          </td>                    
-                                          <td class="text-end actions-col" style="width:220px;">
-                                            <div class="d-inline-flex align-items-center justify-content-end">
-                                              <div class="btn-group btn-group-sm" role="group" aria-label="Row actions">
-                    
-                                                <a class="btn btn-outline-primary"
-                                                   href="{{ url_for('edit_engagement', engagement_id=fu['id']) }}?next={{ (url_for('edit_contact', contact_id=c['id']) ~ '#engagements')|urlencode }}">
-                                                  Edit
-                                                </a>
-                                        
-                                                <button type="button"
-                                                        class="btn btn-outline-danger"
-                                                        onclick="if(confirm('Delete this follow-up?')) document.getElementById('fuDeleteForm_{{ fu['id'] }}').submit();">
-                                                  Delete
-                                                </button>
-                    
-                                              </div>
-                    
-                                              <form id="fuDeleteForm_{{ fu['id'] }}"
-                                                    method="post"
-                                                    action="{{ url_for('remove_engagement', engagement_id=fu['id']) }}"
-                                                    class="d-none">
-                                                <input type="hidden" name="next" value="{{ url_for('edit_contact', contact_id=c['id']) }}#engagements">
-                                              </form>
-                                            </div>
-                                          </td>
-                                        </tr>
-                    
-                                        <tr class="engagement-detail-row">
-                                          <td colspan="4">
-                                            <div class="engagement-detail-content">
-                                              <div class="engagement-outcome-label mb-1">Outcome</div>
-                    
-                                                <div id="fuOutcome{{ fu['id'] }}"
-                                                     class="eng-outcome-clamp{% if fu_outcome_text and fu_outcome_text|length > 140 %} is-clamped{% endif %}">
-                                                  {{ fu_outcome_text if fu_outcome_text else "No outcome yet." }}
-                                                </div>
-                                                
-                                                {% if fu_outcome_text and fu_outcome_text|length > 140 %}
-                                                  <button type="button"
-                                                          class="btn btn-link p-0 small text-decoration-none"
-                                                          data-desc-toggle="1"
-                                                          data-target="fuOutcome{{ fu['id'] }}">
-                                                    See more
-                                                  </button>
-                                                {% endif %}
-                                            </div>
-                                          </td>
-                                        </tr>
-                    
-                                      {% endfor %}
-                                    </tbody>
-                                  </table>
+                              
+                                <div class="eng-followup-child-list">
+                                  {% for fu in child_list %}
+                                    {% set fu_outcome_text = ((fu["outcome"] or fu["notes"] or fu["summary_clean"] or "")|trim) %}
+                              
+                                    <div class="eng-followup-child-row {% if fu['follow_up_completed'] %}is-completed{% else %}is-active{% endif %}">
+                                      <div class="eng-followup-child-status">
+                                        {% if fu["follow_up_completed"] %}
+                                          <span class="badge bg-success">Completed</span>
+                                        {% else %}
+                                          <span class="badge bg-primary">Active</span>
+                                        {% endif %}
+                                      </div>
+                              
+                                      <div class="eng-followup-child-date">
+                                        <div class="fw-semibold">
+                                          {{ fu["occurred_at"]|fmt_dt }}
+                                        </div>
+                                        {% if fu["follow_up_due_at"] %}
+                                          <div class="small text-muted">
+                                            Due: <span class="followup-due-date">{{ fu["follow_up_due_at"]|fmt_dt }}</span>
+                                          </div>
+                                        {% endif %}
+                                      </div>
+                              
+                                      <div class="eng-followup-child-type">
+                                        {{ (fu["engagement_type"] or "follow_up")|replace("_"," ")|title }}
+                                      </div>
+                              
+                                      <div class="eng-followup-child-summary">
+                                        {{ fu_outcome_text if fu_outcome_text else "No outcome yet." }}
+                                      </div>
+                              
+                                      <div class="eng-followup-child-actions">
+                                        <div class="btn-group btn-group-sm" role="group" aria-label="Follow-up actions">
+                                          <a class="btn btn-outline-primary"
+                                             href="{{ url_for('edit_engagement', engagement_id=fu['id']) }}?next={{ (url_for('edit_contact', contact_id=c['id']) ~ '#engagements')|urlencode }}">
+                                            Edit
+                                          </a>
+                              
+                                          <button type="button"
+                                                  class="btn btn-outline-danger"
+                                                  onclick="if(confirm('Delete this follow-up?')) document.getElementById('fuDeleteForm_{{ fu['id'] }}').submit();">
+                                            Delete
+                                          </button>
+                                        </div>
+                              
+                                        <form id="fuDeleteForm_{{ fu['id'] }}"
+                                              method="post"
+                                              action="{{ url_for('remove_engagement', engagement_id=fu['id']) }}"
+                                              class="d-none">
+                                          <input type="hidden" name="next" value="{{ url_for('edit_contact', contact_id=c['id']) }}#engagements">
+                                        </form>
+                                      </div>
+                                    </div>
+                                  {% endfor %}
                                 </div>
                               </div>
                             </div>

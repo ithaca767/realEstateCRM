@@ -126,10 +126,14 @@
     
         {% if engagement %}
           <div class="fw-semibold">
-            {{ (engagement.engagement_type or "")|replace("_"," ")|title }}
-            {% if engagement.occurred_at %} · {{ engagement.occurred_at.date() }}{% endif %}
+            <a href="{{ url_for('edit_engagement',
+                                engagement_id=engagement.id,
+                                next=url_for('tasks_view', task_id=task.id)) }}">
+              {{ (engagement.engagement_type or "")|replace("_"," ")|title }}
+              {% if engagement.occurred_at %} · {{ engagement.occurred_at.date() }}{% endif %}
+            </a>
           </div>
-          <div class="text-muted small">
+          <div class="text-muted small eng-desc is-clamped">
             {{ engagement.summary_display if engagement.summary_display else "No notes or summary" }}
           </div>
     
@@ -138,10 +142,14 @@
             {% for e in engagements %}
               <div>
                 <div class="fw-semibold">
-                  {{ (e.engagement_type or "")|replace("_"," ")|title }}
-                  {% if e.occurred_at %} · {{ e.occurred_at.date() }}{% endif %}
+                  <a href="{{ url_for('edit_engagement',
+                                      engagement_id=e.id,
+                                      next=url_for('tasks_view', task_id=task.id)) }}">
+                    {{ (e.engagement_type or "")|replace("_"," ")|title }}
+                    {% if e.occurred_at %} · {{ e.occurred_at.date() }}{% endif %}
+                  </a>
                 </div>
-                <div class="text-muted small">
+                <div class="text-muted small eng-desc is-clamped">
                   {{ e.summary_display if e.summary_display else "No notes or summary" }}
                 </div>
               </div>
@@ -152,7 +160,7 @@
           —
         {% endif %}
       </div>
-    
+          
       <!-- Professionals -->
       <div class="col-md-3">
         <div class="text-muted small">Professionals</div>

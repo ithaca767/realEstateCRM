@@ -13,7 +13,22 @@
 
   {% if e.get("parent_engagement_id") %}
 
-    {% set follow_subhead = (e['notes'] or e['outcome'] or e['summary_clean'] or '')|trim %}
+    {% set follow_source = (e['summary_clean'] or e['outcome'] or e['notes'] or '')|trim %}
+    
+    {% if follow_source %}
+      {% set words = follow_source.split() %}
+      {% set follow_subhead = words[:10]|join(' ') %}
+      {% if words|length > 10 %}
+        {% set follow_subhead = follow_subhead ~ '…' %}
+      {% endif %}
+    {% else %}
+      {% if e.get('occurred_at') %}
+        {% set follow_subhead = ((e['engagement_type'] or '')|replace('_',' ')|title) ~ " · " ~ (e['occurred_at']|fmt_dt) %}
+      {% else %}
+        {% set follow_subhead = "Engagement follow-up" %}
+      {% endif %}
+    {% endif %}
+    
     {% if not follow_subhead %}
       {% if e.get('occurred_at') %}
         {% set follow_subhead = ((e['engagement_type'] or '')|replace('_',' ')|title) ~ " · " ~ (e['occurred_at']|fmt_dt) %}
