@@ -6699,7 +6699,19 @@ def add_engagement(contact_id):
     notes = (request.form.get("notes") or "").strip() or None
     transcript_raw = (request.form.get("transcript_raw") or "").strip() or None
     summary_clean = (request.form.get("summary_clean") or "").strip() or None
-
+    
+    completed_at_raw = (request.form.get("completed_at") or "").strip()
+    completed_at = None
+    
+    if completed_at_raw:
+        try:
+            completed_at = datetime.fromisoformat(completed_at_raw)
+            if completed_at.tzinfo is None:
+                completed_at = completed_at.replace(tzinfo=get_user_tz())
+            else:
+                completed_at = completed_at.astimezone(get_user_tz())
+        except ValueError:
+            completed_at = None        
     occurred_date = (request.form.get("occurred_date") or "").strip()
     time_hour = (request.form.get("time_hour") or "").strip()
     time_minute = (request.form.get("time_minute") or "").strip()
@@ -6764,6 +6776,7 @@ def add_engagement(contact_id):
         contact_id=contact_id,
         engagement_type=engagement_type,
         occurred_at=occurred_at,
+        completed_at=completed_at,
         outcome=outcome,
         notes=notes,
         transcript_raw=transcript_raw,
@@ -7150,6 +7163,7 @@ def edit_engagement(engagement_id):
         notes = (request.form.get("notes") or "").strip() or None
         transcript_raw = (request.form.get("transcript_raw") or "").strip() or None
         summary_clean = (request.form.get("summary_clean") or "").strip() or None
+        follow_up_completed_at = request.form.get("follow_up_completed_at") or None
 
 
         # -------------------------

@@ -719,14 +719,12 @@
                     </select>
                   </div>
 
-                  <div class="col-md-6">
-                    <label class="form-label">Outcome</label>
-                    <input name="outcome" class="form-control" placeholder="Spoke, left VM, no answer, set showing, etc.">
-                  </div>
-
-                  <div class="col-md-6">
+                  <div class="col-12">
                     <label class="form-label">Notes</label>
-                    <input name="notes" class="form-control" placeholder="CRM-ready summary">
+                    <textarea name="notes"
+                              class="form-control"
+                              rows="5"
+                              placeholder="CRM-ready notes"></textarea>
                   </div>
 
                   <div class="col-12">
@@ -819,11 +817,33 @@
                                   rows="5"
                                   placeholder="Paste full transcript here"></textarea>
                       </div>
+                      
                       <div>
                         <label class="form-label">Summary (clean)</label>
-                        <textarea name="summary_clean" class="form-control" rows="4" placeholder="Paste cleaned summary here"></textarea>
+                        <textarea name="summary_clean"
+                                  class="form-control"
+                                  rows="5"
+                                  placeholder="Paste cleaned summary here"></textarea>
                       </div>
-
+                      
+                      <div class="mt-3">
+                        <label class="form-label">Outcome</label>
+                        <textarea name="outcome"
+                                  class="form-control js-outcome-field"
+                                  rows="5"
+                                  placeholder="Spoke, left VM, no answer, set showing, etc."></textarea>
+                      </div>
+                      
+                      <div class="mt-3">
+                        <label class="form-label">Completed Date/Time</label>
+                        <input type="datetime-local"
+                               name="completed_at"
+                               class="form-control js-outcome-datetime">
+                        <div class="form-text">
+                          Auto-fills when an outcome is entered, but can be edited.
+                        </div>
+                      </div>
+                      
                       <div class="mt-3">
                         <button type="button" class="btn btn-outline-primary btn-sm" id="engAiSummarizeDraftBtn">
                           AI Assist: Summarize transcript
@@ -926,7 +946,7 @@
                     : document.querySelector('textarea[name="transcript_raw"]');
   
                   const summaryCleanField = form.querySelector('textarea[name="summary_clean"]');
-                  const notesField = form.querySelector('input[name="notes"]');
+                  const notesField = form.querySelector('textarea[name="notes"]');
 
                   function setStatus(msg, isError) {
                     if (!statusEl) return;

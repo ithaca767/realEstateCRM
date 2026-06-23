@@ -198,11 +198,21 @@
                          value="{{ e['follow_up_due_at'].strftime('%Y-%m-%dT%H:%M') if e.get('follow_up_due_at') else '' }}">
                 </div>
               
-                <div class="col-md-3">
+                <div class="col-12">
                   <label class="form-label">Outcome</label>
-                  <input name="outcome" class="form-control" value="{{ e['outcome'] or '' }}">
+                  <textarea name="outcome"
+                            class="form-control js-outcome-field"
+                            rows="5">{{ e['outcome'] or '' }}</textarea>
                 </div>
-              
+                
+                <div class="col-md-4">
+                  <label class="form-label">Completed Date/Time</label>
+                  <input type="datetime-local"
+                         name="follow_up_completed_at"
+                         class="form-control js-outcome-datetime"
+                         value="{{ e['follow_up_completed_at'].strftime('%Y-%m-%dT%H:%M') if e.get('follow_up_completed_at') else '' }}">
+                </div> 
+                             
               </div>
 
               <hr class="my-4">
@@ -394,9 +404,11 @@
                          value="{{ e['occurred_at'].strftime('%Y-%m-%dT%H:%M') if e['occurred_at'] else '' }}">
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-12">
                   <label class="form-label">Outcome</label>
-                  <input name="outcome" class="form-control" value="{{ e['outcome'] or '' }}">
+                  <textarea name="outcome"
+                            class="form-control js-outcome-field"
+                            rows="5">{{ e['outcome'] or '' }}</textarea>
                 </div>
 
               </div>
@@ -1068,4 +1080,24 @@
     }
   })();
 </script>  
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".js-outcome-field").forEach(function (outcomeField) {
+      const form = outcomeField.closest("form");
+      if (!form) return;
+
+      const dateTimeField = form.querySelector(".js-outcome-datetime");
+      if (!dateTimeField) return;
+
+      outcomeField.addEventListener("input", function () {
+        if (outcomeField.value.trim() && !dateTimeField.value) {
+          const now = new Date();
+          now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+          dateTimeField.value = now.toISOString().slice(0, 16);
+        }
+      });
+    });
+  });
+</script>
 {% endblock %}

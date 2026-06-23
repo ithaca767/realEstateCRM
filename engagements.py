@@ -8,6 +8,7 @@ def list_engagements_for_contact(conn, user_id, contact_id, limit=50, offset=0):
           id,
           engagement_type,
           occurred_at,
+          completed_at,
           outcome,
           notes,
           summary_clean,
@@ -40,6 +41,7 @@ def list_child_followups_for_parents(conn, user_id: int, contact_id: int, parent
           parent_engagement_id,
           engagement_type,
           occurred_at,
+          completed_at,
           outcome,
           notes,
           summary_clean,
@@ -68,6 +70,7 @@ def insert_engagement(
     contact_id: int,
     engagement_type: str,
     occurred_at,
+    completed_at=None,
     outcome=None,
     notes=None,
     transcript_raw=None,
@@ -90,6 +93,7 @@ def insert_engagement(
                 parent_engagement_id,
                 engagement_type,
                 occurred_at,
+                completed_at,
                 outcome,
                 notes,
                 transcript_raw,
@@ -100,7 +104,7 @@ def insert_engagement(
                 follow_up_completed_at
               )
             VALUES
-              (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+              (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -109,6 +113,7 @@ def insert_engagement(
                 parent_engagement_id,
                 engagement_type,
                 occurred_at,
+                completed_at,
                 outcome,
                 notes,
                 transcript_raw,
