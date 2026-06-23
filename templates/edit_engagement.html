@@ -248,9 +248,17 @@
                     </div>
                   </div>
 
-                  <textarea name="summary_clean" class="form-control mt-2" rows="5">{{ e['summary_clean'] or '' }}</textarea>
+                    <textarea name="summary_clean" class="form-control mt-2" rows="5">{{ e['summary_clean'] or '' }}</textarea>
+                    
+                    <div class="col-12 mt-3">
+                      <label class="form-label">Outcome</label>
+                      <textarea name="outcome"
+                                class="form-control js-outcome-field"
+                                rows="5">{{ e['outcome'] or '' }}</textarea>
+                    </div>
+                    
+                    <div class="card mt-3" id="engAiExistingPreviewCard" style="display:none;">
 
-                  <div class="card mt-3" id="engAiExistingPreviewCard" style="display:none;">
                     <div class="card-body">
                       <div class="d-flex justify-content-between align-items-start">
                         <div>
@@ -397,13 +405,6 @@
                          value="{{ e['occurred_at'].strftime('%Y-%m-%dT%H:%M') if e['occurred_at'] else '' }}">
                 </div>
 
-                <div class="col-12">
-                  <label class="form-label">Outcome</label>
-                  <textarea name="outcome"
-                            class="form-control js-outcome-field"
-                            rows="5">{{ e['outcome'] or '' }}</textarea>
-                </div>
-
               </div>
 
               <hr class="my-4">
@@ -446,9 +447,25 @@
                     </div>
                   </div>
 
-                  <textarea name="summary_clean" class="form-control mt-2" rows="5">{{ e['summary_clean'] or '' }}</textarea>
+                    <textarea name="summary_clean" class="form-control mt-2" rows="5">{{ e['summary_clean'] or '' }}</textarea>
+                    
+                    <div class="col-12 mt-3">
+                      <label class="form-label">Outcome</label>
+                      <textarea name="outcome"
+                                class="form-control js-outcome-field"
+                                rows="5">{{ e['outcome'] or '' }}</textarea>
+                    </div>
 
-                  <div class="card mt-3" id="engAiExistingPreviewCard" style="display:none;">
+                    <div class="col-md-4 mt-3">
+                      <label class="form-label">Completed Date/Time</label>
+                      <input type="datetime-local"
+                             name="completed_at"
+                             class="form-control js-outcome-datetime"
+                             value="{{ e['completed_at'].strftime('%Y-%m-%dT%H:%M') if e.get('completed_at') else '' }}">
+                    </div>
+                    
+                    <div class="card mt-3" id="engAiExistingPreviewCard" style="display:none;">
+                    
                     <div class="card-body">
                       <div class="d-flex justify-content-between align-items-start">
                         <div>
