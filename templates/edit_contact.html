@@ -2766,5 +2766,23 @@ document.addEventListener("click", function (e) {
     }
   })();
 </script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".js-outcome-field").forEach(function (outcomeField) {
+    const form = outcomeField.closest("form");
+    if (!form) return;
 
+    const dateTimeField = form.querySelector(".js-outcome-datetime");
+    if (!dateTimeField) return;
+
+    outcomeField.addEventListener("input", function () {
+      if (outcomeField.value.trim() && !dateTimeField.value) {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        dateTimeField.value = now.toISOString().slice(0, 16);
+      }
+    });
+  });
+});
+</script>
 {% endblock %}
