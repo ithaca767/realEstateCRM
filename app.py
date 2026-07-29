@@ -9605,7 +9605,27 @@ def seller_profile(contact_id):
 @app.route("/followups")
 @login_required
 def followups():
-    today = date.today()
+
+    app_tz = ZoneInfo("America/New_York")
+
+    # Current time as an absolute UTC instant.
+    now_utc = datetime.now(timezone.utc)
+
+    # Determine today's calendar boundaries in New York.
+    now_local = now_utc.astimezone(app_tz)
+    today_local = now_local.date()
+
+    today_start_local = datetime.combine(
+        today_local,
+        datetime.min.time(),
+        tzinfo=app_tz,
+    )
+    today_end_local = today_start_local + timedelta(days=1)
+
+    # Convert local calendar boundaries to UTC for comparison
+    # against PostgreSQL timestamptz values.
+    today_start_utc = today_start_local.astimezone(timezone.utc)
+    today_end_utc = today_end_local.astimezone(timezone.utc)
 
     conn = get_db()
     cur = conn.cursor()
@@ -9620,7 +9640,7 @@ def followups():
             e.outcome,
             e.notes,
             e.summary_clean,
-    
+
             c.id AS contact_id,
             c.name,
             c.first_name,
@@ -9628,7 +9648,7 @@ def followups():
             c.pipeline_stage,
             c.priority,
             c.target_area
-    
+
         FROM engagements e
         JOIN contacts c ON c.id = e.contact_id
         WHERE e.user_id = %s
@@ -9642,29 +9662,44 @@ def followups():
         """,
         (current_user.id, current_user.id),
     )
+
     rows = cur.fetchall()
     conn.close()
 
-    now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = today_start + timedelta(days=1)
-    
     overdue = []
     today_list = []
     upcoming = []
-    
-    for row in rows:
+
+    for original_row in rows:
+        row = dict(original_row)
         due = row.get("follow_up_due_at")
+
         if not due:
             continue
-    
-        # Safety: normalize naive timestamps
+
+        if not isinstance(due, datetime):
+            app.logger.warning(
+                "Unexpected follow_up_due_at type for engagement %s: %r",
+                row.get("engagement_id"),
+                due,
+            )
+            continue
+
+        # psycopg should return timestamptz values as aware datetimes.
+        # This fallback treats legacy naive values as New York wall time,
+        # rather than incorrectly pretending they were UTC.
         if due.tzinfo is None:
-            due = due.replace(tzinfo=timezone.utc)
-    
-        if due < now:
+            due = due.replace(tzinfo=app_tz)
+
+        due_utc = due.astimezone(timezone.utc)
+        due_local = due_utc.astimezone(app_tz)
+
+        # Make the correctly converted value available to the template.
+        row["follow_up_due_at"] = due_local
+
+        if due_utc < now_utc:
             overdue.append(row)
-        elif today_start <= due < today_end:
+        elif today_start_utc <= due_utc < today_end_utc:
             today_list.append(row)
         else:
             upcoming.append(row)
@@ -9674,7 +9709,7 @@ def followups():
         overdue=overdue,
         today_list=today_list,
         upcoming=upcoming,
-        today=today.isoformat(),
+        today=today_local.isoformat(),
         active_page="followups",
     )
 
