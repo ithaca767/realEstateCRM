@@ -75,6 +75,7 @@ def list_attention_items(conn, user_id: int, now=None):
              AND p.user_id = e.user_id
 
             WHERE e.user_id = %s
+              AND c.archived_at IS NULL
               AND e.parent_engagement_id IS NOT NULL
               AND e.requires_follow_up = TRUE
               AND e.follow_up_completed = FALSE

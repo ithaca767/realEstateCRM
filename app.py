@@ -37,6 +37,7 @@ from services.email_sync.read import list_messages_for_contact
 
 from engagements import list_engagements_for_contact
 from engagements import insert_engagement
+from attention import list_attention_items
 
 from services.integrations.activepipe import (
     emit_single_contact_csv,
@@ -4664,6 +4665,19 @@ def dashboard():
     now_local = datetime.now(get_user_tz())
     cutoff_local = now_local + timedelta(days=UPCOMING_DAYS)
 
+    # Attention Engine owns the overdue Follow-up rule.
+    attention_items = list_attention_items(
+        conn,
+        current_user.id,
+        now=now_local,
+    )
+
+    overdue_followup_ids = {
+        item["source_id"]
+        for item in attention_items
+        if item.get("attention_type") == "overdue_followup"
+    }
+
     followups_overdue = []
     followups_upcoming = []
 
@@ -4672,7 +4686,9 @@ def dashboard():
         if not due:
             continue
 
-        if due < now_local:
+        engagement_id = row.get("engagement_id")
+
+        if engagement_id in overdue_followup_ids:
             followups_overdue.append(row)
         elif due <= cutoff_local:
             followups_upcoming.append(row)
