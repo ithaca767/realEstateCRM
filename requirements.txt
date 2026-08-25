@@ -6,3 +6,4 @@ python-dotenv
 openai>=1.0.0
 cryptography
 requests
+pywebpush==2.1.2

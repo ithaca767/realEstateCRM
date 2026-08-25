@@ -103,6 +103,7 @@ def list_attention_items(conn, user_id: int, now=None):
                 "contact_name": row["contact_name"],
                 "due_at": row["due_at"],
                 "snippet": row["snippet"],
+                "target_url": f"/engagements/{row['source_id']}/edit",
             }
         )
 
