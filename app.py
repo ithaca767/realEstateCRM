@@ -57,6 +57,15 @@ def get_user_tz():
     # Phase 8: single timezone system-wide
     return NY
 
+
+def normalize_followup_due(due_dt):
+    if not due_dt:
+        return None
+    if due_dt.tzinfo is None:
+        return due_dt.replace(tzinfo=get_user_tz())
+    return due_dt.astimezone(get_user_tz())
+
+
 APP_ENV = os.getenv("APP_ENV", "LOCAL").upper()
 
 from flask import (
@@ -4659,13 +4668,6 @@ def dashboard():
     cur.execute(followups_sql, (current_user.id, current_user.id, current_user.id))
     followup_rows = cur.fetchall() or []
     
-    def _normalize_followup_due(due_dt):
-        if not due_dt:
-            return None
-        if due_dt.tzinfo is None:
-            return due_dt.replace(tzinfo=get_user_tz())
-        return due_dt.astimezone(get_user_tz())    
-    
     # Build follow-ups buckets
     now_local = datetime.now(get_user_tz())
     cutoff_local = now_local + timedelta(days=UPCOMING_DAYS)
@@ -4687,7 +4689,7 @@ def dashboard():
     followups_upcoming = []
 
     for row in followup_rows:
-        due = _normalize_followup_due(row.get("follow_up_due_at"))
+        due = normalize_followup_due(row.get("follow_up_due_at"))
         if not due:
             continue
 
@@ -4706,7 +4708,7 @@ def dashboard():
     snapshot_followups_today = []
 
     for row in followup_rows:
-        due = _normalize_followup_due(row.get("follow_up_due_at"))
+        due = normalize_followup_due(row.get("follow_up_due_at"))
         if not due:
             continue
 
@@ -4747,7 +4749,7 @@ def dashboard():
     today_ny = datetime.now(get_user_tz()).date()
     
     def _overdue_days_from_due(due_dt):
-        due_dt = _normalize_followup_due(due_dt)
+        due_dt = normalize_followup_due(due_dt)
         if not due_dt:
             return None
         try:
@@ -7467,6 +7469,10 @@ def edit_engagement(engagement_id):
     fu_done_at = child_fu["follow_up_completed_at"] if child_fu else None
     fu_child_id = child_fu["id"] if child_fu else None
 
+    if e.get("follow_up_due_at"):
+        e["follow_up_due_at"] = normalize_followup_due(
+            e["follow_up_due_at"]
+        )
 
     conn.close()
 
