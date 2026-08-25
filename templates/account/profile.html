@@ -33,37 +33,62 @@
               <div class="row g-3">
                 <div class="col-md-6">
                   <label class="form-label">First name</label>
-                  <input class="form-control" name="first_name" value="{{ user.first_name or '' }}">
+                  <input
+                    class="form-control"
+                    name="first_name"
+                    value="{{ user.first_name or '' }}">
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Last name</label>
-                  <input class="form-control" name="last_name" value="{{ user.last_name or '' }}">
+                  <input
+                    class="form-control"
+                    name="last_name"
+                    value="{{ user.last_name or '' }}">
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Title</label>
-                  <input class="form-control" name="title" value="{{ user.title or '' }}" placeholder="Broker Associate, Realtor, etc.">
+                  <input
+                    class="form-control"
+                    name="title"
+                    value="{{ user.title or '' }}"
+                    placeholder="Broker Associate, Realtor, etc.">
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Agent phone</label>
-                  <input class="form-control phone-input" name="agent_phone" value="{{ user.agent_phone or '' }}" placeholder="(555) 555-5555">
+                  <input
+                    class="form-control phone-input"
+                    name="agent_phone"
+                    value="{{ user.agent_phone or '' }}"
+                    placeholder="(555) 555-5555">
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Agent website</label>
-                  <input class="form-control url-input" name="agent_website" value="{{ user.agent_website or '' }}" placeholder="https://">
+                  <input
+                    class="form-control url-input"
+                    name="agent_website"
+                    value="{{ user.agent_website or '' }}"
+                    placeholder="https://">
                 </div>
 
                 <div class="col-md-3">
                   <label class="form-label">License number</label>
-                  <input class="form-control" name="license_number" value="{{ user.license_number or '' }}">
+                  <input
+                    class="form-control"
+                    name="license_number"
+                    value="{{ user.license_number or '' }}">
                 </div>
 
                 <div class="col-md-3">
                   <label class="form-label">License state</label>
-                  <input class="form-control" name="license_state" value="{{ user.license_state or '' }}" placeholder="NJ">
+                  <input
+                    class="form-control"
+                    name="license_state"
+                    value="{{ user.license_state or '' }}"
+                    placeholder="NJ">
                 </div>
               </div>
 
@@ -82,47 +107,77 @@
               <div class="row g-3">
                 <div class="col-md-8">
                   <label class="form-label">Brokerage name</label>
-                  <input class="form-control" name="brokerage_name" value="{{ brokerage.brokerage_name or '' }}">
+                  <input
+                    class="form-control"
+                    name="brokerage_name"
+                    value="{{ brokerage.brokerage_name or '' }}">
                 </div>
 
                 <div class="col-md-4">
                   <label class="form-label">Office license number</label>
-                  <input class="form-control" name="office_license_number" value="{{ brokerage.office_license_number or '' }}">
+                  <input
+                    class="form-control"
+                    name="office_license_number"
+                    value="{{ brokerage.office_license_number or '' }}">
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Address 1</label>
-                  <input class="form-control" name="address1" value="{{ brokerage.address1 or '' }}">
+                  <input
+                    class="form-control"
+                    name="address1"
+                    value="{{ brokerage.address1 or '' }}">
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Address 2</label>
-                  <input class="form-control" name="address2" value="{{ brokerage.address2 or '' }}">
+                  <input
+                    class="form-control"
+                    name="address2"
+                    value="{{ brokerage.address2 or '' }}">
                 </div>
 
                 <div class="col-md-5">
                   <label class="form-label">City</label>
-                  <input class="form-control" name="city" value="{{ brokerage.city or '' }}">
+                  <input
+                    class="form-control"
+                    name="city"
+                    value="{{ brokerage.city or '' }}">
                 </div>
 
                 <div class="col-md-3">
                   <label class="form-label">State</label>
-                  <input class="form-control" name="state" value="{{ brokerage.state or '' }}" placeholder="NJ">
+                  <input
+                    class="form-control"
+                    name="state"
+                    value="{{ brokerage.state or '' }}"
+                    placeholder="NJ">
                 </div>
 
                 <div class="col-md-4">
                   <label class="form-label">Zip</label>
-                  <input class="form-control" name="zip" value="{{ brokerage.zip or '' }}">
+                  <input
+                    class="form-control"
+                    name="zip"
+                    value="{{ brokerage.zip or '' }}">
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Brokerage phone</label>
-                  <input class="form-control phone-input" name="brokerage_phone" value="{{ brokerage.brokerage_phone or '' }}" placeholder="(555) 555-5555">
+                  <input
+                    class="form-control phone-input"
+                    name="brokerage_phone"
+                    value="{{ brokerage.brokerage_phone or '' }}"
+                    placeholder="(555) 555-5555">
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Brokerage website</label>
-                  <input class="form-control url-input" name="brokerage_website" value="{{ brokerage.brokerage_website or '' }}" placeholder="https://">
+                  <input
+                    class="form-control url-input"
+                    name="brokerage_website"
+                    value="{{ brokerage.brokerage_website or '' }}"
+                    placeholder="https://">
                 </div>
               </div>
 
@@ -131,12 +186,40 @@
         </div>
 
         <div class="col-12 d-flex justify-content-end">
-          <button type="submit" class="btn btn-primary">Save Profile</button>
+          <button type="submit" class="btn btn-primary">
+            Save Profile
+          </button>
         </div>
 
       </div>
     </form>
   </div>
 </div>
+
+<div class="card mt-3">
+  <div class="card-header">
+    Notifications
+  </div>
+
+  <div class="card-body bg-white">
+    <p class="text-muted mb-3">
+      Enable push notifications from Ulysses on this device.
+    </p>
+
+    <button
+      type="button"
+      class="btn btn-outline-primary"
+      id="enablePushNotificationsBtn">
+      Enable Notifications on This Device
+    </button>
+
+    <div
+      id="pushNotificationStatus"
+      class="small text-muted mt-2">
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='push-notifications.js') }}"></script>
 
 {% endblock %}

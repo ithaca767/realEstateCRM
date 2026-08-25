@@ -39,6 +39,11 @@ from engagements import list_engagements_for_contact
 from engagements import insert_engagement
 from attention import list_attention_items
 
+from push_subscriptions import (
+    save_push_subscription,
+    deactivate_push_subscription,
+)
+
 from services.integrations.activepipe import (
     emit_single_contact_csv,
     ACTIVEPIPE_HEADERS_BASIC,
@@ -11995,6 +12000,165 @@ def api_contacts_search():
     finally:
         conn.close()
 
+@app.get("/api/push/public-key")
+@login_required
+def api_push_public_key():
+    public_key = (os.getenv("VAPID_PUBLIC_KEY") or "").strip()
+
+    if not public_key:
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "push_not_configured",
+                "message": "Push notifications are not configured."
+            }
+        }), 503
+
+    return jsonify({
+        "ok": True,
+        "public_key": public_key,
+    })
+
+
+@app.post("/api/push/subscribe")
+@login_required
+def api_push_subscribe():
+    payload = request.get_json(silent=True) or {}
+
+    endpoint = (payload.get("endpoint") or "").strip()
+    keys = payload.get("keys") or {}
+    p256dh = (keys.get("p256dh") or "").strip()
+    auth = (keys.get("auth") or "").strip()
+
+    if not endpoint or not p256dh or not auth:
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "invalid_subscription",
+                "message": "A complete push subscription is required."
+            }
+        }), 400
+
+    conn = get_db()
+
+    try:
+        subscription_id = save_push_subscription(
+            conn,
+            user_id=current_user.id,
+            endpoint=endpoint,
+            p256dh=p256dh,
+            auth=auth,
+        )
+
+        conn.commit()
+
+        return jsonify({
+            "ok": True,
+            "subscription_id": subscription_id,
+        }), 200
+
+    except ValueError as e:
+        conn.rollback()
+
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "invalid_subscription",
+                "message": str(e),
+            }
+        }), 400
+
+    except Exception:
+        conn.rollback()
+
+        app.logger.exception(
+            "Push subscription save failed (user_id=%s)",
+            current_user.id,
+        )
+
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "push_subscription_failed",
+                "message": "Push subscription could not be saved."
+            }
+        }), 500
+
+    finally:
+        conn.close()
+
+@app.post("/api/push/unsubscribe")
+@login_required
+def api_push_unsubscribe():
+    payload = request.get_json(silent=True) or {}
+    endpoint = (payload.get("endpoint") or "").strip()
+
+    if not endpoint:
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "invalid_subscription",
+                "message": "A push subscription endpoint is required."
+            }
+        }), 400
+
+    conn = get_db()
+
+    try:
+        subscription_id = deactivate_push_subscription(
+            conn,
+            user_id=current_user.id,
+            endpoint=endpoint,
+        )
+
+        conn.commit()
+
+        return jsonify({
+            "ok": True,
+            "subscription_id": subscription_id,
+        }), 200
+
+    except ValueError as e:
+        conn.rollback()
+
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "invalid_subscription",
+                "message": str(e),
+            }
+        }), 400
+
+    except Exception:
+        conn.rollback()
+
+        app.logger.exception(
+            "Push subscription deactivation failed (user_id=%s)",
+            current_user.id,
+        )
+
+        return jsonify({
+            "ok": False,
+            "error": {
+                "code": "push_unsubscribe_failed",
+                "message": "Push notifications could not be disabled."
+            }
+        }), 500
+
+    finally:
+        conn.close()
+        
+        
+@app.get("/service-worker.js")
+def service_worker():
+    response = make_response(
+        app.send_static_file("service-worker.js")
+    )
+    response.headers["Content-Type"] = "application/javascript"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
+                
 @app.route("/admin/search-index/rebuild", methods=["POST"])
 @login_required
 def admin_rebuild_search_index():
