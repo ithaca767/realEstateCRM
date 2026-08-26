@@ -6179,20 +6179,20 @@ def edit_contact(contact_id):
             (current_user.id, contact_id, parent_ids),
         )
         child_rows = cur.fetchall() or []
-        
+
         for original_child in child_rows:
             c = dict(original_child)
-        
+
             if c.get("updated_at"):
                 c["updated_at"] = normalize_utc_instant(
                     c["updated_at"]
                 )
-        
+
             pid = c.get("parent_engagement_id")
-        
+
             if not pid:
                 continue
-        
+
             child_followups_by_parent.setdefault(pid, []).append(c)
 
         # Count open child followups (requires_follow_up=true AND follow_up_completed=false)
