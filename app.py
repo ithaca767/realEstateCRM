@@ -57,6 +57,14 @@ def get_user_tz():
     # Phase 8: single timezone system-wide
     return NY
 
+def normalize_utc_instant(dt):
+    if not dt:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(get_user_tz())
 
 def normalize_followup_due(due_dt):
     if not due_dt:
@@ -6171,11 +6179,20 @@ def edit_contact(contact_id):
             (current_user.id, contact_id, parent_ids),
         )
         child_rows = cur.fetchall() or []
-
-        for c in child_rows:
+        
+        for original_child in child_rows:
+            c = dict(original_child)
+        
+            if c.get("updated_at"):
+                c["updated_at"] = normalize_utc_instant(
+                    c["updated_at"]
+                )
+        
             pid = c.get("parent_engagement_id")
+        
             if not pid:
                 continue
+        
             child_followups_by_parent.setdefault(pid, []).append(c)
 
         # Count open child followups (requires_follow_up=true AND follow_up_completed=false)
