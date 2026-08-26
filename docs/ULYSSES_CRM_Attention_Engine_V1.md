@@ -1,9 +1,12 @@
-# Ulysses CRM -- Attention Engine V1
+(venv) dennisfotopoulos@Denniss-MacBook-Air real-estate-crm % cat
+docs/ULYSSES_CRM_Attention_Engine_V1.md \# Ulysses CRM -- Attention
+Engine V1
 
-**Baseline:** Ulysses CRM v1.10.3\
-**Status:** Architecture locked; ready for V1A implementation\
+**Initial baseline:** Ulysses CRM v1.10.3\
+**Current checkpoint:** Ulysses CRM v1.10.5\
+**Status:** V1A-V1D complete and production validated; ready for V1E\
 **Phase type:** Architecture / incremental feature development\
-**Last reviewed:** August 21, 2026
+**Last reviewed:** August 25, 2026
 
 ## Purpose
 
@@ -14,7 +17,7 @@ existing source-of-truth, user-intent, and AI guardrail principles.
 The Attention Engine is not a second follow-up system. It is an
 evaluation layer above existing operational records.
 
-Long-term architecture:
+Current architecture:
 
 ``` text
 Existing operational records
@@ -27,15 +30,34 @@ Existing operational records
               ↓
        Notification Policy
               ↓
-       Push Subscriptions
+ Delivery / Deduplication State
               ↓
-      Render Dispatcher
+         Push Delivery
               ↓
-          Web Push
+      Push Subscriptions
+              ↓
+       Authorized Devices
 ```
 
-The implementation will be incremental. V1A begins only with existing
-overdue Follow-ups.
+Future scheduled architecture:
+
+``` text
+        Render Scheduler
+              ↓
+        Attention Engine
+              ↓
+       Notification Policy
+              ↓
+ Delivery / Deduplication State
+              ↓
+         Push Delivery
+              ↓
+      Push Subscriptions
+              ↓
+       Authorized Devices
+```
+
+The Flask/Gunicorn web process must not run its own internal scheduler.
 
 ------------------------------------------------------------------------
 
@@ -278,7 +300,8 @@ Initial conceptual shape:
     "contact_id": 45,
     "contact_name": "Contact Name",
     "due_at": due_datetime,
-    "snippet": "Follow-up context"
+    "snippet": "Follow-up context",
+    "target_url": "/engagements/123/edit"
 }
 ```
 
@@ -327,102 +350,193 @@ Attention evaluator.
 
 ------------------------------------------------------------------------
 
-# Planned Incremental Build
+# Implementation Through V1D
 
-## V1A --- Attention Evaluator
+## V1A -- Attention Evaluator
 
--   Add `attention.py`
--   Evaluate overdue Follow-ups
--   No database writes
--   Test directly against LOCAL data
--   Verify returned items against known Follow-ups
+**Status: COMPLETE**
 
-## V1B --- Ulysses Attention UI
+-   Added `attention.py`
+-   Evaluates overdue child Follow-ups
+-   Uses timezone-aware comparisons
+-   Attention remains calculated state
+-   Tested against known LOCAL Follow-ups
 
--   Surface Attention results inside Ulysses
--   Reuse the V1A evaluator
--   Follow established Ulysses dashboard/UI standards
--   No push notifications yet
+## V1B -- Ulysses Attention UI
 
-## V1C --- Permission-Based Push Subscriptions
+**Status: COMPLETE**
 
-Introduce explicit per-device/browser notification permission.
+The Dashboard consumes the same `attention.py` evaluator for overdue
+Follow-ups. The Dashboard does not maintain a separate overdue rule.
 
-Likely new table:
+## V1C -- Permission-Based Push Subscriptions
 
-``` text
-push_subscriptions
+**Status: COMPLETE AND DEPLOYED**
+
+Push permission is stored per browser/device subscription. One user may
+have multiple authorized devices.
+
+Implemented production table:
+
+``` sql
+CREATE TABLE push_subscriptions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ
+);
 ```
 
-Conceptual fields:
+The implemented field is `last_seen_at`, not the earlier conceptual
+`last_used_at`.
 
--   `id`
--   `user_id`
--   `endpoint`
--   `p256dh`
--   `auth`
--   `created_at`
--   `updated_at`
--   `last_used_at`
--   `is_active`
-
-Push permission belongs to a user + browser/device subscription, not
-simply to the user record.
-
-One user may have multiple authorized devices.
-
-The exact schema will be designed only when V1C begins.
-
-## V1D --- Test Web Push
-
--   Add service worker
--   Register browser/device subscription
--   Send a controlled test push
--   Verify permission behavior and device delivery
--   No automated Attention dispatch yet
-
-## V1E --- Render Dispatcher
-
-Add scheduled production evaluation outside the Flask/Gunicorn web
-process.
-
-Conceptual flow:
+Implemented components include:
 
 ``` text
-Render scheduled process
+push_subscriptions.py
+static/push-notifications.js
+static/service-worker.js
+GET  /api/push/public-key
+POST /api/push/subscribe
+```
+
+The Account/Profile UI provides explicit device-level controls to enable
+and turn off notifications.
+
+Web Push uses stable VAPID credentials supplied through
+`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT`.
+
+## V1D -- Web Push Delivery
+
+**Status: COMPLETE AND PRODUCTION VALIDATED**
+
+V1D introduced `push_delivery.py` using `pywebpush==2.1.2`.
+
+The server sends JSON payloads containing `title`, `body`, and `url`.
+Attention items include `target_url`; overdue Follow-ups target
+`/engagements/<source_id>/edit`.
+
+The service worker receives the push, displays it, and uses the target
+URL when the user clicks **Show**. It focuses an existing Ulysses window
+when possible or opens a new one.
+
+### Production Validation -- August 25, 2026
+
+V1D was validated end-to-end in production as Ulysses CRM v1.10.5.
+
+Production validation confirmed:
+
+-   the expected `push_subscriptions` schema exists
+-   a real active production subscription was created for user ID 1
+-   the production Chrome subscription used an FCM Web Push endpoint
+-   Render loaded the VAPID environment variables
+-   Chrome reported `Notification.permission = granted`
+-   the production service worker was activated
+-   direct production `showNotification()` succeeded
+-   macOS Chrome notification permission was enabled
+-   a controlled Attention push was sent for Ethelene Lambert,
+    engagement 586
+-   the push provider returned HTTP 201
+-   the notification appeared
+-   clicking **Show** opened `/engagements/586/edit`
+
+Validated production path:
+
+``` text
+Production CRM data
         ↓
 Attention Engine
         ↓
-Notification policy
+Overdue Follow-up candidate
+        ↓
+target_url
+        ↓
+push_delivery.py
+        ↓
+Web Push provider / FCM
+        ↓
+Chrome
+        ↓
+macOS notification
+        ↓
+User clicks Show
+        ↓
+Exact Ulysses engagement
+```
+
+A successful provider response does not by itself prove visible OS
+presentation. Browser site permission and operating-system browser
+notification permission are separate layers.
+
+------------------------------------------------------------------------
+
+# Current Production Boundary
+
+As of v1.10.5, Ulysses can calculate and display overdue Follow-up
+Attention items, manage device subscriptions, deliver Web Push with CRM
+context, and navigate directly to the exact engagement.
+
+Automatic notification dispatch is intentionally still disabled.
+
+------------------------------------------------------------------------
+
+# V1E -- Notification Orchestration and Deduplication
+
+**Status: NEXT PHASE**
+
+V1E makes Web Push safe to automate before any scheduler is added.
+
+The same unchanged Attention condition must not generate another
+notification every time the evaluator runs.
+
+Do not add a generic `notified` field to `engagements`. Notification
+state belongs to the notification/orchestration layer.
+
+V1E must establish:
+
+-   deterministic notification eligibility
+-   delivery/deduplication state
+-   successful-send recording
+-   handling of inactive subscriptions
+-   behavior with multiple active subscriptions
+-   behavior when delivery fails
+-   identity of an Attention condition
+-   a callable orchestration function for the future scheduler
+
+The exact schema must distinguish the Attention event itself from
+delivery attempts to individual subscriptions.
+
+------------------------------------------------------------------------
+
+# V1F -- Scheduled Production Dispatcher
+
+**Status: DEFERRED UNTIL V1E IS PROVEN**
+
+Only after V1E is working safely should Render invoke the orchestration
+automatically.
+
+``` text
+Render Scheduler
+        ↓
+V1E orchestration function
+        ↓
+Attention Engine
+        ↓
+Notification Policy
+        ↓
+Delivery / Deduplication State
         ↓
 Authorized push subscriptions
         ↓
 Web Push
 ```
 
-The web process must not run its own internal timer.
-
-## V1F --- Notification Deduplication / Delivery State
-
-Prevent repeated pushes for the same unchanged Attention condition.
-
-Do not add a generic `notified` flag to `engagements`.
-
-Notification delivery state belongs to the notification layer, not the
-Follow-up record.
-
-A future delivery/history structure may contain concepts such as:
-
--   user
--   subscription
--   attention type
--   source type
--   source ID
--   sent time
--   delivery status
-
-The exact schema is intentionally deferred until the push pipeline is
-proven.
+The dispatcher must run outside the Flask/Gunicorn web process.
 
 ------------------------------------------------------------------------
 
@@ -477,6 +591,9 @@ values such as:
 -   `engagements.follow_up_due_at` --- `TIMESTAMPTZ`
 -   `tasks.due_at` --- `TIMESTAMPTZ`
 -   `tasks.snoozed_until` --- `TIMESTAMPTZ`
+-   `push_subscriptions.created_at` --- `TIMESTAMPTZ`
+-   `push_subscriptions.updated_at` --- `TIMESTAMPTZ`
+-   `push_subscriptions.last_seen_at` --- `TIMESTAMPTZ`
 
 Other older fields use `TIMESTAMP WITHOUT TIME ZONE`.
 
@@ -489,33 +606,69 @@ migration. Existing historical timestamp cleanup is outside this phase.
 
 1.  The Attention Engine sits above existing operational records.
 2.  Existing Follow-ups remain canonical child engagements.
-3.  V1A evaluates overdue Follow-ups only.
-4.  Attention is calculated and is not persisted in V1A.
-5.  V1A requires no database migration.
-6.  `attention.py` owns the Attention rule.
-7.  Consumers must reuse the same evaluator.
-8.  Tasks and transaction deadlines are deferred.
-9.  Push permission is per browser/device subscription.
-10. Push infrastructure is deferred until V1C.
-11. Render scheduling is deferred until V1E.
-12. Notification delivery/deduplication state is separate from
-    operational CRM records.
-13. The old `interactions` reminder system will not be reused.
-14. Legacy reminder cleanup will occur separately after the replacement
-    path is working.
-15. The Attention Engine V1 contains no AI and makes no autonomous CRM
-    changes.
+3.  The initial Attention rule evaluates overdue Follow-ups only.
+4.  Attention itself is calculated rather than persisted.
+5.  `attention.py` owns the Attention rule.
+6.  Consumers reuse the same evaluator.
+7.  Tasks and transaction deadlines remain future Attention sources.
+8.  Push permission is per browser/device subscription.
+9.  One user may have multiple push subscriptions.
+10. Push subscriptions may be activated or deactivated independently.
+11. Web Push uses stable VAPID credentials.
+12. Notification delivery state is separate from operational CRM
+    records.
+13. A generic `notified` field must not be added to `engagements`.
+14. Notifications may contain a target URL to the exact CRM record.
+15. The service worker owns browser notification presentation and click
+    navigation.
+16. V1D Web Push delivery has been validated in production.
+17. A successful provider response does not by itself prove visible OS
+    presentation.
+18. Browser permission and operating-system notification permission are
+    separate layers.
+19. Automatic dispatch remains disabled until
+    orchestration/deduplication exists.
+20. V1E implements orchestration and deduplication before scheduling.
+21. V1F introduces the Render scheduler only after V1E is proven.
+22. The scheduler must run outside Flask/Gunicorn.
+23. The legacy `interactions` reminder architecture will not be reused.
+24. Legacy reminder cleanup remains separate.
+25. Attention Engine V1 contains no AI and makes no autonomous CRM
+    record changes.
+
+------------------------------------------------------------------------
+
+# Implementation Checkpoint
+
+``` text
+V1A  Attention evaluator                         COMPLETE
+V1B  Dashboard Attention UI                      COMPLETE
+V1C  Permission-based push subscriptions         COMPLETE
+V1D  Web Push + exact engagement navigation      COMPLETE
+      Production validation                      COMPLETE
+V1E  Notification orchestration + deduplication  NEXT
+V1F  Render scheduled dispatcher                 DEFERRED
+```
+
+Current production version: `v1.10.5`
 
 ------------------------------------------------------------------------
 
 # Immediate Next Step
 
-Implement V1A by creating:
+Design V1E before writing code.
 
-``` text
-attention.py
-```
+Specifically determine:
 
-Then test the evaluator against the LOCAL database and verify that its
-returned Attention candidates correspond exactly to known overdue child
-Follow-ups before wiring the engine into any UI.
+1.  what uniquely identifies a notification-worthy Attention condition
+2.  what delivery/deduplication state must be persisted
+3.  whether state is per Attention condition, per device delivery, or
+    both
+4.  when a previously notified condition may become eligible again
+5.  how failed delivery differs from successful notification
+6.  how multiple active device subscriptions are handled
+7.  what callable orchestration interface the future Render dispatcher
+    will invoke
+
+Only after those decisions are locked should the V1E database schema and
+implementation be created.
