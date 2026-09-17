@@ -91,11 +91,21 @@ Fixed and locally validated September 17, 2026.
 - Application version bumped to v1.10.7.
 - Implementation checkpoint: `540a470`.
 
-### 3. Open House Archiving
+### 3. Open House Archiving - COMPLETE
 
-Allow Open Houses to be archived rather than destructively deleted.
+Completed and locally validated September 18, 2026.
 
-Archived Open Houses should leave the normal operational view while preserving history.
+- Added `archived_at timestamptz` to `open_houses`.
+- Active Open Houses are the default operational view.
+- Added separate Active and Archived views.
+- Added tenant-scoped POST-only Archive and Unarchive actions.
+- Archiving preserves the Open House record and sign-in history.
+- Archived Open House detail and CSV export remain accessible to the owner.
+- Archived public sign-in links display a closed message and cannot process new sign-ins.
+- Unarchiving restores the same public sign-in link.
+- Application version bumped to v1.10.8.
+- Local migration: `docs/migrations/2026_09_17_open_houses_add_archived_at.sql`.
+- Production migration/deployment remains pending.
 
 ### 4. Dashboard Follow-ups Mobile Layout
 
@@ -128,9 +138,18 @@ Associated Contacts editing is complete at checkpoint `c7a4b80`.
 
 Engagement Navigation is complete at checkpoint `540a470`.
 
-Next: Open House Archiving.
+Open House Archiving is complete locally in v1.10.8. Production migration/deployment remains pending.
 
-Inspect the existing Open House schema, routes, templates, and current delete behavior before choosing an implementation. The goal is to allow Open Houses to leave the normal operational view while preserving their history. Do not alter the data model or delete behavior until the existing implementation is understood.
+Next: Dashboard Follow-ups Mobile Layout.
+
+Improve the existing Dashboard Follow-ups presentation on mobile without changing Follow-ups behavior or creating a separate Follow-ups dashboard.
+
+Intended hierarchy:
+
+1. Row 1: Contact name + follow-up date.
+2. Row 2: Last engagement plus useful context such as notes or summary.
+
+Inspect the existing Dashboard template and Follow-up rendering before modifying it. Follow established Dashboard mobile presentation patterns and preserve desktop behavior unless a change is explicitly justified.
 
 Work one issue at a time:
 

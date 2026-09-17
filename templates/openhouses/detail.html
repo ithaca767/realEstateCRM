@@ -21,8 +21,23 @@
       <div class="text-muted small">Start: {{ openhouse["start_datetime"] }} | End: {{ openhouse["end_datetime"] }}</div>
     </div>
     <div class="text-end">
-      <a class="btn btn-outline-secondary" href="{{ url_for('openhouse_list') }}">Back</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('openhouse_list', view='archived' if openhouse['archived_at'] else 'active') }}">Back</a>
       <a class="btn btn-outline-success" href="{{ url_for('openhouse_export_csv', open_house_id=openhouse['id']) }}">Export CSV</a>
+
+      {% if openhouse["archived_at"] %}
+        <form method="post"
+              action="{{ url_for('openhouse_unarchive', open_house_id=openhouse['id']) }}"
+              class="d-inline">
+          <button type="submit" class="btn btn-outline-success">Unarchive</button>
+        </form>
+      {% else %}
+        <form method="post"
+              action="{{ url_for('openhouse_archive', open_house_id=openhouse['id']) }}"
+              class="d-inline"
+              onsubmit="return confirm('Archive this open house? Its public sign-in will be closed.');">
+          <button type="submit" class="btn btn-outline-secondary">Archive</button>
+        </form>
+      {% endif %}
     </div>
   </div>
 

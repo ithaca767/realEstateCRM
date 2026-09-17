@@ -10459,8 +10459,18 @@ def openhouse_list():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
+    view = (request.args.get("view") or "active").strip().lower()
+    if view not in ("active", "archived"):
+        view = "active"
+
+    archive_clause = (
+        "archived_at IS NOT NULL"
+        if view == "archived"
+        else "archived_at IS NULL"
+    )
+
     cur.execute(
-        """
+        f"""
         SELECT
             id,
             address_line1,
@@ -10469,9 +10479,11 @@ def openhouse_list():
             zip,
             start_datetime,
             end_datetime,
-            public_token
+            public_token,
+            archived_at
         FROM open_houses
         WHERE created_by_user_id = %s
+          AND {archive_clause}
         ORDER BY start_datetime DESC
         """,
         (current_user.id,),
@@ -10479,7 +10491,65 @@ def openhouse_list():
     rows = cur.fetchall()
     conn.close()
     
-    return render_template("openhouses/list.html", openhouses=rows)
+    return render_template(
+        "openhouses/list.html",
+        openhouses=rows,
+        openhouse_view=view,
+    )
+
+
+@app.route("/openhouses/<int:open_house_id>/archive", methods=["POST"])
+@login_required
+def openhouse_archive(open_house_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE open_houses
+            SET archived_at = NOW()
+            WHERE id = %s
+              AND created_by_user_id = %s
+              AND archived_at IS NULL
+            """,
+            (open_house_id, current_user.id),
+        )
+        if cur.rowcount == 0:
+            conn.rollback()
+            abort(404)
+        conn.commit()
+    finally:
+        conn.close()
+
+    flash("Open house archived. Sign-in is now closed.", "success")
+    return redirect(url_for("openhouse_list", view="archived"))
+
+
+@app.route("/openhouses/<int:open_house_id>/unarchive", methods=["POST"])
+@login_required
+def openhouse_unarchive(open_house_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE open_houses
+            SET archived_at = NULL
+            WHERE id = %s
+              AND created_by_user_id = %s
+              AND archived_at IS NOT NULL
+            """,
+            (open_house_id, current_user.id),
+        )
+        if cur.rowcount == 0:
+            conn.rollback()
+            abort(404)
+        conn.commit()
+    finally:
+        conn.close()
+
+    flash("Open house unarchived. Sign-in is active again.", "success")
+    return redirect(url_for("openhouse_detail", open_house_id=open_house_id))
 
 
 @app.route("/openhouses/new", methods=["GET", "POST"])
@@ -10555,7 +10625,7 @@ def openhouse_detail(open_house_id):
         cur.execute(
             """
             SELECT id, address_line1, city, state, zip, start_datetime, end_datetime,
-                   public_token, house_photo_url, notes
+                   public_token, house_photo_url, notes, archived_at
             FROM open_houses
             WHERE id = %s AND created_by_user_id = %s
             """,
@@ -10588,7 +10658,7 @@ def openhouse_public_signin(token):
 
     try:
         cur.execute("""
-            SELECT id, created_by_user_id, address_line1, city, state, zip, start_datetime, end_datetime, house_photo_url
+            SELECT id, created_by_user_id, address_line1, city, state, zip, start_datetime, end_datetime, house_photo_url, archived_at
             FROM open_houses
             WHERE public_token = %s
         """, (token,))
@@ -10596,6 +10666,14 @@ def openhouse_public_signin(token):
         if not oh:
             abort(404)
         
+        archived_at = oh["archived_at"] if isinstance(oh, dict) else oh[9]
+        if archived_at is not None:
+            return render_template(
+                "public/openhouse_closed.html",
+                openhouse=oh,
+                hide_nav=True,
+            )
+
         open_house_id = oh["id"] if isinstance(oh, dict) else oh[0]
         owner_user_id = oh["created_by_user_id"] if isinstance(oh, dict) else oh[1]
 
