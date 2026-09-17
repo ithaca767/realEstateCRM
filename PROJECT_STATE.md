@@ -70,13 +70,16 @@ Current maintenance work must not expand into V1E unless explicitly approved.
 
 ## Current Maintenance Queue
 
-### 1. Associated Contacts Edit Bug
+### 1. Associated Contacts Edit Bug - COMPLETE
 
-Reproducible error when editing an existing associated contact:
+Fixed and locally validated September 17, 2026.
 
-`Could not update association: name 'update_contact_association' is not defined`
-
-Investigate the existing association update route/helper before changing architecture.
+- Added the missing `update_contact_association()` helper.
+- Preserved the existing live Edit Association UI and route.
+- Update is tenant-safe and verifies that the association includes the current contact.
+- Notes and relationship edits were manually tested and confirmed persistent.
+- Application version bumped to v1.10.6.
+- Implementation checkpoint: `c7a4b80`.
 
 ### 2. Engagement Navigation
 
@@ -115,7 +118,11 @@ Do not choose the data model until the current checklist schema and implementati
 
 Current session is Maintenance / Stabilization.
 
-Begin with the Associated Contacts edit bug.
+Associated Contacts editing is fixed and locally validated at checkpoint `c7a4b80`.
+
+Next: Engagement Navigation.
+
+Inspect the current Engagement screen and replace the ambiguous `Back` navigation with `Back to Contact` or equivalent, preserving the existing return destination and established Ulysses UI patterns.
 
 Work one issue at a time:
 
