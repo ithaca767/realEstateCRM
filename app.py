@@ -1947,6 +1947,41 @@ def get_contact_associations(conn, user_id, contact_id):
     )
     return cur.fetchall()
 
+def update_contact_association(
+    conn,
+    user_id,
+    assoc_id,
+    contact_id,
+    relationship_type=None,
+    notes=None,
+):
+    """
+    Update an association only when it belongs to the current user
+    and includes the current contact on either side.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE contact_associations
+        SET relationship_type = %s,
+            notes = %s,
+            updated_at = NOW()
+        WHERE id = %s
+          AND user_id = %s
+          AND (contact_id_primary = %s OR contact_id_related = %s)
+        """,
+        (
+            relationship_type,
+            notes,
+            assoc_id,
+            user_id,
+            contact_id,
+            contact_id,
+        ),
+    )
+    return cur.rowcount == 1
+
+
 def get_primary_email_account(conn, user_id):
     with conn.cursor() as cur:
         cur.execute(
