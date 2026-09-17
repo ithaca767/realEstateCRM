@@ -81,9 +81,15 @@ Fixed and locally validated September 17, 2026.
 - Application version bumped to v1.10.6.
 - Implementation checkpoint: `c7a4b80`.
 
-### 2. Engagement Navigation
+### 2. Engagement Navigation - COMPLETE
 
-Replace ambiguous `Back` navigation with `Back to Contact` or equivalent.
+Fixed and locally validated September 17, 2026.
+
+- Changed the ordinary View / Edit Engagement page-level navigation from `Back` to `Back to Contact`.
+- Preserved the existing destination to the associated Contact's Engagements section.
+- Follow-up navigation was already correctly labeled `Back to Contact` and was left unchanged.
+- Application version bumped to v1.10.7.
+- Implementation checkpoint: `540a470`.
 
 ### 3. Open House Archiving
 
@@ -118,11 +124,13 @@ Do not choose the data model until the current checklist schema and implementati
 
 Current session is Maintenance / Stabilization.
 
-Associated Contacts editing is fixed and locally validated at checkpoint `c7a4b80`.
+Associated Contacts editing is complete at checkpoint `c7a4b80`.
 
-Next: Engagement Navigation.
+Engagement Navigation is complete at checkpoint `540a470`.
 
-Inspect the current Engagement screen and replace the ambiguous `Back` navigation with `Back to Contact` or equivalent, preserving the existing return destination and established Ulysses UI patterns.
+Next: Open House Archiving.
+
+Inspect the existing Open House schema, routes, templates, and current delete behavior before choosing an implementation. The goal is to allow Open Houses to leave the normal operational view while preserving their history. Do not alter the data model or delete behavior until the existing implementation is understood.
 
 Work one issue at a time:
 
