@@ -1,9 +1,9 @@
 # Ulysses CRM - Project State
 
 **Last updated:** September 17, 2026  
-**Current production version:** v1.10.5  
+**Current production version:** v1.10.8
 **Current branch:** main  
-**Current checkpoint:** 33badd0  
+**Current checkpoint:** 26478f1
 **Session mode:** Maintenance / Stabilization
 
 ## Current Architecture
@@ -110,16 +110,19 @@ Completed and locally validated September 18, 2026.
 - Production v1.10.8 deployed and fully validated September 17, 2026.
 - Production validation confirmed Active/Archived views, preserved sign-in history and CSV access, Archive/Unarchive lifecycle, and public sign-in closure/restoration.
 
-### 4. Dashboard Follow-ups Mobile Layout
+### 4. Dashboard Follow-ups Mobile Layout - COMPLETE
 
-Improve mobile Follow-up presentation.
+Completed and locally validated September 17, 2026.
 
-Intended hierarchy:
-
-- Row 1: Contact name + follow-up date
-- Row 2: Last engagement plus useful context such as notes or summary
-
-Follow established Dashboard mobile presentation patterns.
+- Added a dedicated responsive mobile Follow-up presentation without changing Follow-up behavior.
+- Mobile hierarchy presents contact name and due date first, followed by Last Engagement context and actions.
+- Preserved the existing desktop table while refining desktop column proportions.
+- Constrained the desktop Name column and allowed Last Engagement to use the flexible remaining width.
+- Last Engagement detail is limited to two lines by default with an in-place `See more` / `See less` control.
+- Preserved the existing Open and Done actions.
+- No database, query, Follow-up lifecycle, or Attention Engine changes were required.
+- Application version bumped to v1.10.9.
+- Implementation checkpoint: `26478f1`.
 
 ### 5. Listing Checklist Management
 
@@ -143,16 +146,19 @@ Engagement Navigation is complete at checkpoint `540a470`.
 
 Open House Archiving is complete and production validated in v1.10.8 at checkpoint `005cd21`.
 
-Next: Dashboard Follow-ups Mobile Layout.
+Dashboard Follow-ups Mobile Layout is complete and locally validated in v1.10.9 at checkpoint `26478f1`.
 
-Improve the existing Dashboard Follow-ups presentation on mobile without changing Follow-ups behavior or creating a separate Follow-ups dashboard.
+Next: Listing Checklist Management.
 
-Intended hierarchy:
+Review and improve the existing listing checklist.
 
-1. Row 1: Contact name + follow-up date.
-2. Row 2: Last engagement plus useful context such as notes or summary.
+Desired capabilities include:
 
-Inspect the existing Dashboard template and Follow-up rendering before modifying it. Follow established Dashboard mobile presentation patterns and preserve desktop behavior unless a change is explicitly justified.
+1. Add checklist items.
+2. Remove or hide checklist items.
+3. Preserve existing checklist history appropriately.
+
+Do not choose the data model or deletion/archive/hide behavior until the current checklist schema and implementation are inspected.
 
 Work one issue at a time:
 
