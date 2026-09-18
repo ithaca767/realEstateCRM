@@ -326,75 +326,74 @@
           
               <!-- Buyer Checklist -->
               <div class="tab-pane fade" id="bp-checklist" role="tabpanel">
-                <h6 class="fw-bold mb-2">Buyer Checklist</h6>
-          
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="cis_signed" id="cis_signed" {% if bp and bp['cis_signed'] %}checked{% endif %}>
-                  <label class="form-check-label" for="cis_signed">Consumer Information Statement signed?</label>
+                <div class="card card-soft">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-semibold">Buyer Checklist</div>
+                      <div class="text-muted small">
+                        {{ buyer_checklist_complete }} / {{ buyer_checklist_total }} complete
+                      </div>
+                    </div>
+
+                    {% if bp %}
+                      <button type="button"
+                              class="btn btn-sm btn-primary"
+                              data-bs-toggle="modal"
+                              data-bs-target="#buyerChecklistModal">
+                        Edit Checklist
+                      </button>
+                    {% endif %}
+                  </div>
+
+                  <div class="card-body p-0">
+                    {% if buyer_checklist %}
+                      <div class="table-responsive">
+                        <table class="table contacts-table mb-0 align-middle">
+                          <thead class="table-light">
+                            <tr>
+                              <th style="width: 56px;">Done</th>
+                              <th>Item</th>
+                              <th style="width: 140px;">Due</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for item in buyer_checklist %}
+                              <tr>
+                                <td>
+                                  {% if item.is_complete %}
+                                    <span class="badge text-bg-success">Yes</span>
+                                  {% else %}
+                                    <span class="badge text-bg-secondary">No</span>
+                                  {% endif %}
+                                </td>
+                                <td>{{ item.label }}</td>
+                                <td>
+                                  {% if item.due_date %}
+                                    {% if (not item.is_complete) and item.due_date < today %}
+                                      <span class="text-danger fw-semibold">{{ item.due_date }}</span>
+                                    {% else %}
+                                      {{ item.due_date }}
+                                    {% endif %}
+                                  {% else %}
+                                    <span class="text-muted">None</span>
+                                  {% endif %}
+                                </td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    {% elif bp %}
+                      <div class="p-3 text-muted">No checklist items.</div>
+                    {% else %}
+                      <div class="p-3 text-muted">
+                        Save the Buyer Profile to create the checklist.
+                      </div>
+                    {% endif %}
+                  </div>
                 </div>
-          
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="buyer_agreement_signed" id="buyer_agreement_signed" {% if bp and bp['buyer_agreement_signed'] %}checked{% endif %}>
-                  <label class="form-check-label" for="buyer_agreement_signed">Buyer’s Agency Agreement signed?</label>
-                </div>
-          
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="wire_fraud_notice_signed" id="wire_fraud_notice_signed" {% if bp and bp['wire_fraud_notice_signed'] %}checked{% endif %}>
-                  <label class="form-check-label" for="wire_fraud_notice_signed">Wire Fraud Notice signed?</label>
-                </div>
-          
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="dual_agency_consent_signed" id="dual_agency_consent_signed" {% if bp and bp['dual_agency_consent_signed'] %}checked{% endif %}>
-                  <label class="form-check-label" for="dual_agency_consent_signed">Informed Consent to Dual Agency signed?</label>
-                </div>
-                          
-                <div class="form-check mt-2">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  name="preapproval_letter_received"
-                  id="preapproval_letter_received"
-                  {% if bp and bp['preapproval_letter_received'] %}checked{% endif %}
-                >
-                <label class="form-check-label" for="preapproval_letter_received">
-                  Pre-approval letter received?
-                </label>
-              </div>
-              
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  name="proof_of_funds_received"
-                  id="proof_of_funds_received"
-                  {% if bp and bp['proof_of_funds_received'] %}checked{% endif %}
-                >
-                <label class="form-check-label" for="proof_of_funds_received">
-                  Proof of funds received (if applicable)?
-                </label>
-              </div>
-              
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  name="photo_id_received"
-                  id="photo_id_received"
-                  {% if bp and bp['photo_id_received'] %}checked{% endif %}
-                >
-                <label class="form-check-label" for="photo_id_received">
-                  Photo ID received?
-                </label>
               </div>
 
-                <div class="mt-3">
-                  <button class="btn btn-primary" type="submit" name="form_action" value="save_profile">
-                    Save Buyer Profile
-                  </button>
-                </div>
-
-              </div> <!-- is this needed? -->
-          
               <!-- Transactions -->
               <div class="tab-pane fade" id="bp-transactions" role="tabpanel">
                 {% set status_labels = dict(transaction_statuses) %}
@@ -456,11 +455,153 @@
             </div>
           </form>
 
+          {% if bp %}
+          <!-- Buyer Checklist modal (outside main Buyer Profile form) -->
+          <div class="modal fade"
+               id="buyerChecklistModal"
+               tabindex="-1"
+               aria-labelledby="buyerChecklistModalLabel"
+               aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+              <div class="modal-content">
+
+                <div class="modal-header">
+                  <h5 class="modal-title" id="buyerChecklistModalLabel">Buyer Checklist</h5>
+                  <button type="button"
+                          class="btn-close"
+                          data-bs-dismiss="modal"
+                          aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                  <div class="text-muted small mb-3">
+                    Check items off and set due dates. Changes save item by item.
+                  </div>
+
+                  <div class="list-group" id="buyerChecklistItemList">
+                    {% for item in buyer_checklist %}
+                      <div class="list-group-item" data-buyer-checklist-row="{{ item.id }}">
+                        <div class="row g-2 align-items-center">
+
+                          <div class="col-12 col-md-5">
+                            <div class="form-check">
+                              <input
+                                class="form-check-input buyer-checklist-checkbox"
+                                type="checkbox"
+                                id="buyer_chk_{{ item.id }}"
+                                data-item-id="{{ item.id }}"
+                                {% if item.is_complete %}checked{% endif %}
+                              >
+                              <label class="form-check-label" for="buyer_chk_{{ item.id }}">
+                                {{ item.label }}
+                              </label>
+                            </div>
+                          </div>
+
+                          <div class="col-7 col-md-4">
+                            <input
+                              type="date"
+                              class="form-control form-control-sm buyer-checklist-date"
+                              data-item-id="{{ item.id }}"
+                              value="{% if item.due_date %}{{ item.due_date }}{% endif %}"
+                            >
+                          </div>
+
+                          <div class="col-5 col-md-3 text-end">
+                            <span class="text-muted small me-2"
+                                  id="buyer-status-{{ item.id }}"></span>
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-outline-secondary buyer-checklist-remove"
+                              data-item-id="{{ item.id }}"
+                            >
+                              Remove
+                            </button>
+                          </div>
+
+                        </div>
+                      </div>
+                    {% endfor %}
+                  </div>
+
+                  <hr class="my-4">
+
+                  <form id="addBuyerChecklistItemForm"
+                        action="{{ url_for('add_buyer_checklist_item', contact_id=contact_id) }}">
+                    <div class="fw-semibold mb-2">Add Checklist Item</div>
+
+                    <div class="row g-2 align-items-end">
+                      <div class="col-12 col-md-7">
+                        <label class="form-label small">Item</label>
+                        <input
+                          type="text"
+                          name="label"
+                          class="form-control"
+                          required
+                        >
+                      </div>
+
+                      <div class="col-12 col-md-3">
+                        <label class="form-label small">Due Date</label>
+                        <input
+                          type="date"
+                          name="due_date"
+                          class="form-control"
+                        >
+                      </div>
+
+                      <div class="col-12 col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                          Add Item
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+
+                <div class="modal-footer">
+                  <button type="button"
+                          class="btn btn-secondary"
+                          data-bs-dismiss="modal">
+                    Close
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
         </div>
     </div>
 
 <script>
+let buyerChecklistDirty = false;
+
 document.addEventListener("DOMContentLoaded", function () {
+    // Persist active Buyer Profile tab
+    const tabs = document.querySelectorAll('form .nav-tabs button[data-bs-toggle="tab"]');
+
+    tabs.forEach(btn => {
+        btn.addEventListener("shown.bs.tab", function (event) {
+            const id = event.target.getAttribute("data-bs-target");
+            if (id) localStorage.setItem("buyerProfileActiveTab", id);
+        });
+    });
+
+    // Restore last active Buyer Profile tab
+    const saved = localStorage.getItem("buyerProfileActiveTab");
+
+    if (saved) {
+        const trigger = document.querySelector(
+            `form .nav-tabs button[data-bs-target="${saved}"]`
+        );
+
+        if (trigger && window.bootstrap) {
+            new bootstrap.Tab(trigger).show();
+        }
+    }
+
     function wireSelect(selectId, nameId, phoneId, emailId) {
         var select = document.getElementById(selectId);
         if (!select) return;
@@ -479,6 +620,247 @@ document.addEventListener("DOMContentLoaded", function () {
     wireSelect("buyer_attorney_select", "buyer_attorney_name", "buyer_attorney_phone", "buyer_attorney_email");
     wireSelect("buyer_lender_select", "buyer_lender_name", "buyer_lender_phone", "buyer_lender_email");
     wireSelect("buyer_inspector_select", "buyer_inspector_name", "buyer_inspector_phone", "buyer_inspector_email");
+
+    // Buyer Checklist AJAX saving
+    function updateBuyerChecklistItem(itemId, isComplete, dueDate) {
+        fetch(`/api/buyer-checklist/${itemId}/update`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+                is_complete: isComplete ? "true" : "false",
+                due_date: dueDate || "",
+            }),
+        })
+        .then(response => {
+            if (response.ok === false) {
+                throw new Error("Unable to update checklist item.");
+            }
+            return response.json();
+        })
+        .then(() => {
+            buyerChecklistDirty = true;
+
+            const status = document.getElementById(`buyer-status-${itemId}`);
+
+            if (status) {
+                status.textContent = "Saved";
+                setTimeout(() => {
+                    status.textContent = "";
+                }, 1200);
+            }
+        })
+        .catch(() => {
+            const status = document.getElementById(`buyer-status-${itemId}`);
+            if (status) status.textContent = "Error";
+        });
+    }
+
+    function wireBuyerChecklistRemove(button) {
+        button.addEventListener("click", function () {
+            const itemId = this.dataset.itemId;
+            const row = this.closest("[data-buyer-checklist-row]");
+
+            if (!itemId || !row) return;
+
+            if (!window.confirm("Remove this checklist item?")) return;
+
+            this.disabled = true;
+
+            fetch(`/api/buyer-checklist/${itemId}/archive`, {
+                method: "POST",
+            })
+            .then(response => {
+                if (response.ok === false) {
+                    throw new Error("Unable to remove checklist item.");
+                }
+                return response.json();
+            })
+            .then(() => {
+                row.remove();
+                buyerChecklistDirty = true;
+            })
+            .catch(() => {
+                this.disabled = false;
+                window.alert("Unable to remove checklist item.");
+            });
+        });
+    }
+
+    document.querySelectorAll(".buyer-checklist-remove").forEach(button => {
+        wireBuyerChecklistRemove(button);
+    });
+
+    document.querySelectorAll(".buyer-checklist-checkbox").forEach(checkbox => {
+        checkbox.addEventListener("change", function () {
+            const itemId = this.dataset.itemId;
+            const dateInput = document.querySelector(
+                `.buyer-checklist-date[data-item-id="${itemId}"]`
+            );
+
+            updateBuyerChecklistItem(
+                itemId,
+                this.checked,
+                dateInput ? dateInput.value : ""
+            );
+        });
+    });
+
+    document.querySelectorAll(".buyer-checklist-date").forEach(input => {
+        input.addEventListener("change", function () {
+            const itemId = this.dataset.itemId;
+            const checkbox = document.querySelector(
+                `.buyer-checklist-checkbox[data-item-id="${itemId}"]`
+            );
+
+            updateBuyerChecklistItem(
+                itemId,
+                checkbox ? checkbox.checked : false,
+                this.value
+            );
+        });
+    });
+
+    const addBuyerChecklistItemForm =
+        document.getElementById("addBuyerChecklistItemForm");
+
+    if (addBuyerChecklistItemForm) {
+        addBuyerChecklistItemForm.addEventListener("submit", function (event) {
+            event.preventDefault();
+
+            const labelInput = this.querySelector('input[name="label"]');
+            const dueDateInput = this.querySelector('input[name="due_date"]');
+            const submitButton = this.querySelector('button[type="submit"]');
+            const label = labelInput ? labelInput.value.trim() : "";
+
+            if (label === "") return;
+
+            if (submitButton) submitButton.disabled = true;
+
+            fetch(this.action, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    label: label,
+                    due_date: dueDateInput ? dueDateInput.value : "",
+                }),
+            })
+            .then(response => {
+                if (response.ok === false) {
+                    throw new Error("Unable to add checklist item.");
+                }
+                return response.json();
+            })
+            .then(data => {
+                const item = data.item;
+                const list = document.getElementById("buyerChecklistItemList");
+
+                if (item == null || list == null) {
+                    throw new Error("Invalid checklist response.");
+                }
+
+                const row = document.createElement("div");
+                row.className = "list-group-item";
+                row.dataset.buyerChecklistRow = item.id;
+
+                row.innerHTML = `
+                    <div class="row g-2 align-items-center">
+                        <div class="col-12 col-md-5">
+                            <div class="form-check">
+                                <input
+                                    class="form-check-input buyer-checklist-checkbox"
+                                    type="checkbox"
+                                    id="buyer_chk_${item.id}"
+                                    data-item-id="${item.id}"
+                                >
+                                <label
+                                    class="form-check-label"
+                                    for="buyer_chk_${item.id}"
+                                ></label>
+                            </div>
+                        </div>
+
+                        <div class="col-7 col-md-4">
+                            <input
+                                type="date"
+                                class="form-control form-control-sm buyer-checklist-date"
+                                data-item-id="${item.id}"
+                                value="${item.due_date || ""}"
+                            >
+                        </div>
+
+                        <div class="col-5 col-md-3 text-end">
+                            <span
+                                class="text-muted small me-2"
+                                id="buyer-status-${item.id}"
+                            ></span>
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-secondary buyer-checklist-remove"
+                                data-item-id="${item.id}"
+                            >
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                const newLabel = row.querySelector(".form-check-label");
+                const newCheckbox = row.querySelector(".buyer-checklist-checkbox");
+                const newDate = row.querySelector(".buyer-checklist-date");
+                const newRemove = row.querySelector(".buyer-checklist-remove");
+
+                if (newLabel) newLabel.textContent = item.label;
+                if (newRemove) wireBuyerChecklistRemove(newRemove);
+
+                if (newCheckbox) {
+                    newCheckbox.addEventListener("change", function () {
+                        updateBuyerChecklistItem(
+                            item.id,
+                            this.checked,
+                            newDate ? newDate.value : ""
+                        );
+                    });
+                }
+
+                if (newDate) {
+                    newDate.addEventListener("change", function () {
+                        updateBuyerChecklistItem(
+                            item.id,
+                            newCheckbox ? newCheckbox.checked : false,
+                            this.value
+                        );
+                    });
+                }
+
+                list.appendChild(row);
+
+                buyerChecklistDirty = true;
+                addBuyerChecklistItemForm.reset();
+
+                if (labelInput) labelInput.focus();
+            })
+            .catch(() => {
+                window.alert("Unable to add checklist item.");
+            })
+            .finally(() => {
+                if (submitButton) submitButton.disabled = false;
+            });
+        });
+    }
+
+    // Refresh only if something changed in the Buyer Checklist.
+    const buyerChecklistModal =
+        document.getElementById("buyerChecklistModal");
+
+    if (buyerChecklistModal) {
+        buyerChecklistModal.addEventListener("hidden.bs.modal", function () {
+            if (buyerChecklistDirty) {
+                buyerChecklistDirty = false;
+                localStorage.setItem("buyerProfileActiveTab", "#bp-checklist");
+                window.location.reload();
+            }
+        });
+    }
 });
 </script>
 

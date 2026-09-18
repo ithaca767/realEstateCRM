@@ -4192,6 +4192,100 @@ def get_listing_checklist(contact_id: int):
     complete = sum(1 for r in rows if r["is_complete"])
     return rows, complete, total
 
+BUYER_CHECKLIST_DEFAULTS = [
+    ("cis_signed", "Consumer Information Statement Signed", None),
+    ("buyer_agreement_signed", "Buyer Agency Agreement Signed", None),
+    ("wire_fraud_notice_signed", "Wire Fraud Notice Signed", None),
+    ("dual_agency_consent_signed", "Informed Consent to Dual Agency Signed", None),
+    ("preapproval_letter_received", "Pre-approval Letter Received", None),
+    ("proof_of_funds_received", "Proof of Funds Received (if applicable)", None),
+    ("photo_id_received", "Photo ID Received", None),
+]
+
+
+def ensure_buyer_checklist_initialized(user_id: int, contact_id: int) -> None:
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT c.archived_at
+            FROM contacts AS c
+            JOIN buyer_profiles AS bp ON bp.contact_id = c.id
+            WHERE c.id = %s
+              AND c.user_id = %s
+            """,
+            (contact_id, user_id),
+        )
+        row = cur.fetchone()
+
+        if not row:
+            return
+
+        if row["archived_at"] is not None:
+            return
+
+        cur.execute(
+            """
+            SELECT 1
+            FROM buyer_checklist_items
+            WHERE contact_id = %s
+            LIMIT 1
+            """,
+            (contact_id,),
+        )
+
+        if cur.fetchone():
+            return
+
+        rows = [
+            (contact_id, item_key, label)
+            for item_key, label, _offset in BUYER_CHECKLIST_DEFAULTS
+        ]
+
+        cur.executemany(
+            """
+            INSERT INTO buyer_checklist_items
+                (contact_id, item_key, label)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (contact_id, item_key) DO NOTHING
+            """,
+            rows,
+        )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_buyer_checklist(contact_id: int):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, item_key, label, due_date, is_complete
+            FROM buyer_checklist_items
+            WHERE contact_id = %s
+              AND archived_at IS NULL
+            ORDER BY
+              CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+              due_date ASC,
+              label ASC
+            """,
+            (contact_id,),
+        )
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    total = len(rows)
+    complete = sum(1 for row in rows if row["is_complete"])
+
+    return rows, complete, total
+
+
 def _ics_escape(s: str) -> str:
     return (s or "").replace("\\", "\\\\").replace("\r\n", "\\n").replace("\n", "\\n").replace(",", "\\,").replace(";", "\\;")
 
@@ -8726,6 +8820,15 @@ def buyer_profile(contact_id):
     )
     buyer_profile = cur.fetchone()
 
+    # Buyer checklist
+    if buyer_profile:
+        ensure_buyer_checklist_initialized(current_user.id, contact_id)
+        buyer_checklist, buyer_checklist_complete, buyer_checklist_total = get_buyer_checklist(contact_id)
+    else:
+        buyer_checklist = []
+        buyer_checklist_complete = 0
+        buyer_checklist_total = 0
+
     # Phase 3.3: Transactions (buyer sheet)
     cur.execute(
         """
@@ -8831,17 +8934,6 @@ def buyer_profile(contact_id):
 
             other_professionals = (request.form.get("other_professionals") or "").strip() or None
 
-            # Checklist booleans
-            cis_signed = truthy_checkbox(request.form.get("cis_signed"))
-            buyer_agreement_signed = truthy_checkbox(request.form.get("buyer_agreement_signed"))
-            wire_fraud_notice_signed = truthy_checkbox(request.form.get("wire_fraud_notice_signed"))
-            dual_agency_consent_signed = truthy_checkbox(request.form.get("dual_agency_consent_signed"))
-
-            # Additional checklist items you added
-            preapproval_letter_received = truthy_checkbox(request.form.get("preapproval_letter_received"))
-            proof_of_funds_received = truthy_checkbox(request.form.get("proof_of_funds_received"))
-            photo_id_received = truthy_checkbox(request.form.get("photo_id_received"))
-
             if buyer_profile:
                 # Update existing buyer profile
                 cur.execute(
@@ -8858,15 +8950,6 @@ def buyer_profile(contact_id):
                       lender_name = %s,
                       referral_source = %s,
                       notes = %s,
-
-                      cis_signed = %s,
-                      buyer_agreement_signed = %s,
-                      wire_fraud_notice_signed = %s,
-                      dual_agency_consent_signed = %s,
-
-                      preapproval_letter_received = %s,
-                      proof_of_funds_received = %s,
-                      photo_id_received = %s,
 
                       buyer_attorney_name = %s,
                       buyer_attorney_email = %s,
@@ -8896,15 +8979,6 @@ def buyer_profile(contact_id):
                         lender_name,
                         referral_source,
                         notes,
-
-                        cis_signed,
-                        buyer_agreement_signed,
-                        wire_fraud_notice_signed,
-                        dual_agency_consent_signed,
-
-                        preapproval_letter_received,
-                        proof_of_funds_received,
-                        photo_id_received,
 
                         buyer_attorney_name,
                         buyer_attorney_email,
@@ -8941,15 +9015,6 @@ def buyer_profile(contact_id):
                       referral_source,
                       notes,
 
-                      cis_signed,
-                      buyer_agreement_signed,
-                      wire_fraud_notice_signed,
-                      dual_agency_consent_signed,
-
-                      preapproval_letter_received,
-                      proof_of_funds_received,
-                      photo_id_received,
-
                       buyer_attorney_name,
                       buyer_attorney_email,
                       buyer_attorney_phone,
@@ -8971,8 +9036,6 @@ def buyer_profile(contact_id):
                       %s, %s, %s, %s,
                       %s, %s, %s,
                       %s, %s, %s, %s,
-                      %s, %s, %s,
-                      %s, %s, %s, %s,
                       %s
                     )
                     RETURNING *
@@ -8989,15 +9052,6 @@ def buyer_profile(contact_id):
                         lender_name,
                         referral_source,
                         notes,
-
-                        cis_signed,
-                        buyer_agreement_signed,
-                        wire_fraud_notice_signed,
-                        dual_agency_consent_signed,
-
-                        preapproval_letter_received,
-                        proof_of_funds_received,
-                        photo_id_received,
 
                         buyer_attorney_name,
                         buyer_attorney_email,
@@ -9059,6 +9113,11 @@ def buyer_profile(contact_id):
         bp=buyer_profile,
         buyer_profile=buyer_profile,
         buyer=buyer_profile,
+
+        # buyer checklist
+        buyer_checklist=buyer_checklist,
+        buyer_checklist_complete=buyer_checklist_complete,
+        buyer_checklist_total=buyer_checklist_total,
 
         # subject properties and other context
         subject_properties=subject_properties,
@@ -11417,6 +11476,137 @@ def unarchive_contact(contact_id):
 
     flash("Contact unarchived. Restored to active workflows.", "success")
     return redirect(url_for("edit_contact", contact_id=contact_id))
+
+
+@app.route("/contact/<int:contact_id>/buyer-checklist/add", methods=["POST"])
+@login_required
+def add_buyer_checklist_item(contact_id):
+    label = (request.form.get("label") or "").strip()
+    due_date = request.form.get("due_date") or None
+
+    if not label:
+        abort(400)
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT bp.id
+            FROM buyer_profiles AS bp
+            JOIN contacts AS c ON c.id = bp.contact_id
+            WHERE bp.contact_id = %s
+              AND c.user_id = %s
+            """,
+            (contact_id, current_user.id),
+        )
+
+        if not cur.fetchone():
+            abort(404)
+
+        item_key = f"custom_{secrets.token_hex(8)}"
+
+        cur.execute(
+            """
+            INSERT INTO buyer_checklist_items
+                (contact_id, item_key, label, due_date)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, label, due_date, is_complete
+            """,
+            (contact_id, item_key, label, due_date),
+        )
+
+        item = cur.fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify(
+        success=True,
+        item={
+            "id": item["id"],
+            "label": item["label"],
+            "due_date": item["due_date"].isoformat() if item["due_date"] else "",
+            "is_complete": item["is_complete"],
+        },
+    )
+
+
+@app.route("/api/buyer-checklist/<int:item_id>/archive", methods=["POST"])
+@login_required
+def archive_buyer_checklist_item(item_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            UPDATE buyer_checklist_items AS bci
+            SET archived_at = NOW(),
+                updated_at = NOW()
+            FROM contacts AS c
+            WHERE bci.id = %s
+              AND bci.contact_id = c.id
+              AND c.user_id = %s
+              AND bci.archived_at IS NULL
+            """,
+            (item_id, current_user.id),
+        )
+
+        if cur.rowcount == 0:
+            conn.rollback()
+            abort(404)
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify(success=True)
+
+
+@app.route("/api/buyer-checklist/<int:item_id>/update", methods=["POST"])
+@login_required
+def update_buyer_checklist_item(item_id):
+    is_complete = request.form.get("is_complete") == "true"
+    due_date = request.form.get("due_date") or None
+    completed_at = datetime.utcnow() if is_complete else None
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            UPDATE buyer_checklist_items AS bci
+            SET is_complete = %s,
+                due_date = %s,
+                completed_at = %s,
+                updated_at = NOW()
+            FROM contacts AS c
+            WHERE bci.id = %s
+              AND bci.contact_id = c.id
+              AND c.user_id = %s
+              AND bci.archived_at IS NULL
+            """,
+            (
+                is_complete,
+                due_date,
+                completed_at,
+                item_id,
+                current_user.id,
+            ),
+        )
+
+        if cur.rowcount == 0:
+            conn.rollback()
+            abort(404)
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify(success=True)
 
 
 @app.route("/contact/<int:contact_id>/listing-checklist/add", methods=["POST"])
