@@ -1,9 +1,9 @@
 # Ulysses CRM - Project State
 
 **Last updated:** September 17, 2026  
-**Current production version:** v1.10.8
+**Current production version:** v1.10.9
 **Current branch:** main  
-**Current checkpoint:** 26478f1
+**Current checkpoint:** 8cdee2c
 **Session mode:** Maintenance / Stabilization
 
 ## Current Architecture
@@ -123,6 +123,8 @@ Completed and locally validated September 17, 2026.
 - No database, query, Follow-up lifecycle, or Attention Engine changes were required.
 - Application version bumped to v1.10.9.
 - Implementation checkpoint: `26478f1`.
+- Production v1.10.9 deployed and validated September 17, 2026.
+- Production validation confirmed desktop and mobile responsive presentation and working `See more` / `See less` behavior.
 
 ### 5. Listing Checklist Management
 
@@ -136,6 +138,13 @@ Desired capabilities include:
 
 Do not choose the data model until the current checklist schema and implementation are inspected.
 
+### Deferred Maintenance Note
+
+- Intermittent stale `Please log in to access this page.` flash messages have occasionally appeared while the user is already authenticated, on both desktop and mobile.
+- During September 17, 2026 production validation, two identical messages were present but did not return after dismissal and Dashboard refresh.
+- No authentication change was made because the issue was not reproducible on refresh and existing login protection appeared to be functioning normally.
+- Investigate only when the behavior can be reproduced reliably.
+
 ## RESUME HERE
 
 Current session is Maintenance / Stabilization.
@@ -146,7 +155,7 @@ Engagement Navigation is complete at checkpoint `540a470`.
 
 Open House Archiving is complete and production validated in v1.10.8 at checkpoint `005cd21`.
 
-Dashboard Follow-ups Mobile Layout is complete and locally validated in v1.10.9 at checkpoint `26478f1`.
+Dashboard Follow-ups Mobile Layout is complete and production validated in v1.10.9 at checkpoint `26478f1`.
 
 Next: Listing Checklist Management.
 
