@@ -11429,15 +11429,24 @@ def update_listing_checklist_item(item_id):
     cur = conn.cursor()
     cur.execute(
         """
-        UPDATE listing_checklist_items
+        UPDATE listing_checklist_items AS lci
         SET is_complete = %s,
             due_date = %s,
             completed_at = %s,
             updated_at = NOW()
-        WHERE id = %s
+        FROM contacts AS c
+        WHERE lci.id = %s
+          AND lci.contact_id = c.id
+          AND c.user_id = %s
         """,
-        (is_complete, due_date, completed_at, item_id)
+        (is_complete, due_date, completed_at, item_id, current_user.id)
     )
+
+    if cur.rowcount == 0:
+        conn.rollback()
+        conn.close()
+        abort(404)
+
     conn.commit()
     conn.close()
 
