@@ -574,7 +574,7 @@
           Check items off and set due dates. Changes save item by item.
         </div>
 
-        <div class="list-group">
+        <div class="list-group" id="checklistItemList">
           {% for item in checklist_items %}
             <div class="list-group-item">
               <div class="row g-2 align-items-center">
@@ -611,6 +611,39 @@
             </div>
           {% endfor %}
         </div>
+
+        <hr class="my-4">
+
+        <form id="addChecklistItemForm"
+              action="{{ url_for('add_listing_checklist_item', contact_id=contact_id) }}">
+          <div class="fw-semibold mb-2">Add Checklist Item</div>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-7">
+              <label class="form-label small">Item</label>
+              <input
+                type="text"
+                name="label"
+                class="form-control"
+                required
+              >
+            </div>
+
+            <div class="col-12 col-md-3">
+              <label class="form-label small">Due Date</label>
+              <input
+                type="date"
+                name="due_date"
+                class="form-control"
+              >
+            </div>
+
+            <div class="col-12 col-md-2">
+              <button type="submit" class="btn btn-primary w-100">
+                Add Item
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
 
       <div class="modal-footer">
@@ -707,6 +740,115 @@ document.addEventListener("DOMContentLoaded", function () {
       updateChecklistItem(itemId, checkbox ? checkbox.checked : false, this.value);
     });
   });
+
+  const addChecklistItemForm = document.getElementById("addChecklistItemForm");
+
+  if (addChecklistItemForm) {
+    addChecklistItemForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+
+      const labelInput = this.querySelector('input[name="label"]');
+      const dueDateInput = this.querySelector('input[name="due_date"]');
+      const submitButton = this.querySelector('button[type="submit"]');
+      const label = labelInput ? labelInput.value.trim() : "";
+
+      if (label === "") return;
+
+      if (submitButton) submitButton.disabled = true;
+
+      fetch(this.action, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          label: label,
+          due_date: dueDateInput ? dueDateInput.value : "",
+        }),
+      })
+      .then(response => {
+        if (response.ok === false) {
+          throw new Error("Unable to add checklist item.");
+        }
+        return response.json();
+      })
+      .then(data => {
+        const item = data.item;
+        const list = document.getElementById("checklistItemList");
+
+        if (item == null || list == null) {
+          throw new Error("Invalid checklist response.");
+        }
+
+        const row = document.createElement("div");
+        row.className = "list-group-item";
+
+        row.innerHTML = `
+          <div class="row g-2 align-items-center">
+            <div class="col-12 col-md-6">
+              <div class="form-check">
+                <input
+                  class="form-check-input checklist-checkbox"
+                  type="checkbox"
+                  id="chk_${item.id}"
+                  data-item-id="${item.id}"
+                >
+                <label class="form-check-label" for="chk_${item.id}"></label>
+              </div>
+            </div>
+            <div class="col-8 col-md-4">
+              <input
+                type="date"
+                class="form-control form-control-sm checklist-date"
+                data-item-id="${item.id}"
+                value="${item.due_date || ""}"
+              >
+            </div>
+            <div class="col-4 col-md-2 text-end">
+              <span class="text-muted small" id="status-${item.id}"></span>
+            </div>
+          </div>
+        `;
+
+        const newLabel = row.querySelector(".form-check-label");
+        const newCheckbox = row.querySelector(".checklist-checkbox");
+        const newDate = row.querySelector(".checklist-date");
+
+        if (newLabel) newLabel.textContent = item.label;
+
+        if (newCheckbox) {
+          newCheckbox.addEventListener("change", function () {
+            updateChecklistItem(
+              item.id,
+              this.checked,
+              newDate ? newDate.value : ""
+            );
+          });
+        }
+
+        if (newDate) {
+          newDate.addEventListener("change", function () {
+            updateChecklistItem(
+              item.id,
+              newCheckbox ? newCheckbox.checked : false,
+              this.value
+            );
+          });
+        }
+
+        list.appendChild(row);
+
+        checklistDirty = true;
+        addChecklistItemForm.reset();
+
+        if (labelInput) labelInput.focus();
+      })
+      .catch(() => {
+        window.alert("Unable to add checklist item.");
+      })
+      .finally(() => {
+        if (submitButton) submitButton.disabled = false;
+      });
+    });
+  }
 
   // Refresh only if something changed in the checklist
   const checklistModal = document.getElementById("listingChecklistModal");

@@ -11417,6 +11417,55 @@ def unarchive_contact(contact_id):
     flash("Contact unarchived. Restored to active workflows.", "success")
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
+
+@app.route("/contact/<int:contact_id>/listing-checklist/add", methods=["POST"])
+@login_required
+def add_listing_checklist_item(contact_id):
+    label = (request.form.get("label") or "").strip()
+    due_date = request.form.get("due_date") or None
+
+    if not label:
+        flash("Please provide a checklist item.", "warning")
+        return redirect(url_for("seller_profile", contact_id=contact_id) + "#pane-checklist")
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+            (contact_id, current_user.id),
+        )
+        if not cur.fetchone():
+            abort(404)
+
+        item_key = f"custom_{secrets.token_hex(8)}"
+
+        cur.execute(
+            """
+            INSERT INTO listing_checklist_items
+                (contact_id, item_key, label, due_date)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, label, due_date, is_complete
+            """,
+            (contact_id, item_key, label, due_date),
+        )
+        item = cur.fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify(
+        success=True,
+        item={
+            "id": item["id"],
+            "label": item["label"],
+            "due_date": item["due_date"].isoformat() if item["due_date"] else "",
+            "is_complete": item["is_complete"],
+        },
+    )
+
+
 @app.route("/api/listing-checklist/<int:item_id>/update", methods=["POST"])
 @login_required
 def update_listing_checklist_item(item_id):
