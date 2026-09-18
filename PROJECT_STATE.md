@@ -1,9 +1,9 @@
 # Ulysses CRM - Project State
 
-**Last updated:** September 17, 2026  
-**Current production version:** v1.10.9
-**Current branch:** main  
-**Current checkpoint:** 8cdee2c
+**Last updated:** September 18, 2026
+**Current production version:** v1.10.10
+**Current branch:** main
+**Current checkpoint:** 83f401e
 **Session mode:** Maintenance / Stabilization
 
 ## Current Architecture
@@ -126,17 +126,41 @@ Completed and locally validated September 17, 2026.
 - Production v1.10.9 deployed and validated September 17, 2026.
 - Production validation confirmed desktop and mobile responsive presentation and working `See more` / `See less` behavior.
 
-### 5. Listing Checklist Management
+### 5. Listing Checklist Management - COMPLETE
 
-Review and improve the existing listing checklist.
+Completed, deployed, and production validated September 18, 2026.
 
-Desired capabilities include:
+- Seller checklist items can be added per contact with optional due dates.
 
-- Add checklist items
-- Remove or hide checklist items
-- Preserve existing checklist history appropriately
+- Seller checklist items are removed operationally through archival rather than destructive deletion.
 
-Do not choose the data model until the current checklist schema and implementation are inspected.
+- Seller checklist updates and archival are tenant-scoped.
+
+- Existing Seller checklist history is preserved.
+
+- Buyer Checklist was modernized from fixed `buyer_profiles` boolean fields to independent per-contact checklist item records.
+
+- Existing Buyer checklist values were migrated without changing their completion state.
+
+- Buyer checklist items support completion status, optional due dates, custom items, and archival removal.
+
+- Legacy Buyer checklist columns remain in `buyer_profiles` as a safety net but are no longer written by the application.
+
+- Seller production migration: `docs/migrations/2026_09_18_listing_checklist_add_archived_at.sql`.
+
+- Buyer production migration: `docs/migrations/2026_09_18_buyer_checklist_items.sql`.
+
+- Seller implementation checkpoints: `5e3bf1e`, `4d99a4a`, `6d2220a`.
+
+- Buyer implementation checkpoint: `83f401e`.
+
+- Production Seller migration verified with 345 existing checklist rows preserved.
+
+- Production Buyer migration verified with 98 expected rows, 98 matched rows, and 0 mismatches across 14 Buyer Profiles.
+
+- Production application deployed through checkpoint `83f401e`.
+
+- Application version bumped to v1.10.10.
 
 ### Deferred Maintenance Note
 
@@ -147,34 +171,22 @@ Do not choose the data model until the current checklist schema and implementati
 
 ## RESUME HERE
 
-Current session is Maintenance / Stabilization.
+Maintenance / Stabilization queue completed September 18, 2026.
 
-Associated Contacts editing is complete at checkpoint `c7a4b80`.
+Completed maintenance items:
 
-Engagement Navigation is complete at checkpoint `540a470`.
+1. Associated Contacts Edit Bug - `c7a4b80`
 
-Open House Archiving is complete and production validated in v1.10.8 at checkpoint `005cd21`.
+2. Engagement Navigation - `540a470`
 
-Dashboard Follow-ups Mobile Layout is complete and production validated in v1.10.9 at checkpoint `26478f1`.
+3. Open House Archiving - production validated in v1.10.8
 
-Next: Listing Checklist Management.
+4. Dashboard Follow-ups Mobile Layout - production validated in v1.10.9
 
-Review and improve the existing listing checklist.
+5. Listing Checklist Management - Seller and Buyer checklist management deployed and production validated in v1.10.10 through checkpoint `83f401e`.
 
-Desired capabilities include:
+The intermittent stale `Please log in to access this page.` flash remains deferred until it can be reproduced reliably.
 
-1. Add checklist items.
-2. Remove or hide checklist items.
-3. Preserve existing checklist history appropriately.
+No numbered Maintenance / Stabilization queue items remain.
 
-Do not choose the data model or deletion/archive/hide behavior until the current checklist schema and implementation are inspected.
-
-Work one issue at a time:
-
-1. Inspect existing implementation.
-2. Scope the change.
-3. Modify locally.
-4. Test locally.
-5. Review diff.
-6. Commit.
-7. Move to the next issue.
+Before beginning additional CRM development, review and prioritize the next approved work item rather than extending the completed maintenance queue.
