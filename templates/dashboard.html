@@ -444,57 +444,70 @@
         
           {% macro followup_table(rows) %}
             {% if rows and rows|length > 0 %}
-              <div class="table-responsive">
+
+              <!-- Desktop / tablet presentation -->
+              <div class="table-responsive d-none d-md-block">
                 <table class="table table-sm table-striped mb-0 align-middle">
                   <thead class="table-light">
                     <tr>
-                      <th>Name</th>
-                      <th style="width: 220px;">Due</th>
-                      <th>Last Engagement</th>
-                      <th style="width: 220px;" class="text-end actions-col">Actions</th>
+                      <th class="dash-followup-name-col">Name</th>
+                      <th class="dash-followup-due-col">Due</th>
+                      <th class="dash-followup-engagement-col">Last Engagement</th>
+                      <th class="text-end actions-col dash-followup-actions-col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {% for c in rows %}
                       <tr>
-                        <td>
+                        <td class="dash-followup-name-col">
                           <a href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
                             {{ contact_display(c) }}
                           </a>
                         </td>
-        
-                        <td>
+
+                        <td class="dash-followup-due-col">
                           {% if c.get("follow_up_due_at") %}
                             {{ c["follow_up_due_at"]|fmt_dt }}
                           {% else %}
                             <span class="text-muted">None</span>
                           {% endif %}
                         </td>
-        
-                        <td style="min-width: 280px;">
+
+                        <td class="dash-followup-engagement-col">
                           {% if c.get("last_engagement_at") %}
                             <div class="small">
                               <strong>{{ c.get("last_engagement_type") or "engagement" }}</strong>
                               <span class="text-muted">({{ c["last_engagement_at"]|fmt_dt }})</span>
                             </div>
-        
+
                             {% set detail = c.get("last_engagement_outcome") or c.get("last_engagement_summary") %}
                             {% if detail %}
-                              <div class="text-muted small">{{ detail }}</div>
+                              <div class="text-muted small">
+                                <div id="followupDetail_{{ c['engagement_id'] or c['contact_id'] }}"
+                                     class="dash-followup-detail dash-clamp-2">
+                                  {{ detail }}
+                                </div>
+                                <button type="button"
+                                        class="btn btn-link btn-sm p-0 dash-followup-more"
+                                        data-detail-target="followupDetail_{{ c['engagement_id'] or c['contact_id'] }}"
+                                        aria-expanded="false">
+                                  See more
+                                </button>
+                              </div>
                             {% endif %}
                           {% else %}
                             <span class="text-muted small">No engagement context yet</span>
                           {% endif %}
                         </td>
-        
-                        <td class="text-end actions-col">
+
+                        <td class="text-end actions-col dash-followup-actions-col">
                           <div class="d-inline-flex align-items-center justify-content-end">
                             <div class="btn-group btn-group-sm" role="group" aria-label="Follow-up actions">
                               <a class="btn btn-outline-primary"
                                  href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
                                 Open
                               </a>
-                        
+
                               {% if c.get("engagement_id") %}
                                 <button type="button"
                                         class="btn btn-outline-success"
@@ -503,7 +516,7 @@
                                 </button>
                               {% endif %}
                             </div>
-                        
+
                             {% if c.get("engagement_id") %}
                               <form id="followupDoneForm_{{ c['engagement_id'] }}"
                                     method="post"
@@ -518,6 +531,83 @@
                   </tbody>
                 </table>
               </div>
+
+              <!-- Mobile presentation -->
+              <div class="d-md-none dash-followup-mobile">
+                {% for c in rows %}
+                  <div class="dash-followup-mobile-item">
+
+                    <div class="dash-followup-mobile-primary">
+                      <a class="fw-semibold text-decoration-none"
+                         href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
+                        {{ contact_display(c) }}
+                      </a>
+
+                      <div class="dash-followup-mobile-due">
+                        {% if c.get("follow_up_due_at") %}
+                          {{ c["follow_up_due_at"]|fmt_dt }}
+                        {% else %}
+                          <span class="text-muted">None</span>
+                        {% endif %}
+                      </div>
+                    </div>
+
+                    <div class="dash-followup-mobile-context">
+                      {% if c.get("last_engagement_at") %}
+                        <div class="small">
+                          <strong>{{ c.get("last_engagement_type") or "engagement" }}</strong>
+                          <span class="text-muted">· {{ c["last_engagement_at"]|fmt_dt }}</span>
+                        </div>
+
+                        {% set detail = c.get("last_engagement_outcome") or c.get("last_engagement_summary") %}
+                        {% if detail %}
+                          <div class="text-muted small mt-1">
+                            <div id="followupDetailMobile_{{ c['engagement_id'] or c['contact_id'] }}"
+                                 class="dash-followup-detail dash-clamp-2">
+                              {{ detail }}
+                            </div>
+                            <button type="button"
+                                    class="btn btn-link btn-sm p-0 dash-followup-more"
+                                    data-detail-target="followupDetailMobile_{{ c['engagement_id'] or c['contact_id'] }}"
+                                    aria-expanded="false">
+                              See more
+                            </button>
+                          </div>
+                        {% endif %}
+                      {% else %}
+                        <span class="text-muted small">No engagement context yet</span>
+                      {% endif %}
+                    </div>
+
+                    <div class="dash-followup-mobile-actions">
+                      <div class="btn-group btn-group-sm" role="group" aria-label="Follow-up actions">
+                        <a class="btn btn-outline-primary"
+                           href="{{ url_for('edit_contact', contact_id=c['contact_id']) }}#engagements">
+                          Open
+                        </a>
+
+                        {% if c.get("engagement_id") %}
+                          <button type="button"
+                                  class="btn btn-outline-success"
+                                  onclick="document.getElementById('followupDoneMobileForm_{{ c['engagement_id'] }}').submit();">
+                            Done
+                          </button>
+                        {% endif %}
+                      </div>
+
+                      {% if c.get("engagement_id") %}
+                        <form id="followupDoneMobileForm_{{ c['engagement_id'] }}"
+                              method="post"
+                              action="{{ url_for('followup_clear', engagement_id=c['engagement_id']) }}"
+                              class="d-none">
+                        </form>
+                      {% endif %}
+                    </div>
+
+                  </div>
+                {% endfor %}
+              </div>
+
             {% else %}
               <p class="mb-0 text-muted">Nothing here.</p>
             {% endif %}
@@ -803,4 +893,26 @@
 </style>
   
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".dash-followup-more").forEach(function (button) {
+    const detail = document.getElementById(button.dataset.detailTarget);
+
+    if (!detail) {
+      button.classList.add("d-none");
+      return;
+    }
+
+    button.addEventListener("click", function () {
+      const expanded = detail.classList.toggle("is-expanded");
+
+      button.textContent = expanded ? "See less" : "See more";
+      button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    });
+  });
+});
+</script>
 {% endblock %}

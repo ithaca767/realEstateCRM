@@ -94,3 +94,96 @@
   margin: 14px 0;
 }
 
+
+/* Mobile Follow-up presentation */
+
+.dashboard-scope .dash-followup-mobile-item {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(0,0,0,.12);
+}
+
+.dashboard-scope .dash-followup-mobile-item:first-child {
+  padding-top: 0;
+}
+
+.dashboard-scope .dash-followup-mobile-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.dashboard-scope .dash-followup-mobile-primary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.dashboard-scope .dash-followup-mobile-primary > a {
+  min-width: 0;
+}
+
+.dashboard-scope .dash-followup-mobile-due {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.dashboard-scope .dash-followup-mobile-context {
+  margin-top: 0.35rem;
+}
+
+.dashboard-scope .dash-followup-mobile-actions {
+  margin-top: 0.55rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Desktop Follow-up column proportions */
+
+@media (min-width: 768px) {
+  .dashboard-scope .dash-followup-name-col {
+    width: 160px;
+    max-width: 200px;
+  }
+
+  .dashboard-scope .dash-followup-name-col a {
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-scope .dash-followup-due-col {
+    width: 220px;
+    white-space: nowrap;
+  }
+
+  .dashboard-scope .dash-followup-engagement-col {
+    width: auto;
+    min-width: 0;
+  }
+
+  .dashboard-scope .dash-followup-actions-col {
+    width: 170px;
+    white-space: nowrap;
+  }
+}
+
+/* Follow-up engagement summary expansion */
+
+.dashboard-scope .dash-followup-more {
+  font-size: inherit;
+  text-decoration: none;
+}
+
+.dashboard-scope .dash-followup-more:hover,
+.dashboard-scope .dash-followup-more:focus {
+  text-decoration: underline;
+}
+
+/* Fully release the two-line clamp when Follow-up detail is expanded */
+
+.dashboard-scope .dash-followup-detail.dash-clamp-2.is-expanded {
+  display: block;
+  -webkit-line-clamp: initial;
+  -webkit-box-orient: initial;
+  overflow: visible;
+}
