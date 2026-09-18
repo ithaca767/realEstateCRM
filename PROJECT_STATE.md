@@ -106,7 +106,9 @@ Completed and locally validated September 18, 2026.
 - Application version bumped to v1.10.8.
 - Local migration: `docs/migrations/2026_09_17_open_houses_add_archived_at.sql`.
 - Implementation checkpoint: `005cd21`.
-- Production migration/deployment remains pending.
+- Production database migration completed and verified September 17, 2026.
+- Production v1.10.8 deployed and fully validated September 17, 2026.
+- Production validation confirmed Active/Archived views, preserved sign-in history and CSV access, Archive/Unarchive lifecycle, and public sign-in closure/restoration.
 
 ### 4. Dashboard Follow-ups Mobile Layout
 
@@ -139,7 +141,7 @@ Associated Contacts editing is complete at checkpoint `c7a4b80`.
 
 Engagement Navigation is complete at checkpoint `540a470`.
 
-Open House Archiving is complete locally in v1.10.8 at checkpoint `005cd21`. Production migration/deployment remains pending.
+Open House Archiving is complete and production validated in v1.10.8 at checkpoint `005cd21`.
 
 Next: Dashboard Follow-ups Mobile Layout.
 
