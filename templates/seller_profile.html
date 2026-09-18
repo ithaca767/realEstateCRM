@@ -576,10 +576,10 @@
 
         <div class="list-group" id="checklistItemList">
           {% for item in checklist_items %}
-            <div class="list-group-item">
+            <div class="list-group-item" data-checklist-row="{{ item.id }}">
               <div class="row g-2 align-items-center">
 
-                <div class="col-12 col-md-6">
+                <div class="col-12 col-md-5">
                   <div class="form-check">
                     <input
                       class="form-check-input checklist-checkbox"
@@ -594,7 +594,7 @@
                   </div>
                 </div>
 
-                <div class="col-8 col-md-4">
+                <div class="col-7 col-md-4">
                   <input
                     type="date"
                     class="form-control form-control-sm checklist-date"
@@ -603,8 +603,15 @@
                   >
                 </div>
 
-                <div class="col-4 col-md-2 text-end">
-                  <span class="text-muted small" id="status-{{ item.id }}"></span>
+                <div class="col-5 col-md-3 text-end">
+                  <span class="text-muted small me-2" id="status-{{ item.id }}"></span>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary checklist-remove"
+                    data-item-id="{{ item.id }}"
+                  >
+                    Remove
+                  </button>
                 </div>
 
               </div>
@@ -725,6 +732,41 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  function wireChecklistRemove(button) {
+    button.addEventListener("click", function () {
+      const itemId = this.dataset.itemId;
+      const row = this.closest("[data-checklist-row]");
+
+      if (!itemId || !row) return;
+
+      if (!window.confirm("Remove this checklist item?")) return;
+
+      this.disabled = true;
+
+      fetch(`/api/listing-checklist/${itemId}/archive`, {
+        method: "POST",
+      })
+      .then(response => {
+        if (response.ok === false) {
+          throw new Error("Unable to remove checklist item.");
+        }
+        return response.json();
+      })
+      .then(() => {
+        row.remove();
+        checklistDirty = true;
+      })
+      .catch(() => {
+        this.disabled = false;
+        window.alert("Unable to remove checklist item.");
+      });
+    });
+  }
+
+  document.querySelectorAll(".checklist-remove").forEach(button => {
+    wireChecklistRemove(button);
+  });
+
   document.querySelectorAll(".checklist-checkbox").forEach(cb => {
     cb.addEventListener("change", function () {
       const itemId = this.dataset.itemId;
@@ -780,10 +822,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const row = document.createElement("div");
         row.className = "list-group-item";
+        row.dataset.checklistRow = item.id;
 
         row.innerHTML = `
           <div class="row g-2 align-items-center">
-            <div class="col-12 col-md-6">
+            <div class="col-12 col-md-5">
               <div class="form-check">
                 <input
                   class="form-check-input checklist-checkbox"
@@ -794,7 +837,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 <label class="form-check-label" for="chk_${item.id}"></label>
               </div>
             </div>
-            <div class="col-8 col-md-4">
+            <div class="col-7 col-md-4">
               <input
                 type="date"
                 class="form-control form-control-sm checklist-date"
@@ -802,8 +845,15 @@ document.addEventListener("DOMContentLoaded", function () {
                 value="${item.due_date || ""}"
               >
             </div>
-            <div class="col-4 col-md-2 text-end">
-              <span class="text-muted small" id="status-${item.id}"></span>
+            <div class="col-5 col-md-3 text-end">
+              <span class="text-muted small me-2" id="status-${item.id}"></span>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary checklist-remove"
+                data-item-id="${item.id}"
+              >
+                Remove
+              </button>
             </div>
           </div>
         `;
@@ -811,8 +861,10 @@ document.addEventListener("DOMContentLoaded", function () {
         const newLabel = row.querySelector(".form-check-label");
         const newCheckbox = row.querySelector(".checklist-checkbox");
         const newDate = row.querySelector(".checklist-date");
+        const newRemove = row.querySelector(".checklist-remove");
 
         if (newLabel) newLabel.textContent = item.label;
+        if (newRemove) wireChecklistRemove(newRemove);
 
         if (newCheckbox) {
           newCheckbox.addEventListener("change", function () {

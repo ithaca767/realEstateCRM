@@ -4178,6 +4178,7 @@ def get_listing_checklist(contact_id: int):
         SELECT id, item_key, label, due_date, is_complete
         FROM listing_checklist_items
         WHERE contact_id = %s
+          AND archived_at IS NULL
         ORDER BY
           CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
           due_date ASC,
@@ -11466,6 +11467,37 @@ def add_listing_checklist_item(contact_id):
     )
 
 
+@app.route("/api/listing-checklist/<int:item_id>/archive", methods=["POST"])
+@login_required
+def archive_listing_checklist_item(item_id):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE listing_checklist_items AS lci
+            SET archived_at = NOW(),
+                updated_at = NOW()
+            FROM contacts AS c
+            WHERE lci.id = %s
+              AND lci.contact_id = c.id
+              AND c.user_id = %s
+              AND lci.archived_at IS NULL
+            """,
+            (item_id, current_user.id),
+        )
+
+        if cur.rowcount == 0:
+            conn.rollback()
+            abort(404)
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify(success=True)
+
+
 @app.route("/api/listing-checklist/<int:item_id>/update", methods=["POST"])
 @login_required
 def update_listing_checklist_item(item_id):
@@ -11487,6 +11519,7 @@ def update_listing_checklist_item(item_id):
         WHERE lci.id = %s
           AND lci.contact_id = c.id
           AND c.user_id = %s
+          AND lci.archived_at IS NULL
         """,
         (is_complete, due_date, completed_at, item_id, current_user.id)
     )
@@ -11500,6 +11533,7 @@ def update_listing_checklist_item(item_id):
     conn.close()
 
     return jsonify(success=True)
+
 
 @app.route("/contact/<int:contact_id>/special-dates/add", methods=["POST"])
 @login_required
