@@ -322,5 +322,158 @@ class DashboardTenantIsolationTests(unittest.TestCase):
         )
 
 
+class BuyerPropertyTenantIsolationTests(unittest.TestCase):
+    def setUp(self):
+        app_module.app.config["TESTING"] = True
+        app_module.app.config["SECRET_KEY"] = "tenant-isolation-test-secret"
+        self.client = app_module.app.test_client()
+        self.original_user_callback = app_module.login_manager._user_callback
+
+    def tearDown(self):
+        app_module.login_manager._user_callback = self.original_user_callback
+
+    def login_as(self, user_id):
+        user = app_module.User(
+            {
+                "id": user_id,
+                "email": f"user{user_id}@example.com",
+                "role": "owner",
+                "is_active": True,
+                "timezone_name": "America/New_York",
+            }
+        )
+        app_module.login_manager._user_callback = (
+            lambda requested_user_id: (
+                user
+                if str(requested_user_id) == str(user_id)
+                else None
+            )
+        )
+        with self.client.session_transaction() as session:
+            session["_user_id"] = str(user_id)
+            session["_fresh"] = True
+
+    def test_user_cannot_get_another_users_buyer_property(self):
+        self.login_as(101)
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchone.return_value = None
+
+        with patch("app.get_db", return_value=conn):
+            response = self.client.get("/buyer/property/77/edit")
+
+        self.assertEqual(response.status_code, 404)
+
+        self.assertEqual(len(cur.execute.call_args_list), 1)
+        sql, params = cur.execute.call_args_list[0].args
+        self.assertIn("WHERE bp.id = %s", sql)
+        self.assertIn("AND c.user_id = %s", sql)
+        self.assertEqual(params, (77, 101))
+
+        all_sql = "\n".join(
+            call.args[0] for call in cur.execute.call_args_list if call.args
+        )
+        self.assertNotIn("UPDATE buyer_properties", all_sql)
+        conn.close.assert_called_once()
+
+    def test_user_cannot_post_another_users_buyer_property(self):
+        self.login_as(101)
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchone.return_value = None
+
+        with patch("app.get_db", return_value=conn):
+            response = self.client.post(
+                "/buyer/property/77/edit",
+                data={
+                    "address_line": "Other Tenant Property",
+                    "city": "Keyport",
+                    "state": "NJ",
+                    "postal_code": "07735",
+                    "offer_status": "considering",
+                },
+            )
+
+        self.assertEqual(response.status_code, 404)
+
+        self.assertEqual(len(cur.execute.call_args_list), 1)
+        sql, params = cur.execute.call_args_list[0].args
+        self.assertIn("WHERE bp.id = %s", sql)
+        self.assertIn("AND c.user_id = %s", sql)
+        self.assertEqual(params, (77, 101))
+
+        all_sql = "\n".join(
+            call.args[0] for call in cur.execute.call_args_list if call.args
+        )
+        self.assertNotIn("UPDATE buyer_properties", all_sql)
+        conn.commit.assert_not_called()
+        conn.close.assert_called_once()
+
+    def test_owned_buyer_property_update_is_tenant_scoped(self):
+        self.login_as(101)
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchone.return_value = {
+            "id": 77,
+            "buyer_profile_id": 55,
+            "address_line": "1 Main Street",
+            "city": "Keyport",
+            "state": "NJ",
+            "postal_code": "07735",
+            "offer_status": "considering",
+            "contact_id": 44,
+            "first_name": "Test",
+            "last_name": "Buyer",
+        }
+
+        with patch("app.get_db", return_value=conn):
+            response = self.client.post(
+                "/buyer/property/77/edit",
+                data={
+                    "address_line": "2 Main Street",
+                    "city": "Keyport",
+                    "state": "NJ",
+                    "postal_code": "07735",
+                    "offer_status": "accepted",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(len(cur.execute.call_args_list), 2)
+
+        lookup_sql, lookup_params = cur.execute.call_args_list[0].args
+        self.assertIn("WHERE bp.id = %s", lookup_sql)
+        self.assertIn("AND c.user_id = %s", lookup_sql)
+        self.assertEqual(lookup_params, (77, 101))
+
+        update_sql, update_params = cur.execute.call_args_list[1].args
+        self.assertIn("UPDATE buyer_properties", update_sql)
+        self.assertIn("WHERE id = %s", update_sql)
+        self.assertIn("AND EXISTS", update_sql)
+        self.assertIn("AND c.user_id = %s", update_sql)
+        self.assertEqual(
+            update_params,
+            (
+                "2 Main Street",
+                "Keyport",
+                "NJ",
+                "07735",
+                "accepted",
+                77,
+                101,
+            ),
+        )
+
+        conn.commit.assert_called_once()
+        conn.close.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

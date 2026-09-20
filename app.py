@@ -8933,8 +8933,9 @@ def edit_buyer_property(property_id):
         JOIN buyer_profiles b ON bp.buyer_profile_id = b.id
         JOIN contacts c ON b.contact_id = c.id
         WHERE bp.id = %s
+          AND c.user_id = %s
         """,
-        (property_id,),
+        (property_id, current_user.id),
     )
     prop = cur.fetchone()
 
@@ -8961,8 +8962,23 @@ def edit_buyer_property(property_id):
                 postal_code = %s,
                 offer_status = %s
             WHERE id = %s
+              AND EXISTS (
+                  SELECT 1
+                  FROM buyer_profiles b
+                  JOIN contacts c ON c.id = b.contact_id
+                  WHERE b.id = buyer_properties.buyer_profile_id
+                    AND c.user_id = %s
+              )
             """,
-            (address_line, city, state, postal_code, offer_status, property_id),
+            (
+                address_line,
+                city,
+                state,
+                postal_code,
+                offer_status,
+                property_id,
+                current_user.id,
+            ),
         )
 
         conn.commit()
