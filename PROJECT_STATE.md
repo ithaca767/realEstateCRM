@@ -3,7 +3,7 @@
 **Last updated:** September 20, 2026
 **Current production version:** v1.10.10
 **Current branch:** main
-**Current checkpoint:** 0f67799
+**Current checkpoint:** da509d1
 **Session mode:** Calendar Foundation Complete / Next Work Prioritization
 
 ## Current Architecture
@@ -175,7 +175,7 @@ Completed, deployed, and production validated September 18, 2026.
 - No authentication change was made because the issue was not reproducible on refresh and existing login protection appeared to be functioning normally.
 - Investigate only when the behavior can be reproduced reliably.
 
-## Calendar Foundation - COMPLETE LOCALLY
+## Calendar Foundation - COMPLETE AND PRODUCTION VALIDATED
 
 Completed September 20, 2026 through checkpoint `0f67799`.
 
@@ -200,6 +200,26 @@ Current Calendar rules:
 - Safari Calendar subscription was manually validated against the local feed.
 - Calendar route, credential management, adapter, and serializer tests are in place.
 - Full local suite passed: 84 tests.
+- Production deployment and end-to-end Calendar validation completed September 20, 2026.
+- Production migration `docs/migrations/2026_09_20_users_add_timezone_name.sql` was applied successfully; all existing production users were assigned `America/New_York`, with a non-null account timezone and the intended default.
+- Production migration `docs/migrations/2026_09_20_calendar_feed_tokens.sql` was applied successfully; the per-user credential table and active-user/token-hash uniqueness indexes were verified.
+- Production Calendar Feed credential generation was manually validated.
+- A production Calendar subscription successfully returned real Ulysses Engagement Follow-up Activities.
+- No Transaction Deadline Activity was available during production QA, so the production all-day deadline path remains covered by automated/local validation rather than a live production example.
+- Regenerating the production Calendar Feed credential successfully revoked the prior credential; the old subscription URL returned the expected unavailable/error response.
+- Production environment requirements `TOKEN_PEPPER` and `PUBLIC_BASE_URL` were confirmed present without exposing their values.
+
+### Future Calendar Connection UX
+
+The credential-bearing subscription URL remains part of the Calendar integration protocol, but it should not need to be exposed during the normal user experience.
+
+Preferred future UX:
+
+- Present provider-oriented connection actions such as Apple Calendar, Google Calendar, and Outlook where supported.
+- Generate and pass the per-user credential through the connection workflow rather than requiring routine manual URL handling.
+- Use confirmation UI for connecting, resetting, or revoking a Calendar connection.
+- Preserve an Advanced / Manual Setup option that exposes the one-time subscription URL for unsupported calendar clients or troubleshooting.
+- The existing security model remains unchanged: raw credentials are not stored, credential ownership remains tenant-specific, and resetting a connection revokes the prior active credential.
 
 Implementation checkpoints:
 
@@ -258,7 +278,7 @@ Document intake is an Assist capability, not a separate source of CRM truth. Doc
 
 Maintenance / Stabilization queue completed September 18, 2026.
 
-Calendar foundation completed locally September 20, 2026 through checkpoint `0f67799`.
+Calendar foundation completed and production validated September 20, 2026. Production schema migrations, credential generation, live Calendar subscription, and credential revocation were successfully verified.
 
 The intermittent stale `Please log in to access this page.` flash remains deferred until it can be reproduced reliably.
 
