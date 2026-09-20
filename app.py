@@ -38,6 +38,7 @@ from services.email_sync.read import list_messages_for_contact
 from engagements import list_engagements_for_contact
 from engagements import insert_engagement
 from attention import list_attention_items
+from activity_engine import list_dashboard_snapshot_items
 
 from push_subscriptions import (
     save_push_subscription,
@@ -4454,10 +4455,6 @@ def dashboard():
     followup_rows = []
     followups_overdue = []
     followups_upcoming = []
-    snapshot_followups_today = []
-    snapshot_followups_overdue = []
-    snapshot_tasks_overdue = []
-    snapshot_tasks_today = []
 
     def has_column(table_name, column_name):
         cur.execute(
@@ -4838,242 +4835,26 @@ def dashboard():
         elif due <= cutoff_local:
             followups_upcoming.append(row)
             
-    # Today's Snapshot: Follow-ups due today (NY date) but not overdue
-    tz = get_user_tz()
-    today_ny = datetime.now(tz).date()
-    now_local = datetime.now(tz)
+    # Today's Snapshot: unified Activity Engine
+    #
+    # The Activity Engine owns actionable source aggregation, due
+    # classification, source identity, and de-duplication. The Dashboard
+    # consumes only overdue and today Activities through its compatibility
+    # adapter.
+    snapshot_now = datetime.now(get_user_tz())
 
-    snapshot_followups_today = []
-
-    for row in followup_rows:
-        due = normalize_followup_due(row.get("follow_up_due_at"))
-        if not due:
-            continue
-
-        try:
-            # Exclude overdue items so they cannot appear twice
-            if due >= now_local and due.date() == today_ny:
-                snapshot_followups_today.append(row)
-        except Exception:
-            pass
-            
-    def _clean_snippet(s, max_len=180):
-        s = (s or "").strip()
-        if not s:
-            return ""
-        s = " ".join(s.split())
-        return s[:max_len] + ("…" if len(s) > max_len else "")
-    
-    def _followup_snippet(r):
-        # Prefer the followup (child) engagement itself first
-        return (
-            _clean_snippet(r.get("outcome"))
-            or _clean_snippet(r.get("summary_clean"))
-            or _clean_snippet(r.get("notes"))
-            or _clean_snippet(r.get("engagement_type"))
-    
-            # Then parent engagement context (shell followups will usually land here)
-            or _clean_snippet(r.get("parent_outcome"))
-            or _clean_snippet(r.get("parent_summary_clean"))
-            or _clean_snippet(r.get("parent_notes"))
-            or _clean_snippet(r.get("parent_engagement_type"))
-    
-            # Fallback to last engagement if needed
-            or _clean_snippet(r.get("last_engagement_outcome"))
-            or _clean_snippet(r.get("last_engagement_summary"))
-            or _clean_snippet(r.get("last_engagement_type"))
-        )
-        
-    today_ny = datetime.now(get_user_tz()).date()
-    
-    def _overdue_days_from_due(due_dt):
-        due_dt = normalize_followup_due(due_dt)
-        if not due_dt:
-            return None
-        try:
-            due_ny_date = due_dt.date()
-            return max(0, (today_ny - due_ny_date).days)
-        except Exception:
-            return None
-    
-    # Enrich snapshot followups (overdue + today)
-    snapshot_followups_overdue_enriched = []
-    for r in (followups_overdue or []):
-        rr = dict(r)
-        rr["snap_status"] = "overdue"
-        rr["overdue_days"] = _overdue_days_from_due(rr.get("follow_up_due_at"))
-        rr["snippet"] = _followup_snippet(rr)
-        snapshot_followups_overdue_enriched.append(rr)
-    
-    snapshot_followups_today_enriched = []
-    for r in (snapshot_followups_today or []):
-        rr = dict(r)
-        rr["snap_status"] = "today"
-        rr["overdue_days"] = 0
-        rr["snippet"] = _followup_snippet(rr)
-        snapshot_followups_today_enriched.append(rr)
-    
-    snapshot_followups_overdue = snapshot_followups_overdue_enriched
-    snapshot_followups_today = snapshot_followups_today_enriched
-    
-    app.logger.info(
-        "snapshot followups overdue=%s today=%s ids_overdue=%s ids_today=%s",
-        len(snapshot_followups_overdue),
-        len(snapshot_followups_today),
-        [r.get("engagement_id") for r in snapshot_followups_overdue],
-        [r.get("engagement_id") for r in snapshot_followups_today],
+    snapshot_items_all = list_dashboard_snapshot_items(
+        conn,
+        current_user.id,
+        now=snapshot_now,
     )
 
-    # Today's Snapshot: Tasks (exact schema)
-    cur.execute(
-        """
-        SELECT
-          t.id AS task_id,
-          t.title,
-          t.status,
-          COALESCE(t.due_at, (t.due_date::timestamp AT TIME ZONE 'America/New_York')) AS due_ts,
-          t.due_at,
-          t.due_date,
-          t.snoozed_until,
-          t.contact_id,
-          t.description,
-          COALESCE(
-            NULLIF(TRIM(c.name), ''),
-            NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
-            '(Unnamed)'
-          ) AS contact_name
-        FROM tasks t
-        LEFT JOIN contacts c ON c.id = t.contact_id
-        WHERE t.user_id = %s
-          AND t.status NOT IN ('completed', 'canceled')
-          AND (
-            t.status <> 'snoozed'
-            OR t.snoozed_until IS NULL
-            OR t.snoozed_until <= NOW()
-          )
-          AND (t.due_at IS NOT NULL OR t.due_date IS NOT NULL)
-          AND DATE(timezone('America/New_York', COALESCE(t.due_at, t.due_date::timestamp))) < %s
-        ORDER BY due_ts ASC NULLS LAST
-        LIMIT 500
-        """,
-        (current_user.id, today_ny),
-    )
-    snapshot_tasks_overdue = cur.fetchall() or []
-
-    cur.execute(
-        """
-        SELECT
-          t.id AS task_id,
-          t.title,
-          t.status,
-          COALESCE(t.due_at, (t.due_date::timestamp AT TIME ZONE 'America/New_York')) AS due_ts,
-          t.due_at,
-          t.due_date,
-          t.snoozed_until,
-          t.contact_id,
-          t.description,
-          COALESCE(
-            NULLIF(TRIM(c.name), ''),
-            NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''),
-            '(Unnamed)'
-          ) AS contact_name
-        FROM tasks t
-        LEFT JOIN contacts c ON c.id = t.contact_id
-        WHERE t.user_id = %s
-          AND t.status NOT IN ('completed', 'canceled')
-          AND (
-            t.status <> 'snoozed'
-            OR t.snoozed_until IS NULL
-            OR t.snoozed_until <= NOW()
-          )
-          AND (t.due_at IS NOT NULL OR t.due_date IS NOT NULL)
-          AND DATE(timezone('America/New_York', COALESCE(t.due_at, t.due_date::timestamp))) = %s
-        ORDER BY due_ts ASC NULLS LAST
-        LIMIT 500
-        """,
-        (current_user.id, today_ny),
-    )
-    snapshot_tasks_today = cur.fetchall() or []
-    def _task_snippet(t):
-        # For now, use title as fallback snippet and keep it compact.
-        # If you later add t.description to the SELECT, use that first.
-        return _clean_snippet(t.get("description")) or _clean_snippet(t.get("title"))
-    
-    def _task_due_dt(t):
-        # Use due_ts which you already SELECT
-        return t.get("due_ts") or t.get("due_at")
-    
-    snapshot_tasks_overdue_enriched = []
-    for t in (snapshot_tasks_overdue or []):
-        tt = dict(t)
-        tt["snap_status"] = "overdue"
-        tt["overdue_days"] = _overdue_days_from_due(_task_due_dt(tt))
-        tt["snippet"] = _task_snippet(tt)
-        snapshot_tasks_overdue_enriched.append(tt)
-    
-    snapshot_tasks_today_enriched = []
-    for t in (snapshot_tasks_today or []):
-        tt = dict(t)
-        tt["snap_status"] = "today"
-        tt["overdue_days"] = 0
-        tt["snippet"] = _task_snippet(tt)
-        snapshot_tasks_today_enriched.append(tt)
-    
-    snapshot_tasks_overdue = snapshot_tasks_overdue_enriched
-    snapshot_tasks_today = snapshot_tasks_today_enriched
-
-    def _snap_due_dt(item):
-        d = item.get("follow_up_due_at") or item.get("due_ts") or item.get("due_at")
-        return d or datetime(1900, 1, 1, tzinfo=timezone.utc)
-    
-    snapshot_items_all = []
-    
-    for r in (snapshot_followups_overdue or []):
-        rr = dict(r)
-        rr["item_type"] = "followup"
-        snapshot_items_all.append(rr)
-    
-    for r in (snapshot_followups_today or []):
-        rr = dict(r)
-        rr["item_type"] = "followup"
-        snapshot_items_all.append(rr)
-    
-    for t in (snapshot_tasks_overdue or []):
-        tt = dict(t)
-        tt["item_type"] = "task"
-        snapshot_items_all.append(tt)
-    
-    for t in (snapshot_tasks_today or []):
-        tt = dict(t)
-        tt["item_type"] = "task"
-        snapshot_items_all.append(tt)
-
-    # Defensive de-dupe: never show the same Snapshot item twice
-    seen = set()
-    deduped = []
-    
-    for it in snapshot_items_all:
-        if it.get("item_type") == "followup":
-            k = ("followup", it.get("engagement_id"))
-        elif it.get("item_type") == "task":
-            k = ("task", it.get("task_id"))
-        else:
-            k = ("unknown", it.get("id"))
-    
-        if k in seen:
-            continue
-        seen.add(k)
-        deduped.append(it)
-    
-    snapshot_items_all = deduped
-    
-    snapshot_items_all.sort(key=_snap_due_dt)
-    
     # Page it
     slice_start = dash_offset
     slice_end = dash_offset + (DASH_PAGE_SIZE + 1)
+
     snapshot_page_rows = snapshot_items_all[slice_start:slice_end]
-    
+
     has_prev_snapshot = dash_page > 1
     has_more_snapshot = len(snapshot_page_rows) > DASH_PAGE_SIZE
     snapshot_items = snapshot_page_rows[:DASH_PAGE_SIZE]
@@ -5198,10 +4979,6 @@ def dashboard():
         active_page="dashboard",
         has_more_active=has_more_active,
         has_prev_active=has_prev_active,
-        snapshot_followups_overdue=snapshot_followups_overdue,
-        snapshot_followups_today=snapshot_followups_today,
-        snapshot_tasks_overdue=snapshot_tasks_overdue,
-        snapshot_tasks_today=snapshot_tasks_today,
         active_transactions=active_transactions,
         active_transactions_total=active_transactions_total,
         tx_status_label=tx_status_label,

@@ -266,9 +266,13 @@
                               </div>
                             </div>
               
-                            {% if item.get("due_ts") %}
+                            {% if item.get("due_at") %}
                               <div class="text-muted small mt-1">
-                                {{ item.get("due_ts")|fmt_dt }}
+                                {{ item.get("due_at")|fmt_dt }}
+                              </div>
+                            {% elif item.get("due_date") %}
+                              <div class="text-muted small mt-1">
+                                {{ item.get("due_date")|fmt_date }}
                               </div>
                             {% endif %}
               
@@ -284,6 +288,44 @@
                               <div class="text-muted small dash-clamp-2 mt-1">{{ item.snippet }}</div>
                             {% endif %}
               
+                          </a>
+                        {% elif item.item_type == "transaction_deadline" %}
+                          <a class="dash-snap-item text-decoration-none d-block"
+                             href="{{ url_for('edit_transaction', transaction_id=item['transaction_id']) }}">
+                            <div class="d-flex justify-content-between align-items-center">
+                              <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis">Deadline</span>
+                                {% if item.snap_status == "overdue" %}
+                                  <span class="badge bg-danger-subtle text-danger-emphasis">
+                                    Overdue{% if item.overdue_days is not none %} · {{ item.overdue_days }}d{% endif %}
+                                  </span>
+                                {% else %}
+                                  <span class="badge bg-primary-subtle text-primary-emphasis">Due today</span>
+                                {% endif %}
+                              </div>
+                            </div>
+
+                            {% if item.get("due_date") %}
+                              <div class="text-muted small mt-1">
+                                {{ item.get("due_date")|fmt_date }}
+                              </div>
+                            {% endif %}
+
+                            <div class="fw-semibold mt-1 text-dark">
+                              {{ item.title or "Transaction deadline" }}
+                            </div>
+
+                            {% if item.contact_name %}
+                              <div class="text-muted small mt-1">
+                                {{ item.contact_name }}
+                              </div>
+                            {% endif %}
+
+                            {% if item.snippet %}
+                              <div class="text-muted small dash-clamp-2 mt-1">
+                                {{ item.snippet }}
+                              </div>
+                            {% endif %}
                           </a>
                         {% endif %}
               
