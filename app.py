@@ -12742,6 +12742,16 @@ def account():
             license_number = (request.form.get("license_number") or "").strip()
             license_state = (request.form.get("license_state") or "").strip()
 
+            # Account preference only. Runtime timezone behavior is intentionally
+            # unchanged in this checkpoint.
+            timezone_name = (request.form.get("timezone_name") or "").strip()
+
+            try:
+                ZoneInfo(timezone_name)
+            except Exception:
+                flash("Please select a valid time zone.", "danger")
+                return redirect(url_for("account"))
+
             # Brokerage fields (match template field names)
             brokerage_name = (request.form.get("brokerage_name") or "").strip()
             address1 = (request.form.get("address1") or "").strip()
@@ -12765,7 +12775,8 @@ def account():
                         agent_phone = COALESCE(NULLIF(%s, ''), agent_phone),
                         agent_website = COALESCE(NULLIF(%s, ''), agent_website),
                         license_number = COALESCE(NULLIF(%s, ''), license_number),
-                        license_state = COALESCE(NULLIF(%s, ''), license_state)
+                        license_state = COALESCE(NULLIF(%s, ''), license_state),
+                        timezone_name = %s
                     WHERE id = %s
                     """,
                     (
@@ -12776,6 +12787,7 @@ def account():
                         agent_website,
                         license_number,
                         license_state,
+                        timezone_name,
                         current_user.id,
                     ),
                 )
@@ -12822,7 +12834,8 @@ def account():
         cur.execute(
             """
             SELECT id, email, first_name, last_name, title,
-                   agent_phone, agent_website, license_number, license_state
+                   agent_phone, agent_website, license_number, license_state,
+                   timezone_name
             FROM users
             WHERE id = %s;
             """,
@@ -12845,6 +12858,15 @@ def account():
             "account/profile.html",
             user=u,
             brokerage=b or {},
+            timezone_choices=[
+                ("America/New_York", "Eastern Time"),
+                ("America/Chicago", "Central Time"),
+                ("America/Denver", "Mountain Time"),
+                ("America/Phoenix", "Arizona Time"),
+                ("America/Los_Angeles", "Pacific Time"),
+                ("America/Anchorage", "Alaska Time"),
+                ("Pacific/Honolulu", "Hawaii Time"),
+            ],
             active_page=None
         )
 
