@@ -3,8 +3,8 @@
 **Last updated:** September 20, 2026
 **Current production version:** v1.10.10
 **Current branch:** main
-**Current checkpoint:** da509d1
-**Session mode:** Calendar Foundation Complete / Next Work Prioritization
+**Current checkpoint:** 3f09d45
+**Session mode:** Task Foundation Hardened / Tenant-Isolation Audit Next
 
 ## Current Architecture
 
@@ -274,17 +274,60 @@ A future voice client may use a selected call name such as `Ulysses` or `Penelop
 
 Document intake is an Assist capability, not a separate source of CRM truth. Documents may be interpreted by AI, but proposed data must be resolved to the correct authorized CRM entities and validated by Ulysses before persistence.
 
+## Task Foundation - ARCHITECTURE RESOLVED AND INTEGRITY HARDENED
+
+Completed September 20, 2026 through checkpoint `3f09d45`.
+
+Task is the canonical Ulysses work object. A Task may be associated with CRM context, but it does not require a Contact or any other parent record. Independent work such as `Send emails to commercial contacts`, `Send out mass mailer`, or `Start marketing campaign` uses the same Task model rather than a separate independent-task system.
+
+Current Task semantics:
+
+- A Task represents work the user needs to do.
+- Contact, Transaction, Engagement, and Professional associations are optional CRM context.
+- A Task with no association is valid.
+- Due date/time describes when the Task is due.
+- Completion/cancellation/snooze remain Task lifecycle behavior.
+- Reminder is reserved for alert/notification behavior around work and should not become a duplicate work object.
+- Activity Engine remains the normalized presentation layer for actionable CRM work.
+- Task Calendar eligibility remains unchanged by this checkpoint; Tasks are not currently exported to the Calendar Feed.
+
+Task association integrity is now enforced at the service boundary:
+
+- Every supplied Contact, Transaction, Engagement, or Professional association must belong to the exact Task owner `user_id`.
+- There is no administrator or cross-tenant bypass.
+- When a Contact is supplied with a Transaction or Engagement, the related record must also belong to that Contact.
+- A Transaction or Engagement may be associated without separately supplying a Contact when the authenticated user owns that record.
+- These rules apply to Task creation and Task updates so future Assist/actions cannot bypass tenant ownership by calling the Task service directly.
+
+Task due-time handling now follows the account-timezone contract:
+
+- Browser `datetime-local` values are interpreted as wall time in the authenticated user's account timezone.
+- Python receives timezone-aware datetimes.
+- Stored `timestamptz` values remain instants.
+- Existing timed Tasks are converted back to account-local wall time when rendered for editing.
+- Full-page and modal Task editing both preserve an existing `due_at` instead of clearing it when unrelated Task fields are edited.
+
+Validation at checkpoint:
+
+- 98 automated tests passing.
+- Task association regression coverage includes independent Tasks, Contact ownership, Transaction ownership/contact consistency, Engagement ownership/contact consistency, Professional ownership, and valid combined associations.
+- Timezone regression coverage includes blank values, account-local input interpretation, aware-instant conversion, account-local edit formatting, and legacy naive wall-time preservation.
+
+Implementation checkpoint:
+
+- `3f09d45` - Harden Task integrity and timezone handling
+
 ## Active Feature Backlog
 
 Captured September 20, 2026 from the current approved feature-request list. These items are approved for planning, but inclusion here does not mean that architecture, implementation order, or release scope has been finalized.
 
 ### Activity / Task / Reminder Foundation
 
-- Support independent real-estate Tasks that are not required to belong to a Contact, such as `Send emails to commercial contacts`, `Send out mass mailer`, or `Start marketing campaign`.
-- Determine whether the existing Task / Activity model can support both Contact-associated and independent CRM work without creating a duplicate task system.
-- Add Reminders for real-estate work. Reminders may be associated with Contacts when appropriate but must also support independent CRM work.
+- Independent real-estate Tasks are supported by the existing Task model; no separate independent-task system is needed.
+- Task / association / due-date semantics are resolved and the Task service boundary is tenant-hardened through checkpoint `3f09d45`.
+- Add Reminder behavior for real-estate work. Reminder behavior may apply to Contact-associated or independent Tasks but should not create a duplicate work object.
 - Future reminder delivery should consider integration with the user's external reminder/calendar environment while preserving Ulysses as the authoritative CRM context.
-- Before implementation, explicitly define the relationship among Activity, Task, Reminder, due date/time, completion, association, Calendar eligibility, and notification behavior.
+- Before Reminder implementation, define notification timing, recurrence/repeat behavior if needed, acknowledgement/dismissal behavior, and the relationship between reminders, Calendar eligibility, and future push notifications.
 
 ### Dashboard / Contact Workflow
 
@@ -322,7 +365,7 @@ Captured September 20, 2026 from the current approved feature-request list. Thes
 
 ### Backlog Planning Notes
 
-- Activity / Task / Reminder semantics should be reviewed first because they affect Calendar, Attention Engine, notifications, daily briefings, and Ulysses Assist.
+- Core Task semantics are resolved through checkpoint `3f09d45`; Reminder delivery semantics remain future work.
 - Perform the previously identified tenant-isolation audit before exposing broader CRM retrieval services to Ulysses Assist.
 - Showing / Feedback requires architecture review before implementation.
 - Calendar connection UX improvements remain banked for later; the current production Calendar Feed is functional and secure.
@@ -338,4 +381,8 @@ The intermittent stale `Please log in to access this page.` flash remains deferr
 
 No numbered Maintenance / Stabilization queue items remain.
 
-Before beginning the next implementation, review and prioritize the approved feature list. Ulysses Assist architecture is now directionally locked, but Assist implementation has not begun. Preserve the Calendar, tenant-isolation, timezone, entity-resolution, source-grounding, and validated-mutation contracts when designing future work.
+Task foundation architecture and integrity hardening completed September 20, 2026 through checkpoint `3f09d45`. Existing Tasks support both CRM-associated and independent work. Reminder remains future alert/notification behavior rather than a separate work-object model.
+
+Next priority before broader Ulysses Assist retrieval implementation: perform the previously identified tenant-isolation audit of older application/service paths, especially any legacy fallback or query path that could return CRM data without an exact `user_id` boundary.
+
+Ulysses Assist architecture remains directionally locked, but Assist implementation has not begun. Preserve the Calendar, Task, tenant-isolation, timezone, entity-resolution, source-grounding, and validated-mutation contracts when designing future work.
