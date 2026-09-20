@@ -4513,34 +4513,42 @@ def dashboard():
         )
         return cur.fetchone() is not None
 
-    # Detect multi-user columns (Render is missing contacts.user_id right now)
-    contacts_has_user = has_column("contacts", "user_id")
-    engagements_has_user = has_column("engagements", "user_id")
-    buyer_has_user = has_column("buyer_profiles", "user_id")
-    seller_has_user = has_column("seller_profiles", "user_id")
+    # Tenant isolation requires explicit ownership columns on tenant-owned
+    # root tables. Schema drift must fail closed rather than broaden queries.
+    required_tenant_columns = (
+        ("contacts", "user_id"),
+        ("engagements", "user_id"),
+    )
+    missing_tenant_columns = [
+        f"{table_name}.{column_name}"
+        for table_name, column_name in required_tenant_columns
+        if not has_column(table_name, column_name)
+    ]
+    if missing_tenant_columns:
+        conn.close()
+        raise RuntimeError(
+            "Dashboard tenant-isolation schema is incomplete: missing "
+            + ", ".join(missing_tenant_columns)
+        )
 
-    # Detect contact_state (older prod/local may not have it yet)
+    # contact_state is a compatibility/feature column, not a tenant boundary.
     contacts_has_state = has_column("contacts", "contact_state")
 
     # Total contacts count
-    if contacts_has_user:
-        cur.execute("SELECT COUNT(*) AS cnt FROM contacts WHERE user_id = %s", (current_user.id,))
-    else:
-        cur.execute("SELECT COUNT(*) AS cnt FROM contacts")
+    cur.execute(
+        "SELECT COUNT(*) AS cnt FROM contacts WHERE user_id = %s",
+        (current_user.id,),
+    )
     total_contacts = cur.fetchone()["cnt"]
 
-    # Build reusable WHERE fragments
-    contacts_scope_sql = "c.user_id = %s" if contacts_has_user else "TRUE"
-    engagements_scope_sql = "AND e.user_id = %s" if engagements_has_user else ""
-    buyer_scope_sql = "AND bp.user_id = %s" if buyer_has_user else ""
-    seller_scope_sql = "AND sp.user_id = %s" if seller_has_user else ""
+    # Tenant-owned root tables are always explicitly scoped.
+    # Buyer/seller profiles inherit ownership through their scoped contact.
+    contacts_scope_sql = "c.user_id = %s"
+    engagements_scope_sql = "AND e.user_id = %s"
     contacts_state_sql = "AND c.contact_state = 'active'" if contacts_has_state else ""
 
-    # Params helpers
-    contacts_scope_params = (current_user.id,) if contacts_has_user else tuple()
-    engagements_scope_params = (current_user.id,) if engagements_has_user else tuple()
-    buyer_scope_params = (current_user.id,) if buyer_has_user else tuple()
-    seller_scope_params = (current_user.id,) if seller_has_user else tuple()
+    contacts_scope_params = (current_user.id,)
+    engagements_scope_params = (current_user.id,)
 
     # Active contacts
     active_sql = f"""
@@ -4564,14 +4572,12 @@ def dashboard():
                 SELECT 1
                 FROM buyer_profiles bp
                 WHERE bp.contact_id = c.id
-                {buyer_scope_sql}
             ) AS has_buyer_profile,
 
             EXISTS (
                 SELECT 1
                 FROM seller_profiles sp
                 WHERE sp.contact_id = c.id
-                {seller_scope_sql}
             ) AS has_seller_profile
 
         FROM contacts c
@@ -4594,12 +4600,10 @@ def dashboard():
               OR EXISTS (
                   SELECT 1 FROM buyer_profiles bp
                   WHERE bp.contact_id = c.id
-                  {buyer_scope_sql}
               )
               OR EXISTS (
                   SELECT 1 FROM seller_profiles sp
                   WHERE sp.contact_id = c.id
-                  {seller_scope_sql}
               )
           )
 
@@ -4617,18 +4621,11 @@ def dashboard():
     active_params = []
     active_params += list(contacts_scope_params)
 
-    # buyer exists scopes (first)
-    active_params += list(buyer_scope_params)
-    # seller exists scopes (first)
-    active_params += list(seller_scope_params)
-
     # lateral engagement scope
     active_params += list(engagements_scope_params)
 
     # interval and later EXISTS scopes
     active_params += [interval_param]
-    active_params += list(buyer_scope_params)
-    active_params += list(seller_scope_params)
 
     active_params += [DASH_PAGE_SIZE + 1, dash_offset]
 
@@ -4763,7 +4760,7 @@ def dashboard():
             WHERE {contacts_scope_sql}
               AND c.archived_at IS NULL
               {contacts_state_sql}
-            {"AND e.user_id = %s" if engagements_has_user else ""}
+            AND e.user_id = %s
             ORDER BY
                 e.contact_id,
                 e.occurred_at DESC NULLS LAST,
@@ -4776,8 +4773,7 @@ def dashboard():
     """
     recent_params = []
     recent_params += list(contacts_scope_params)
-    if engagements_has_user:
-        recent_params += [current_user.id]
+    recent_params += [current_user.id]
 
     cur.execute(recent_sql, tuple(recent_params))
     recent_engagements = cur.fetchall() or []
