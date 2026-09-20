@@ -585,6 +585,7 @@ class User(UserMixin):
         self._is_active = row.get("is_active", True)
         self.ai_premium_enabled = bool(row.get("ai_premium_enabled", False))
         self.email_sync_enabled = bool(row.get("email_sync_enabled", False))  # NEW
+        self.timezone_name = row.get("timezone_name") or "America/New_York"
 
     def get_id(self):
         return str(self.id)
@@ -695,7 +696,8 @@ def load_user(user_id):
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT id, email, first_name, last_name, role, is_active, ai_premium_enabled, email_sync_enabled
+        SELECT id, email, first_name, last_name, role, is_active,
+               ai_premium_enabled, email_sync_enabled, timezone_name
         FROM users
         WHERE id = %s
         """,
