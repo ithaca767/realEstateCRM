@@ -99,6 +99,32 @@ class ActivityEngineTests(unittest.TestCase):
 
         self.assertTrue(result["is_upcoming"])
 
+    def test_timestamp_classification_uses_now_timezone_calendar_day(self):
+        pacific = ZoneInfo("America/Los_Angeles")
+        now = datetime(2026, 9, 19, 22, 30, tzinfo=pacific)
+
+        result = classify_due(
+            due_at=datetime(2026, 9, 20, 6, 0, tzinfo=timezone.utc),
+            now=now,
+        )
+
+        self.assertFalse(result["is_overdue"])
+        self.assertTrue(result["is_today"])
+        self.assertFalse(result["is_upcoming"])
+
+    def test_date_only_classification_uses_now_timezone_calendar_day(self):
+        pacific = ZoneInfo("America/Los_Angeles")
+        now = datetime(2026, 9, 19, 22, 30, tzinfo=pacific)
+
+        result = classify_due(
+            due_date=date(2026, 9, 19),
+            now=now,
+        )
+
+        self.assertFalse(result["is_overdue"])
+        self.assertTrue(result["is_today"])
+        self.assertFalse(result["is_upcoming"])
+
     def test_undated_activity_has_no_due_bucket(self):
         result = classify_due(now=self.now)
 
@@ -272,6 +298,7 @@ class TaskActivityDatabaseTests(unittest.TestCase):
     class FakeCursor:
         def __init__(self, rows):
             self.rows = rows
+            self.sql = None
             self.params = None
 
         def __enter__(self):
@@ -281,6 +308,7 @@ class TaskActivityDatabaseTests(unittest.TestCase):
             return False
 
         def execute(self, sql, params):
+            self.sql = sql
             self.params = params
 
         def fetchall(self):
@@ -390,6 +418,22 @@ class TaskActivityDatabaseTests(unittest.TestCase):
         self.assertEqual(
             conn.cursor_instance.params,
             (7, self.now),
+        )
+
+    def test_task_reader_sql_has_no_account_timezone_assumption(self):
+        from activity_engine import list_task_activities
+
+        conn = self.FakeConnection([])
+
+        list_task_activities(
+            conn,
+            7,
+            now=self.now,
+        )
+
+        self.assertNotIn(
+            "America/New_York",
+            conn.cursor_instance.sql,
         )
 
     def test_task_reader_rejects_missing_user(self):
@@ -538,6 +582,28 @@ class UnifiedActivityListTests(unittest.TestCase):
             key[0],
             datetime(2026, 9, 20, 0, 0, tzinfo=NY),
         )
+
+    def test_sort_key_uses_now_timezone_for_date_only_surrogate(self):
+        from activity_engine import _activity_sort_key
+
+        pacific = ZoneInfo("America/Los_Angeles")
+        now = datetime(2026, 9, 19, 22, 30, tzinfo=pacific)
+
+        activity = {
+            "activity_type": "task",
+            "source_id": 9,
+            "due_date": date(2026, 9, 20),
+            "due_at": None,
+        }
+
+        key = _activity_sort_key(activity, now=now)
+
+        self.assertEqual(
+            key[0],
+            datetime(2026, 9, 20, 0, 0, tzinfo=pacific),
+        )
+        self.assertEqual(activity["due_date"], date(2026, 9, 20))
+        self.assertIsNone(activity["due_at"])
 
     def test_timestamp_sorting_uses_new_york_instant(self):
         from activity_engine import _activity_sort_key
@@ -736,6 +802,44 @@ class DashboardActivityAdapterTests(unittest.TestCase):
         self.assertEqual(item["snap_status"], "overdue")
         self.assertEqual(item["overdue_days"], 1)
         self.assertEqual(item["snippet"], "Call Olivia")
+
+    def test_dashboard_overdue_days_uses_now_timezone_calendar_day(self):
+        from activity_engine import dashboard_snapshot_item
+
+        pacific = ZoneInfo("America/Los_Angeles")
+        now = datetime(2026, 9, 20, 0, 30, tzinfo=pacific)
+        due = datetime(2026, 9, 20, 6, 30, tzinfo=timezone.utc)
+
+        activity = {
+            "activity_key": "followup:99",
+            "activity_type": "followup",
+            "source_type": "followup",
+            "source_id": 99,
+            "title": "Follow up",
+            "description": "",
+            "contact_id": 10,
+            "contact_name": "Test Contact",
+            "transaction_id": None,
+            "due_date": None,
+            "due_at": due,
+            "status": "open",
+            "priority": None,
+            "is_overdue": True,
+            "is_today": False,
+            "is_upcoming": False,
+            "calendar_eligible": True,
+            "target_url": "/engagements/99/edit",
+        }
+
+        item = dashboard_snapshot_item(activity, now=now)
+
+        self.assertEqual(
+            due.astimezone(pacific),
+            datetime(2026, 9, 19, 23, 30, tzinfo=pacific),
+        )
+        self.assertEqual(item["snap_status"], "overdue")
+        self.assertEqual(item["overdue_days"], 1)
+        self.assertEqual(item["follow_up_due_at"], due)
 
     def test_date_only_task_stays_date_only_in_dashboard_adapter(self):
         from activity_engine import dashboard_snapshot_item

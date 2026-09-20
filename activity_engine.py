@@ -65,7 +65,8 @@ def classify_due(
     now: datetime,
 ) -> Dict[str, bool]:
     """
-    Classify an incomplete Activity relative to America/New_York.
+    Classify an incomplete Activity relative to the calendar timezone
+    carried by the aware ``now`` value.
 
     Timestamp semantics:
       - earlier than now -> overdue
@@ -73,13 +74,14 @@ def classify_due(
       - after today -> upcoming
 
     Date-only semantics:
-      - before today's NY date -> overdue
-      - today's NY date -> today
-      - after today's NY date -> upcoming
+      - before today's local date -> overdue
+      - today's local date -> today
+      - after today's local date -> upcoming
 
     Exactly one of due_at or due_date may be supplied.
     """
-    now_ny = to_new_york(now)
+    now_local = require_aware_datetime(now)
+    local_tz = now_local.tzinfo
 
     if due_at is not None and due_date is not None:
         raise ValueError("provide due_at or due_date, not both")
@@ -92,16 +94,16 @@ def classify_due(
         }
 
     if due_at is not None:
-        due_ny = to_new_york(due_at)
+        due_local = require_aware_datetime(due_at).astimezone(local_tz)
 
-        if due_ny < now_ny:
+        if due_local < now_local:
             return {
                 "is_overdue": True,
                 "is_today": False,
                 "is_upcoming": False,
             }
 
-        if due_ny.date() == now_ny.date():
+        if due_local.date() == now_local.date():
             return {
                 "is_overdue": False,
                 "is_today": True,
@@ -117,16 +119,16 @@ def classify_due(
     if not isinstance(due_date, date) or isinstance(due_date, datetime):
         raise TypeError("due_date must be a date")
 
-    today_ny = now_ny.date()
+    today_local = now_local.date()
 
-    if due_date < today_ny:
+    if due_date < today_local:
         return {
             "is_overdue": True,
             "is_today": False,
             "is_upcoming": False,
         }
 
-    if due_date == today_ny:
+    if due_date == today_local:
         return {
             "is_overdue": False,
             "is_today": True,
@@ -360,10 +362,8 @@ def list_task_activities(conn, user_id: int, *, now: datetime):
               )
               AND (t.due_at IS NOT NULL OR t.due_date IS NOT NULL)
             ORDER BY
-                COALESCE(
-                    t.due_at,
-                    t.due_date::timestamp AT TIME ZONE 'America/New_York'
-                ) ASC,
+                t.due_at ASC NULLS LAST,
+                t.due_date ASC NULLS LAST,
                 t.id ASC
             """,
             (user_id, now),
@@ -488,19 +488,31 @@ def list_transaction_deadline_activities(conn, user_id: int, *, now: datetime):
     return activities
 
 
-def _activity_sort_key(activity: Dict[str, Any]):
+def _activity_sort_key(
+    activity: Dict[str, Any],
+    *,
+    now: Optional[datetime] = None,
+):
     """
     Return a deterministic sort key without changing Activity due semantics.
 
-    Timestamp Activities sort by their New York instant.
-    Date-only Activities sort at the beginning of their New York calendar day
+    When ``now`` is supplied, its timezone defines local calendar ordering.
+    Direct calls without ``now`` preserve the historical New York behavior.
+
+    Timestamp Activities sort by their instant expressed in the local timezone.
+    Date-only Activities sort at the beginning of their local calendar day
     for ordering purposes only. Their stored due_date remains date-only.
     """
+    if now is None:
+        local_tz = NY
+    else:
+        local_tz = require_aware_datetime(now).tzinfo
+
     due_at = activity.get("due_at")
     due_date = activity.get("due_date")
 
     if due_at is not None:
-        sortable_due = to_new_york(due_at)
+        sortable_due = require_aware_datetime(due_at).astimezone(local_tz)
     elif due_date is not None:
         if not isinstance(due_date, date) or isinstance(due_date, datetime):
             raise TypeError("Activity due_date must be a date")
@@ -511,10 +523,10 @@ def _activity_sort_key(activity: Dict[str, Any]):
             due_date.day,
             0,
             0,
-            tzinfo=NY,
+            tzinfo=local_tz,
         )
     else:
-        sortable_due = datetime.max.replace(tzinfo=NY)
+        sortable_due = datetime.max.replace(tzinfo=local_tz)
 
     return (
         sortable_due,
@@ -577,7 +589,7 @@ def list_activities(conn, user_id: int, *, now: datetime):
 
     return sorted(
         deduped.values(),
-        key=_activity_sort_key,
+        key=lambda activity: _activity_sort_key(activity, now=now),
     )
 
 
@@ -616,23 +628,22 @@ def dashboard_snapshot_item(activity: Dict[str, Any], *, now: datetime):
     This compatibility layer lets the Dashboard move to Activity Engine data
     without requiring an unrelated visual redesign.
     """
-    now_ny = to_new_york(now)
+    now_local = require_aware_datetime(now)
+    local_tz = now_local.tzinfo
 
     due_at = activity.get("due_at")
     due_date = activity.get("due_date")
 
     if due_at is not None:
-        due_ny = to_new_york(due_at)
-        due_day = due_ny.date()
+        due_local = require_aware_datetime(due_at).astimezone(local_tz)
+        due_day = due_local.date()
     elif due_date is not None:
-        due_ny = None
         due_day = due_date
     else:
-        due_ny = None
         due_day = None
 
     if activity.get("is_overdue") and due_day is not None:
-        overdue_days = max(0, (now_ny.date() - due_day).days)
+        overdue_days = max(0, (now_local.date() - due_day).days)
         snap_status = "overdue"
     else:
         overdue_days = 0
