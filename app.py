@@ -8528,6 +8528,16 @@ def add_interaction(contact_id):
 
     conn = get_db()
     cur = conn.cursor()
+
+    # Tenant boundary: the parent contact must belong to the current user.
+    cur.execute(
+        "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+        (contact_id, current_user.id),
+    )
+    if not cur.fetchone():
+        conn.close()
+        return "Contact not found", 404
+
     cur.execute(
         """
         INSERT INTO interactions (user_id, contact_id, kind, happened_at, time_of_day, notes)
@@ -8553,67 +8563,19 @@ def delete_interaction(interaction_id):
     row = cur.fetchone()
     if not row:
         conn.close()
-        return redirect(url_for("contacts"))
+        return "Interaction not found", 404
 
     contact_id = row["contact_id"]
 
-    # Delete the interaction
-    cur.execute("DELETE FROM interactions WHERE id = %s", (interaction_id,))
+    # Delete only within the current user's tenant boundary.
+    cur.execute(
+        "DELETE FROM interactions WHERE id = %s AND user_id = %s",
+        (interaction_id, current_user.id),
+    )
     conn.commit()
     conn.close()
 
     # Go back to that contact's edit page
-    return redirect(url_for("edit_contact", contact_id=contact_id))
-
-@app.route("/add_related/<int:contact_id>", methods=["POST"])
-@login_required
-def add_related(contact_id):
-    related_name = (request.form.get("related_name") or "").strip()
-    relationship = (request.form.get("relationship") or "").strip()
-    email = (request.form.get("related_email") or "").strip()
-    phone = normalize_phone(request.form.get("phone") or request.form.get("related_phone"))
-    notes = (request.form.get("related_notes") or "").strip()
-
-    if not related_name:
-        return redirect(url_for("edit_contact", contact_id=contact_id))
-
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO related_contacts (contact_id, related_name, relationship, email, phone, notes)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """,
-        (contact_id, related_name, relationship, email, phone, notes),
-    )
-    conn.commit()
-    conn.close()
-    return redirect(url_for("edit_contact", contact_id=contact_id))
-
-
-@app.route("/delete_related/<int:related_id>")
-@login_required
-def delete_related(related_id):
-    conn = get_db()
-    cur = conn.cursor()
-
-    # Find parent contact
-    cur.execute(
-        "SELECT contact_id FROM related_contacts WHERE id = %s",
-        (related_id,),
-    )
-    row = cur.fetchone()
-    if not row:
-        conn.close()
-        return redirect(url_for("contacts"))
-
-    contact_id = row["contact_id"]
-
-    # Delete associated-contact row
-    cur.execute("DELETE FROM related_contacts WHERE id = %s", (related_id,))
-    conn.commit()
-    conn.close()
-
     return redirect(url_for("edit_contact", contact_id=contact_id))
 
 @app.route("/buyer/<int:contact_id>", methods=["GET", "POST"])
