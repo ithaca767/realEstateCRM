@@ -274,6 +274,60 @@ A future voice client may use a selected call name such as `Ulysses` or `Penelop
 
 Document intake is an Assist capability, not a separate source of CRM truth. Documents may be interpreted by AI, but proposed data must be resolved to the correct authorized CRM entities and validated by Ulysses before persistence.
 
+## Active Feature Backlog
+
+Captured September 20, 2026 from the current approved feature-request list. These items are approved for planning, but inclusion here does not mean that architecture, implementation order, or release scope has been finalized.
+
+### Activity / Task / Reminder Foundation
+
+- Support independent real-estate Tasks that are not required to belong to a Contact, such as `Send emails to commercial contacts`, `Send out mass mailer`, or `Start marketing campaign`.
+- Determine whether the existing Task / Activity model can support both Contact-associated and independent CRM work without creating a duplicate task system.
+- Add Reminders for real-estate work. Reminders may be associated with Contacts when appropriate but must also support independent CRM work.
+- Future reminder delivery should consider integration with the user's external reminder/calendar environment while preserving Ulysses as the authoritative CRM context.
+- Before implementation, explicitly define the relationship among Activity, Task, Reminder, due date/time, completion, association, Calendar eligibility, and notification behavior.
+
+### Dashboard / Contact Workflow
+
+- Set apart `Active` clients on the Dashboard, representing clients with signed contracts.
+- Add an `Add Contact` action to the Dashboard Active Contacts card.
+- Consider isolating imported Contacts in a separate view/tab until they are activated or reactivated.
+- Add search capability for Professionals.
+
+### Buyer / Seller Data
+
+- Add square footage, bedrooms, and bathrooms to Buyer and Seller sheets/profiles, including minimum requirements where applicable.
+- Add per-square-foot pricing support for commercial leases.
+
+### Transactions / Listings / Offers
+
+- Add a Notes field to Transactions.
+- Add an Agent field to Transactions.
+- Design Listing and Offer status handling as a dedicated branch before implementation.
+
+### Showings / Feedback
+
+- Add showing interactions and agent feedback for Sellers.
+- Before implementation, evaluate a generalized Showing model that can support both Buyer and Seller workflows rather than creating separate showing systems.
+- A Showing may become relevant to an Offer or Transaction, but an Offer remains a distinct business object.
+
+### Reporting / Assist
+
+- Add a daily interactions report or summary.
+- Evaluate the daily summary as an Assist / Activity Engine capability so conversational briefings and traditional presentation do not develop conflicting interpretations of CRM activity.
+
+### Checklist Polish
+
+- Optional future polish for Transaction and Checklist tabs: subtle `Changes save automatically` text or a disabled `Auto-saved` indicator.
+- This is not required for current functionality and should not displace higher-value work.
+
+### Backlog Planning Notes
+
+- Activity / Task / Reminder semantics should be reviewed first because they affect Calendar, Attention Engine, notifications, daily briefings, and Ulysses Assist.
+- Perform the previously identified tenant-isolation audit before exposing broader CRM retrieval services to Ulysses Assist.
+- Showing / Feedback requires architecture review before implementation.
+- Calendar connection UX improvements remain banked for later; the current production Calendar Feed is functional and secure.
+- Ulysses Assist remains architecturally approved but implementation has not begun.
+
 ## RESUME HERE
 
 Maintenance / Stabilization queue completed September 18, 2026.
