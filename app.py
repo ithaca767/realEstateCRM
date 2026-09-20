@@ -55,8 +55,17 @@ from services.integrations.activepipe import (
 NY = ZoneInfo("America/New_York")
 
 def get_user_tz():
-    # Phase 8: single timezone system-wide
-    return NY
+    # Account-specific display/calendar timezone.
+    # Outside an authenticated request, preserve the historical New York default.
+    if not has_request_context() or not current_user.is_authenticated:
+        return NY
+
+    timezone_name = getattr(current_user, "timezone_name", None) or "America/New_York"
+
+    try:
+        return ZoneInfo(timezone_name)
+    except Exception:
+        return NY
 
 def normalize_utc_instant(dt):
     if not dt:
@@ -90,6 +99,7 @@ from flask import (
     session,
     flash,
     abort,
+    has_request_context,
 )
 
 from flask_login import (

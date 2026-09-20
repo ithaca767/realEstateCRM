@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -21,11 +22,82 @@ class AppTimezoneRegressionTests(unittest.TestCase):
     permission to change timestamp storage or date-only semantics.
     """
 
-    def test_get_user_tz_is_new_york(self):
+    def test_get_user_tz_defaults_to_new_york_without_request(self):
         tz = get_user_tz()
 
         self.assertEqual(tz.key, "America/New_York")
         self.assertEqual(tz, NY)
+
+    def test_get_user_tz_uses_authenticated_user_preference(self):
+        user = type(
+            "TimezoneUser",
+            (),
+            {
+                "is_authenticated": True,
+                "timezone_name": "America/Los_Angeles",
+            },
+        )()
+
+        with app.test_request_context("/"):
+            with patch("app.current_user", user):
+                tz = get_user_tz()
+
+        self.assertEqual(tz.key, "America/Los_Angeles")
+
+    def test_get_user_tz_falls_back_for_missing_user_preference(self):
+        user = type(
+            "TimezoneUser",
+            (),
+            {
+                "is_authenticated": True,
+                "timezone_name": None,
+            },
+        )()
+
+        with app.test_request_context("/"):
+            with patch("app.current_user", user):
+                tz = get_user_tz()
+
+        self.assertEqual(tz.key, "America/New_York")
+
+    def test_get_user_tz_falls_back_for_invalid_user_preference(self):
+        user = type(
+            "TimezoneUser",
+            (),
+            {
+                "is_authenticated": True,
+                "timezone_name": "Not/A_Timezone",
+            },
+        )()
+
+        with app.test_request_context("/"):
+            with patch("app.current_user", user):
+                tz = get_user_tz()
+
+        self.assertEqual(tz.key, "America/New_York")
+
+    def test_utc_instant_uses_authenticated_user_preference(self):
+        user = type(
+            "TimezoneUser",
+            (),
+            {
+                "is_authenticated": True,
+                "timezone_name": "America/Los_Angeles",
+            },
+        )()
+        value = datetime(2026, 9, 20, 18, 0, tzinfo=timezone.utc)
+
+        with app.test_request_context("/"):
+            with patch("app.current_user", user):
+                result = normalize_utc_instant(value)
+
+        self.assertEqual(result.tzinfo.key, "America/Los_Angeles")
+        self.assertEqual(result.hour, 11)
+        self.assertEqual(result.minute, 0)
+        self.assertEqual(
+            result.astimezone(timezone.utc),
+            value,
+        )
 
     def test_utc_instant_converts_to_edt(self):
         value = datetime(2026, 9, 20, 18, 0, tzinfo=timezone.utc)
