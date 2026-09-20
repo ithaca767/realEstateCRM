@@ -486,3 +486,96 @@ def list_transaction_deadline_activities(conn, user_id: int, *, now: datetime):
         )
 
     return activities
+
+
+def _activity_sort_key(activity: Dict[str, Any]):
+    """
+    Return a deterministic sort key without changing Activity due semantics.
+
+    Timestamp Activities sort by their New York instant.
+    Date-only Activities sort at the beginning of their New York calendar day
+    for ordering purposes only. Their stored due_date remains date-only.
+    """
+    due_at = activity.get("due_at")
+    due_date = activity.get("due_date")
+
+    if due_at is not None:
+        sortable_due = to_new_york(due_at)
+    elif due_date is not None:
+        if not isinstance(due_date, date) or isinstance(due_date, datetime):
+            raise TypeError("Activity due_date must be a date")
+
+        sortable_due = datetime(
+            due_date.year,
+            due_date.month,
+            due_date.day,
+            0,
+            0,
+            tzinfo=NY,
+        )
+    else:
+        sortable_due = datetime.max.replace(tzinfo=NY)
+
+    return (
+        sortable_due,
+        activity.get("activity_type") or "",
+        activity.get("source_id") or 0,
+    )
+
+
+def list_activities(conn, user_id: int, *, now: datetime):
+    """
+    Return the unified Ulysses Activity List for one user.
+
+    V1 sources:
+      - engagement Follow-ups
+      - Tasks
+      - Transaction Deadlines
+
+    Source records remain authoritative. Results are normalized, de-duplicated
+    by stable source identity, and sorted deterministically.
+
+    Read-only. No database writes.
+    """
+    if not user_id:
+        raise ValueError("user_id is required")
+
+    now = require_aware_datetime(now)
+
+    combined = []
+
+    combined.extend(
+        list_followup_activities(
+            conn,
+            user_id,
+            now=now,
+        )
+    )
+
+    combined.extend(
+        list_task_activities(
+            conn,
+            user_id,
+            now=now,
+        )
+    )
+
+    combined.extend(
+        list_transaction_deadline_activities(
+            conn,
+            user_id,
+            now=now,
+        )
+    )
+
+    deduped = {}
+    for activity in combined:
+        key = activity["activity_key"]
+
+        if key not in deduped:
+            deduped[key] = activity
+
+    return sorted(
+        deduped.values(),
+        key=_activity_sort_key,
+    )

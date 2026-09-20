@@ -509,3 +509,146 @@ class TransactionDeadlineActivityDatabaseTests(unittest.TestCase):
                 0,
                 now=self.now,
             )
+
+
+class UnifiedActivityListTests(unittest.TestCase):
+    def setUp(self):
+        self.now = datetime(2026, 9, 20, 14, 0, tzinfo=NY)
+
+    def test_sort_key_does_not_change_date_only_activity(self):
+        from activity_engine import _activity_sort_key
+
+        activity = {
+            "activity_type": "task",
+            "source_id": 1,
+            "due_date": date(2026, 9, 20),
+            "due_at": None,
+        }
+
+        original_due_date = activity["due_date"]
+
+        key = _activity_sort_key(activity)
+
+        self.assertEqual(
+            activity["due_date"],
+            original_due_date,
+        )
+        self.assertIsNone(activity["due_at"])
+        self.assertEqual(
+            key[0],
+            datetime(2026, 9, 20, 0, 0, tzinfo=NY),
+        )
+
+    def test_timestamp_sorting_uses_new_york_instant(self):
+        from activity_engine import _activity_sort_key
+
+        activity = {
+            "activity_type": "followup",
+            "source_id": 2,
+            "due_date": None,
+            "due_at": datetime(
+                2026, 9, 20, 18, 30, tzinfo=timezone.utc
+            ),
+        }
+
+        key = _activity_sort_key(activity)
+
+        self.assertEqual(
+            key[0],
+            datetime(2026, 9, 20, 14, 30, tzinfo=NY),
+        )
+
+    def test_unified_list_combines_deduplicates_and_sorts(self):
+        from unittest.mock import patch
+
+        from activity_engine import list_activities
+
+        followups = [
+            {
+                "activity_key": "followup:5",
+                "activity_type": "followup",
+                "source_id": 5,
+                "due_date": None,
+                "due_at": datetime(
+                    2026, 9, 21, 13, 0, tzinfo=timezone.utc
+                ),
+            }
+        ]
+
+        tasks = [
+            {
+                "activity_key": "task:2",
+                "activity_type": "task",
+                "source_id": 2,
+                "due_date": date(2026, 9, 20),
+                "due_at": None,
+            },
+            {
+                "activity_key": "task:2",
+                "activity_type": "task",
+                "source_id": 2,
+                "due_date": date(2026, 9, 20),
+                "due_at": None,
+            },
+        ]
+
+        deadlines = [
+            {
+                "activity_key": "transaction_deadline:3",
+                "activity_type": "transaction_deadline",
+                "source_id": 3,
+                "due_date": date(2026, 9, 22),
+                "due_at": None,
+            }
+        ]
+
+        with (
+            patch(
+                "activity_engine.list_followup_activities",
+                return_value=followups,
+            ),
+            patch(
+                "activity_engine.list_task_activities",
+                return_value=tasks,
+            ),
+            patch(
+                "activity_engine.list_transaction_deadline_activities",
+                return_value=deadlines,
+            ),
+        ):
+            activities = list_activities(
+                object(),
+                7,
+                now=self.now,
+            )
+
+        self.assertEqual(
+            [a["activity_key"] for a in activities],
+            [
+                "task:2",
+                "followup:5",
+                "transaction_deadline:3",
+            ],
+        )
+
+        self.assertEqual(len(activities), 3)
+
+    def test_unified_list_rejects_missing_user(self):
+        from activity_engine import list_activities
+
+        with self.assertRaises(ValueError):
+            list_activities(
+                object(),
+                0,
+                now=self.now,
+            )
+
+    def test_unified_list_rejects_naive_now(self):
+        from activity_engine import list_activities
+
+        with self.assertRaises(ValueError):
+            list_activities(
+                object(),
+                7,
+                now=datetime(2026, 9, 20, 14, 0),
+            )
