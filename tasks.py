@@ -94,6 +94,78 @@ def get_task(cur, user_id: int, task_id: int) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+def _validate_task_associations(cur, user_id: int, data: Dict[str, Any]) -> None:
+    """
+    Validate optional Task associations at the service boundary.
+
+    Every supplied association must belong to the Task owner. When a Contact
+    is supplied alongside a Transaction or Engagement, that related record
+    must also belong to the same Contact.
+
+    Tasks with no associations remain valid.
+    """
+    contact_id = data.get("contact_id")
+    transaction_id = data.get("transaction_id")
+    engagement_id = data.get("engagement_id")
+    professional_id = data.get("professional_id")
+
+    if contact_id:
+        cur.execute(
+            "SELECT 1 FROM contacts WHERE id = %s AND user_id = %s",
+            (contact_id, user_id),
+        )
+        if not cur.fetchone():
+            raise ValueError("Invalid contact association")
+
+    if transaction_id:
+        if contact_id:
+            cur.execute(
+                """
+                SELECT 1
+                FROM transactions
+                WHERE id = %s
+                  AND user_id = %s
+                  AND contact_id = %s
+                """,
+                (transaction_id, user_id, contact_id),
+            )
+        else:
+            cur.execute(
+                "SELECT 1 FROM transactions WHERE id = %s AND user_id = %s",
+                (transaction_id, user_id),
+            )
+        if not cur.fetchone():
+            raise ValueError("Invalid transaction association")
+
+    if engagement_id:
+        if contact_id:
+            cur.execute(
+                """
+                SELECT 1
+                FROM engagements
+                WHERE id = %s
+                  AND user_id = %s
+                  AND contact_id = %s
+                """,
+                (engagement_id, user_id, contact_id),
+            )
+        else:
+            cur.execute(
+                "SELECT 1 FROM engagements WHERE id = %s AND user_id = %s",
+                (engagement_id, user_id),
+            )
+        if not cur.fetchone():
+            raise ValueError("Invalid engagement association")
+
+    if professional_id:
+        cur.execute(
+            "SELECT 1 FROM professionals WHERE id = %s AND user_id = %s",
+            (professional_id, user_id),
+        )
+        if not cur.fetchone():
+            raise ValueError("Invalid professional association")
+
+
 def create_task(cur, user_id: int, data: Dict[str, Any]) -> int:
     title = (data.get("title") or "").strip()
     if not title:
@@ -102,6 +174,8 @@ def create_task(cur, user_id: int, data: Dict[str, Any]) -> int:
     status = data.get("status") or "open"
     if status not in TASK_STATUSES:
         raise ValueError("Invalid status")
+
+    _validate_task_associations(cur, user_id, data)
 
     cur.execute(
         """
@@ -146,6 +220,8 @@ def update_task(cur, user_id: int, task_id: int, data: Dict[str, Any]) -> None:
     
     if status == "snoozed":
         raise ValueError("Use the Snooze action to snooze a task.")
+
+    _validate_task_associations(cur, user_id, data)
 
     # Only the dedicated snooze action should maintain snoozed_until
     snoozed_until = data.get("snoozed_until")

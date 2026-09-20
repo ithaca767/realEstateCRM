@@ -82,6 +82,41 @@ def normalize_utc_instant(dt):
 
     return dt.astimezone(get_user_tz())
 
+def format_local_datetime_input(value):
+    """
+    Format a datetime for an HTML datetime-local input in the current user's
+    account timezone.
+
+    Aware datetimes are converted as instants. Naive datetimes preserve
+    existing wall-time semantics.
+    """
+    if not value:
+        return ""
+
+    if value.tzinfo is not None:
+        value = value.astimezone(get_user_tz())
+
+    return value.strftime("%Y-%m-%dT%H:%M")
+
+
+def parse_local_datetime_input(value):
+    """
+    Parse an HTML datetime-local value as wall time in the current user's
+    account timezone.
+
+    Returns an aware datetime, or None for a blank value.
+    """
+    raw = (value or "").strip()
+    if not raw:
+        return None
+
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=get_user_tz())
+
+    return parsed.astimezone(get_user_tz())
+
+
 def normalize_followup_due(due_dt):
     if not due_dt:
         return None
@@ -7771,7 +7806,7 @@ def tasks_new():
             "engagement_id": request.form.get("engagement_id", type=int),
             "professional_id": request.form.get("professional_id", type=int),
             "due_date": (request.form.get("due_date") or "").strip() or None,
-            "due_at": (request.form.get("due_at") or "").strip() or None,
+            "due_at": parse_local_datetime_input(request.form.get("due_at")),
         }
 
         # Guardrails
@@ -8131,7 +8166,7 @@ def tasks_edit(task_id):
                 "engagement_id": form.get("engagement_id") or None,
                 "professional_id": form.get("professional_id") or None,
                 "due_date": form.get("due_date") or None,
-                "due_at": form.get("due_at") or None,
+                "due_at": parse_local_datetime_input(form.get("due_at")),
             }
 
             try:

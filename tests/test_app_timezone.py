@@ -167,6 +167,95 @@ class AppTimezoneRegressionTests(unittest.TestCase):
         self.assertNotIsInstance(value, datetime)
         self.assertEqual(value.isoformat(), "2026-09-20")
 
+class LocalDatetimeOutputTests(unittest.TestCase):
+    def test_blank_datetime_formats_blank(self):
+        from app import format_local_datetime_input
+
+        self.assertEqual(format_local_datetime_input(None), "")
+
+    def test_aware_datetime_formats_in_authenticated_user_timezone(self):
+        from app import format_local_datetime_input
+
+        user = type(
+            "TimezoneUser",
+            (),
+            {
+                "is_authenticated": True,
+                "timezone_name": "America/New_York",
+            },
+        )()
+
+        value = datetime(2026, 9, 22, 14, 0, tzinfo=timezone.utc)
+
+        with app.test_request_context("/"):
+            with patch("app.current_user", user):
+                result = format_local_datetime_input(value)
+
+        self.assertEqual(result, "2026-09-22T10:00")
+
+    def test_naive_datetime_preserves_wall_time(self):
+        from app import format_local_datetime_input
+
+        value = datetime(2026, 9, 22, 10, 0)
+
+        with app.app_context():
+            result = format_local_datetime_input(value)
+
+        self.assertEqual(result, "2026-09-22T10:00")
+
+
+class LocalDatetimeInputTests(unittest.TestCase):
+    def test_blank_local_datetime_returns_none(self):
+        from app import parse_local_datetime_input
+
+        self.assertIsNone(parse_local_datetime_input(""))
+        self.assertIsNone(parse_local_datetime_input(None))
+
+    def test_local_datetime_uses_authenticated_user_timezone(self):
+        from app import parse_local_datetime_input
+
+        user = type(
+            "TimezoneUser",
+            (),
+            {
+                "is_authenticated": True,
+                "timezone_name": "America/Los_Angeles",
+            },
+        )()
+
+        with app.test_request_context("/"):
+            with patch("app.current_user", user):
+                parsed = parse_local_datetime_input("2026-09-20T10:30")
+
+        self.assertEqual(parsed.year, 2026)
+        self.assertEqual(parsed.month, 9)
+        self.assertEqual(parsed.day, 20)
+        self.assertEqual(parsed.hour, 10)
+        self.assertEqual(parsed.minute, 30)
+        self.assertEqual(parsed.tzinfo.key, "America/Los_Angeles")
+
+    def test_aware_datetime_is_converted_not_reinterpreted(self):
+        from app import parse_local_datetime_input
+
+        user = type(
+            "TimezoneUser",
+            (),
+            {
+                "is_authenticated": True,
+                "timezone_name": "America/New_York",
+            },
+        )()
+
+        with app.test_request_context("/"):
+            with patch("app.current_user", user):
+                parsed = parse_local_datetime_input(
+                    "2026-09-20T14:00:00+00:00"
+                )
+
+        self.assertEqual(parsed.hour, 10)
+        self.assertEqual(parsed.minute, 0)
+        self.assertEqual(parsed.tzinfo.key, "America/New_York")
+
 
 if __name__ == "__main__":
     unittest.main()

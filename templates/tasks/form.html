@@ -73,8 +73,8 @@
 
         <div class="col-md-6">
           <label class="form-label">Due Time (optional)</label>
-          <input type="datetime-local" name="due_at" class="form-control" value="">
-          <div class="form-text">We will improve prefill formatting after the first working pass.</div>
+          <input type="datetime-local" name="due_at" class="form-control" value="{{ format_local_datetime_input(task.due_at) if task and task.due_at else '' }}">
+          <div class="form-text">Uses your account timezone.</div>
         </div>
 
         <div class="col-12">
