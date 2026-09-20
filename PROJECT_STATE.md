@@ -1,10 +1,10 @@
 # Ulysses CRM - Project State
 
-**Last updated:** September 18, 2026
+**Last updated:** September 20, 2026
 **Current production version:** v1.10.10
 **Current branch:** main
-**Current checkpoint:** 83f401e
-**Session mode:** Maintenance / Stabilization
+**Current checkpoint:** 0f67799
+**Session mode:** Calendar Foundation Complete / Next Work Prioritization
 
 ## Current Architecture
 
@@ -17,6 +17,10 @@ Primary domain modules currently include:
 - `attention.py`
 - `push_subscriptions.py`
 - `push_delivery.py`
+- `activity_engine.py`
+- `calendar_activity.py`
+- `calendar_feed.py`
+- `calendar_ics.py`
 
 Application version is maintained in `version.py`.
 
@@ -47,9 +51,11 @@ Ulysses uses:
 
 - PostgreSQL `TIMESTAMPTZ` for scheduling-critical instants.
 - Timezone-aware Python datetimes.
-- `America/New_York` as the application/user display timezone.
-- Browser `datetime-local` values as New York wall time before conversion to UTC.
-- UTC instants converted to New York time before display or date-based grouping.
+- The authenticated account's configured timezone for runtime display, scheduling, and calendar presentation.
+- `America/New_York` as the current/default account timezone when no different valid account timezone is configured.
+- Browser `datetime-local` values as account-local wall time before conversion to UTC.
+- UTC instants converted to the account timezone before display or date-based grouping.
+- Date-only values remain true dates and must not be converted into artificial timed instants.
 
 Do not introduce naive datetime handling into scheduling-critical code.
 
@@ -169,24 +175,93 @@ Completed, deployed, and production validated September 18, 2026.
 - No authentication change was made because the issue was not reproducible on refresh and existing login protection appeared to be functioning normally.
 - Investigate only when the behavior can be reproduced reliably.
 
+## Calendar Foundation - COMPLETE LOCALLY
+
+Completed September 20, 2026 through checkpoint `0f67799`.
+
+The legacy direct Follow-up ICS implementation has been replaced by the shared Calendar architecture:
+
+`Activity Engine -> Calendar Integration Layer / Adapter -> ICS serializer -> /followups.ics`
+
+Current Calendar rules:
+
+- `/followups.ics` is one consumer of Ulysses Calendar services, not the Calendar architecture itself.
+- Calendar retrieval is tenant-isolated by exact `user_id`; there is no admin bypass.
+- External calendar subscriptions use per-user credentials. The credential resolves exactly one owning user.
+- Raw calendar credentials are returned only when generated and are never stored.
+- Regenerating a Calendar Feed revokes the prior active credential.
+- Calendar Feed management is available at `More > Calendar Feed`.
+- Only `calendar_eligible` Activities are exported.
+- Timed Activities are converted to the credential owner's account timezone.
+- Date-only Activities remain true all-day events.
+- Calendar event UIDs are derived from stable Activity identity.
+- ICS serialization contains no database, tenant, authentication, or Flask logic.
+- Invalid, missing, revoked, or otherwise unusable credentials return the same non-disclosing Calendar Feed unavailable response.
+- Safari Calendar subscription was manually validated against the local feed.
+- Calendar route, credential management, adapter, and serializer tests are in place.
+- Full local suite passed: 84 tests.
+
+Implementation checkpoints:
+
+- `59c10e8` - Use account timezone in Activity Engine
+- `931832b` - Add per-user calendar feed credentials
+- `beae871` - Add Activity Engine calendar adapter
+- `231e9f0` - Add Activity calendar ICS serializer
+- `0f67799` - Integrate tenant-isolated Activity calendar feed
+
+## Ulysses Assist - ARCHITECTURAL DIRECTION LOCKED
+
+Ulysses Assist is a conversational interface to Ulysses, not an AI feature bolted onto Ulysses.
+
+Assist must operate through bounded Ulysses-owned services and tools. The model must never receive unrestricted database access or a wholesale database dump.
+
+Non-negotiable Assist invariants:
+
+1. Tenant isolation is enforced below the AI layer. No user, administrator, Assist request, background job, API, or future voice client may use AI as a path around user-level data isolation.
+2. Entity resolution occurs before synthesis. A name, property, listing, transaction, or other reference must be resolved to authorized CRM entities before related records are assembled.
+3. Cross-client contamination is prohibited. Context may expand across contacts only through explicit Ulysses relationships or other authoritative CRM associations.
+4. CRM facts are source-grounded. Important factual assertions should retain the Ulysses record or object from which they were retrieved.
+5. Conversation state is not authoritative CRM data. Conversational context may preserve references such as "they" or "that transaction," but current CRM facts must be retrieved from authoritative Ulysses data when they matter.
+6. Reads and writes are separate operations. Assist may retrieve and summarize authorized data naturally. Mutations must pass through defined Ulysses services/actions that validate ownership, permissions, data shape, and business rules.
+7. The model must not directly write SQL or manipulate database rows.
+8. If a requested fact is not established by authorized Ulysses data, Assist must not invent it.
+
+The intended retrieval pattern is:
+
+`Authenticated User -> Entity Resolution -> Tenant-Scoped Ulysses Services -> Bounded Retrieval Envelope -> Assist`
+
+The intended mutation pattern is:
+
+`Assist Request -> Entity Resolution -> Proposed Structured Action -> Ulysses Validation / Authorization -> CRM Mutation`
+
+The Activity Engine and Calendar Integration Layer are foundational services for Assist. Future consumers should use the same authoritative service layer rather than parse ICS or recreate Calendar logic.
+
+## Assist Product Direction
+
+Assist will begin web-first inside the authenticated Ulysses application, but the intelligence layer must be interface-independent and voice-ready.
+
+The same Assist services are intended to support:
+
+- the Ulysses web conversation interface;
+- text conversation about contacts, engagements, Activities, transactions, listings, and Calendar;
+- document intake and structured proposed CRM updates;
+- one-tap mobile access;
+- voice-first interaction;
+- future mobile or native clients;
+- notifications and daily briefings.
+
+A future voice client may use a selected call name such as `Ulysses` or `Penelope`; this is a presentation preference and must not create a separate intelligence or data-access architecture.
+
+Document intake is an Assist capability, not a separate source of CRM truth. Documents may be interpreted by AI, but proposed data must be resolved to the correct authorized CRM entities and validated by Ulysses before persistence.
+
 ## RESUME HERE
 
 Maintenance / Stabilization queue completed September 18, 2026.
 
-Completed maintenance items:
-
-1. Associated Contacts Edit Bug - `c7a4b80`
-
-2. Engagement Navigation - `540a470`
-
-3. Open House Archiving - production validated in v1.10.8
-
-4. Dashboard Follow-ups Mobile Layout - production validated in v1.10.9
-
-5. Listing Checklist Management - Seller and Buyer checklist management deployed and production validated in v1.10.10 through checkpoint `83f401e`.
+Calendar foundation completed locally September 20, 2026 through checkpoint `0f67799`.
 
 The intermittent stale `Please log in to access this page.` flash remains deferred until it can be reproduced reliably.
 
 No numbered Maintenance / Stabilization queue items remain.
 
-Before beginning additional CRM development, review and prioritize the next approved work item rather than extending the completed maintenance queue.
+Before beginning the next implementation, review and prioritize the approved feature list. Ulysses Assist architecture is now directionally locked, but Assist implementation has not begun. Preserve the Calendar, tenant-isolation, timezone, entity-resolution, source-grounding, and validated-mutation contracts when designing future work.

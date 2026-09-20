@@ -121,6 +121,69 @@ Rules:
 AI summaries are intended to reduce administrative overhead while preserving agent voice and intent.
 
 
+## Calendar & Assist Architecture Governance
+
+### Calendar Architecture
+
+The current Calendar architecture supersedes earlier implementations that used a global `ICS_TOKEN`, direct Follow-up queries, or a navbar-generated feed URL.
+
+The authoritative flow is:
+
+`Activity Engine -> Calendar Integration Layer / Adapter -> Calendar Consumer`
+
+The ICS serializer and `/followups.ics` route are downstream components of that architecture. They are not independent sources of Calendar truth.
+
+Calendar laws:
+
+- Calendar consumers must retrieve through the shared Activity/Calendar service layer.
+- Every Calendar data request must be tenant-scoped to exactly one owning `user_id`.
+- There is no administrator bypass for another user's Calendar or Activity data.
+- External Calendar credentials are per-user credentials and resolve exactly one owner.
+- Raw Calendar credentials are never stored.
+- Regeneration revokes the previous active credential.
+- Only Activities explicitly marked `calendar_eligible` may enter Calendar consumers.
+- Timed Activities use the owning account's timezone.
+- Date-only Activities remain date-only/all-day.
+- Stable Activity identity must be preserved into Calendar event identity.
+- ICS serialization must remain independent of database access, tenant resolution, authentication, and Flask request state.
+- Future Ulysses Calendar UI, Assist, notifications, briefings, external integrations, and voice clients must consume the shared service layer rather than parse ICS or independently reconstruct Calendar rules.
+
+Historical sections describing the former global `ICS_TOKEN` implementation remain part of the project evolution record but are superseded by this section.
+
+### Ulysses Assist Doctrine
+
+Ulysses Assist is a conversational interface to Ulysses, not an AI feature bolted onto Ulysses.
+
+Assist may reason over authorized Ulysses data, but the model is not the security boundary, database layer, or source of CRM truth.
+
+The following rules are mandatory:
+
+1. Tenant isolation must be enforced below the AI layer. AI, administrators, APIs, background jobs, Calendar consumers, and future voice clients receive no tenant-isolation bypass.
+2. Entity resolution must precede synthesis. Assist must resolve conversational references to authorized CRM entities before assembling related records.
+3. Cross-contact contamination is prohibited. Multiple contacts may be considered together only when the request and authoritative Ulysses relationships establish that context.
+4. CRM facts must be source-grounded. Important factual claims should remain traceable to their originating Ulysses records or objects.
+5. Conversation state may preserve conversational references, but it is not authoritative CRM data. Current facts must be retrieved from Ulysses when they matter.
+6. AI reads and CRM mutations are distinct operations. Mutations must use defined Ulysses services/actions that enforce tenant ownership, permissions, validation, and business rules.
+7. The model must never directly manipulate database rows or issue unrestricted SQL against CRM data.
+8. Assist must not invent missing CRM facts. Absence or uncertainty must be represented as such.
+9. Document and audio interpretation may propose structured CRM data, but AI extraction does not become CRM truth until Ulysses validates and persists it through an authorized service.
+
+The architectural retrieval pattern is:
+
+`Authenticated User -> Entity Resolution -> Tenant-Scoped Ulysses Services -> Bounded Authorized Context -> Assist`
+
+The architectural mutation pattern is:
+
+`Assist -> Proposed Structured Action -> Ulysses Authorization / Validation -> CRM Mutation`
+
+### Interface Independence and Voice Readiness
+
+Assist will initially be presented through the Ulysses web application, but Assist services must not depend on the web UI.
+
+Web chat, one-tap mobile access, document intake, notifications, future native clients, and voice interaction must be clients of the same tenant-safe Assist and CRM service architecture.
+
+Voice is an interface, not a separate source of intelligence or CRM access. A future voice experience may use a selectable call name such as `Ulysses` or `Penelope` without changing the underlying authorization, retrieval, grounding, or mutation rules.
+
 ## How We Work
 **Effective as of 2026-01-19**
 
@@ -14611,5 +14674,58 @@ Keep BOTH:
 
 Future enhancement:
 - professional conversation logging using separate `professional_engagements` table
+
+# September 20, 2026 - Activity Calendar Foundation & Assist Architecture
+
+## Calendar Foundation Completed Locally
+
+Ulysses replaced the legacy direct Follow-up ICS implementation with a shared Activity-based Calendar architecture.
+
+The implemented flow is:
+
+`Activity Engine -> Calendar Integration Layer / Adapter -> ICS serializer -> /followups.ics`
+
+Key outcomes:
+
+- Added per-user Calendar Feed credentials.
+- Removed the global `ICS_TOKEN` architecture from current application behavior.
+- Removed direct legacy Follow-up querying from `/followups.ics`.
+- Calendar credentials resolve exactly one active Ulysses user.
+- No administrator bypass exists for Calendar feed data.
+- Raw credentials are not stored.
+- Regeneration invalidates the previous active credential.
+- Added `More > Calendar Feed` as the authenticated credential-management UI.
+- Calendar export includes only `calendar_eligible` Activities.
+- Timed Activities use the account timezone.
+- Date-only Activities serialize as true all-day events.
+- Stable Activity identity is used for ICS UIDs.
+- Added a pure ICS serialization layer with no database or tenant logic.
+- Added a non-disclosing human-readable response for missing, invalid, or revoked feed credentials.
+- Local Safari Calendar subscription was manually validated.
+- Full local automated suite passed with 84 tests.
+
+Implementation checkpoints:
+
+- `59c10e8` - Use account timezone in Activity Engine
+- `931832b` - Add per-user calendar feed credentials
+- `beae871` - Add Activity Engine calendar adapter
+- `231e9f0` - Add Activity calendar ICS serializer
+- `0f67799` - Integrate tenant-isolated Activity calendar feed
+
+## Assist Architecture Direction
+
+During Calendar foundation work, the architectural role of Ulysses Assist was clarified and locked.
+
+Assist is intended to provide a ChatGPT-like conversational interface over authorized Ulysses data without copying or exposing the unrestricted CRM database to the model.
+
+The core direction is:
+
+`User -> Assist -> Tenant-Scoped Ulysses Services -> Authorized CRM Data`
+
+Entity resolution, tenant isolation, source grounding, separation of conversational state from CRM truth, and validated service-based mutations are mandatory.
+
+The initial Assist interface will be web-based. The underlying service architecture must remain interface-independent so that the same intelligence can later support voice, one-tap mobile access, document intake, notifications, and native clients without redesigning CRM authorization or data access.
+
+The Activity Engine and Calendar Integration Layer are the first concrete examples of this shared-service approach. Future Assist features should consume those services rather than duplicate their logic.
 
 
