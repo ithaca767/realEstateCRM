@@ -39,6 +39,12 @@ from engagements import list_engagements_for_contact
 from engagements import insert_engagement
 from attention import list_attention_items
 from activity_engine import list_dashboard_snapshot_items
+from calendar_activity import list_calendar_items
+from calendar_feed import (
+    create_calendar_feed_token,
+    resolve_calendar_feed_token,
+)
+from calendar_ics import serialize_calendar
 
 from push_subscriptions import (
     save_push_subscription,
@@ -527,9 +533,6 @@ login_manager.login_view = "login"
 
 
 
-# Optional token for calendar feed protection
-ICS_TOKEN = os.environ.get("ICS_TOKEN")
-
 PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
 app.config["PUBLIC_BASE_URL"] = PUBLIC_BASE_URL
 
@@ -549,13 +552,6 @@ def decrypt_token(value_enc: str) -> str:
         return None
     return _email_token_cipher().decrypt(value_enc.encode("utf-8")).decode("utf-8")
                             
-@app.context_processor
-def inject_calendar_feed_url():
-    calendar_url = url_for("followups_ics")
-    if ICS_TOKEN:
-        calendar_url = calendar_url + f"?key={ICS_TOKEN}"
-    return {"calendar_feed_url": calendar_url}
-
 @app.context_processor
 def inject_current_year():
     return {"current_year": datetime.now(get_user_tz()).year}
@@ -11079,114 +11075,63 @@ def delete_contact_email(contact_id, contact_email_id):
 
     return redirect(url_for("edit_contact", contact_id=contact_id) + "#emails")
     
+def calendar_feed_unauthorized_response():
+    """
+    Return the same human-readable response for any unusable calendar
+    credential without revealing whether a token ever existed.
+    """
+    message = (
+        "Ulysses Calendar Feed Unavailable\n\n"
+        "This calendar subscription link is invalid or no longer active. "
+        "If you regenerated your Calendar Feed, the previous link was "
+        "automatically disabled.\n\n"
+        "Go to More > Calendar Feed in Ulysses to generate a new "
+        "subscription link."
+    )
+    return Response(message, status=401, mimetype="text/plain")
+
+
 @app.route("/followups.ics")
 def followups_ics():
     """
-    Calendar feed of upcoming follow-ups.
-    Subscribe to: https://<your-domain>/followups.ics?key=YOUR_ICS_TOKEN
+    Tenant-isolated Activity calendar feed.
+
+    The feed credential establishes exactly one Ulysses user. Calendar data
+    is retrieved through the Activity Engine calendar adapter and serialized
+    by the shared ICS layer.
     """
-    if ICS_TOKEN:
-        key = request.args.get("key", "")
-        if key != ICS_TOKEN:
-            return Response("Unauthorized", status=401, mimetype="text/plain")
-    """
-    Calendar feed of upcoming follow-ups.
-    Subscribe to: https://<your-domain>/followups.ics
-    """
+    raw_token = request.args.get("key", "").strip()
+    if not raw_token:
+        return calendar_feed_unauthorized_response()
+
     conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            id,
-            name,
-            first_name,
-            last_name,
-            next_follow_up,
-            next_follow_up_time,
-            pipeline_stage,
-            priority,
-            target_area
-        FROM contacts
-        WHERE next_follow_up IS NOT NULL
-          AND next_follow_up <> ''
-        ORDER BY next_follow_up, name
-        """
-    )
-    rows = cur.fetchall()
-    conn.close()
+    try:
+        credential = resolve_calendar_feed_token(conn, raw_token)
+        if credential is None:
+            return calendar_feed_unauthorized_response()
 
-    lines = []
-    lines.append("BEGIN:VCALENDAR")
-    lines.append("VERSION:2.0")
-    lines.append("PRODID:-//Ulysses CRM//EN")
+        try:
+            calendar_tz = ZoneInfo(credential["timezone_name"])
+        except Exception:
+            calendar_tz = NY
 
-    dtstamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        now = datetime.now(timezone.utc)
+        calendar_now = now.astimezone(calendar_tz)
 
-    for row in rows:
-        date_str = row["next_follow_up"]
-        if not date_str:
-            continue
+        items = list_calendar_items(
+            conn,
+            credential["user_id"],
+            now=calendar_now,
+        )
 
-        display_name = row["name"]
-        fn = row.get("first_name") or ""
-        ln = row.get("last_name") or ""
-        full = (fn + " " + ln).strip()
-        if full:
-            display_name = full
+        ics_text = serialize_calendar(
+            items,
+            dtstamp=now,
+        )
 
-        summary = f"Follow up: {display_name}"
-
-        desc_parts = []
-        if row.get("pipeline_stage"):
-            desc_parts.append(f"Stage: {row['pipeline_stage']}")
-        if row.get("priority"):
-            desc_parts.append(f"Priority: {row['priority']}")
-        if row.get("target_area"):
-            desc_parts.append(f"Area: {row['target_area']}")
-
-        description = "\\n".join(desc_parts) if desc_parts else ""
-
-        uid = f"ulysses-followup-{row['id']}@ulyssescrm"
-
-        lines.append("BEGIN:VEVENT")
-        lines.append(f"UID:{uid}")
-        lines.append(f"DTSTAMP:{dtstamp}")
-        lines.append(f"SUMMARY:{summary}")
-
-        time_str = row.get("next_follow_up_time")
-
-        if time_str:
-            try:
-                d_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-                hh, mm = time_str.split(":")
-                hh24 = int(hh)
-                mm_int = int(mm)
-                start_dt = datetime(d_obj.year, d_obj.month, d_obj.day, hh24, mm_int)
-                end_dt = start_dt + timedelta(minutes=30)
-
-                dtstart = start_dt.strftime("%Y%m%dT%H%M%S")
-                dtend = end_dt.strftime("%Y%m%dT%H%M%S")
-
-                lines.append(f"DTSTART:{dtstart}")
-                lines.append(f"DTEND:{dtend}")
-            except Exception:
-                dtstart = date_str.replace("-", "")
-                lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
-                lines.append(f"DTEND;VALUE=DATE:{dtstart}")
-        else:
-            dtstart = date_str.replace("-", "")
-            lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
-            lines.append(f"DTEND;VALUE=DATE:{dtstart}")
-
-        if description:
-            lines.append(f"DESCRIPTION:{description}")
-        lines.append("END:VEVENT")
-
-    lines.append("END:VCALENDAR")
-    ics_text = "\r\n".join(lines) + "\r\n"
-
-    return Response(ics_text, mimetype="text/calendar")
+        return Response(ics_text, mimetype="text/calendar")
+    finally:
+        conn.close()
 
 
 @app.route("/delete/<int:contact_id>", methods=["POST"])
@@ -12737,6 +12682,64 @@ def global_search():
     finally:
         conn.close()
         
+@app.route("/calendar-feed", methods=["GET", "POST"])
+@login_required
+def calendar_feed_settings():
+    """
+    Manage the authenticated user's external calendar-feed credential.
+
+    Raw credentials are shown only when generated. Ulysses stores only the
+    token hash, so an existing subscription URL cannot be recovered later.
+    """
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, created_at
+            FROM calendar_feed_tokens
+            WHERE user_id = %s
+              AND revoked_at IS NULL
+            LIMIT 1;
+            """,
+            (current_user.id,),
+        )
+        active_credential = cur.fetchone()
+        calendar_feed_subscription_url = None
+
+        if request.method == "POST":
+            if not app.config.get("PUBLIC_BASE_URL"):
+                flash(
+                    "PUBLIC_BASE_URL is not configured. "
+                    "Calendar Feed cannot generate a subscription URL.",
+                    "danger",
+                )
+            else:
+                credential = create_calendar_feed_token(
+                    conn,
+                    current_user.id,
+                )
+                calendar_feed_subscription_url = build_link(
+                    app.config["PUBLIC_BASE_URL"],
+                    "/followups.ics",
+                    credential["raw_token"],
+                    param_name="key",
+                )
+                active_credential = {
+                    "id": credential["id"],
+                    "created_at": credential["created_at"],
+                }
+
+        return render_template(
+            "account/calendar_feed.html",
+            active_credential=active_credential,
+            calendar_feed_subscription_url=calendar_feed_subscription_url,
+            active_page=None,
+        )
+    finally:
+        conn.close()
+
+
 @app.route("/account", methods=["GET", "POST"])
 @login_required
 def account():
