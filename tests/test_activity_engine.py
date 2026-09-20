@@ -652,3 +652,204 @@ class UnifiedActivityListTests(unittest.TestCase):
                 7,
                 now=datetime(2026, 9, 20, 14, 0),
             )
+
+
+class DashboardActivityAdapterTests(unittest.TestCase):
+    def setUp(self):
+        self.now = datetime(2026, 9, 20, 14, 0, tzinfo=NY)
+
+    def test_dashboard_list_includes_only_overdue_and_today(self):
+        from unittest.mock import patch
+
+        from activity_engine import list_dashboard_activities
+
+        activities = [
+            {
+                "activity_key": "task:1",
+                "is_overdue": True,
+                "is_today": False,
+            },
+            {
+                "activity_key": "task:2",
+                "is_overdue": False,
+                "is_today": True,
+            },
+            {
+                "activity_key": "task:3",
+                "is_overdue": False,
+                "is_today": False,
+                "is_upcoming": True,
+            },
+        ]
+
+        with patch(
+            "activity_engine.list_activities",
+            return_value=activities,
+        ):
+            result = list_dashboard_activities(
+                object(),
+                7,
+                now=self.now,
+            )
+
+        self.assertEqual(
+            [item["activity_key"] for item in result],
+            ["task:1", "task:2"],
+        )
+
+    def test_followup_adapts_to_existing_dashboard_contract(self):
+        from activity_engine import dashboard_snapshot_item
+
+        due = datetime(
+            2026, 9, 19, 18, 30, tzinfo=timezone.utc
+        )
+
+        activity = {
+            "activity_key": "followup:88",
+            "activity_type": "followup",
+            "source_type": "followup",
+            "source_id": 88,
+            "title": "Follow up with Olivia Quinn",
+            "description": "Call Olivia",
+            "contact_id": 10,
+            "contact_name": "Olivia Quinn",
+            "transaction_id": None,
+            "due_date": None,
+            "due_at": due,
+            "status": "open",
+            "priority": None,
+            "is_overdue": True,
+            "is_today": False,
+            "is_upcoming": False,
+            "calendar_eligible": True,
+            "target_url": "/engagements/88/edit",
+        }
+
+        item = dashboard_snapshot_item(
+            activity,
+            now=self.now,
+        )
+
+        self.assertEqual(item["item_type"], "followup")
+        self.assertEqual(item["engagement_id"], 88)
+        self.assertEqual(item["follow_up_due_at"], due)
+        self.assertEqual(item["snap_status"], "overdue")
+        self.assertEqual(item["overdue_days"], 1)
+        self.assertEqual(item["snippet"], "Call Olivia")
+
+    def test_date_only_task_stays_date_only_in_dashboard_adapter(self):
+        from activity_engine import dashboard_snapshot_item
+
+        activity = {
+            "activity_key": "task:21",
+            "activity_type": "task",
+            "source_type": "task",
+            "source_id": 21,
+            "title": "Another SNOOZE test",
+            "description": "",
+            "contact_id": None,
+            "contact_name": None,
+            "transaction_id": None,
+            "due_date": date(2026, 9, 19),
+            "due_at": None,
+            "status": "snoozed",
+            "priority": None,
+            "is_overdue": True,
+            "is_today": False,
+            "is_upcoming": False,
+            "calendar_eligible": False,
+            "target_url": "/tasks/21",
+        }
+
+        item = dashboard_snapshot_item(
+            activity,
+            now=self.now,
+        )
+
+        self.assertEqual(item["item_type"], "task")
+        self.assertEqual(item["task_id"], 21)
+        self.assertEqual(item["due_date"], date(2026, 9, 19))
+        self.assertIsNone(item["due_at"])
+        self.assertIsNone(item["due_ts"])
+        self.assertEqual(item["overdue_days"], 1)
+
+    def test_transaction_deadline_adapts_for_dashboard(self):
+        from activity_engine import dashboard_snapshot_item
+
+        activity = {
+            "activity_key": "transaction_deadline:3",
+            "activity_type": "transaction_deadline",
+            "source_type": "transaction_deadline",
+            "source_id": 3,
+            "title": "Mortgage commitment",
+            "description": "Confirm with lender",
+            "contact_id": 100,
+            "contact_name": "Tyler Ely",
+            "transaction_id": 200,
+            "due_date": date(2026, 9, 20),
+            "due_at": None,
+            "status": "open",
+            "priority": None,
+            "is_overdue": False,
+            "is_today": True,
+            "is_upcoming": False,
+            "calendar_eligible": True,
+            "target_url": "/transactions/200/edit",
+        }
+
+        item = dashboard_snapshot_item(
+            activity,
+            now=self.now,
+        )
+
+        self.assertEqual(
+            item["item_type"],
+            "transaction_deadline",
+        )
+        self.assertEqual(item["deadline_id"], 3)
+        self.assertEqual(item["transaction_id"], 200)
+        self.assertEqual(item["due_date"], date(2026, 9, 20))
+        self.assertEqual(item["snap_status"], "today")
+        self.assertEqual(item["overdue_days"], 0)
+        self.assertEqual(item["snippet"], "Confirm with lender")
+
+    def test_dashboard_snapshot_items_uses_adapter(self):
+        from unittest.mock import patch
+
+        from activity_engine import list_dashboard_snapshot_items
+
+        activity = {
+            "activity_key": "task:5",
+            "activity_type": "task",
+            "source_type": "task",
+            "source_id": 5,
+            "title": "Call attorney",
+            "description": "",
+            "contact_id": None,
+            "contact_name": None,
+            "transaction_id": None,
+            "due_date": date(2026, 9, 20),
+            "due_at": None,
+            "status": "open",
+            "priority": None,
+            "is_overdue": False,
+            "is_today": True,
+            "is_upcoming": False,
+            "calendar_eligible": False,
+            "target_url": "/tasks/5",
+        }
+
+        with patch(
+            "activity_engine.list_dashboard_activities",
+            return_value=[activity],
+        ):
+            result = list_dashboard_snapshot_items(
+                object(),
+                7,
+                now=self.now,
+            )
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["item_type"], "task")
+        self.assertEqual(result[0]["task_id"], 5)
+        self.assertEqual(result[0]["snap_status"], "today")

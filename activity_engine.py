@@ -579,3 +579,101 @@ def list_activities(conn, user_id: int, *, now: datetime):
         deduped.values(),
         key=_activity_sort_key,
     )
+
+
+def list_dashboard_activities(conn, user_id: int, *, now: datetime):
+    """
+    Return Activity Engine records eligible for the Dashboard snapshot.
+
+    Dashboard V1 shows:
+      - overdue Activities
+      - Activities due today
+
+    Future/upcoming Activities remain available through list_activities()
+    but are not part of Today's Snapshot.
+
+    Read-only. No database writes.
+    """
+    now = require_aware_datetime(now)
+
+    activities = list_activities(
+        conn,
+        user_id,
+        now=now,
+    )
+
+    return [
+        activity
+        for activity in activities
+        if activity.get("is_overdue") or activity.get("is_today")
+    ]
+
+
+def dashboard_snapshot_item(activity: Dict[str, Any], *, now: datetime):
+    """
+    Adapt one normalized Activity into the existing Dashboard snapshot contract.
+
+    This compatibility layer lets the Dashboard move to Activity Engine data
+    without requiring an unrelated visual redesign.
+    """
+    now_ny = to_new_york(now)
+
+    due_at = activity.get("due_at")
+    due_date = activity.get("due_date")
+
+    if due_at is not None:
+        due_ny = to_new_york(due_at)
+        due_day = due_ny.date()
+    elif due_date is not None:
+        due_ny = None
+        due_day = due_date
+    else:
+        due_ny = None
+        due_day = None
+
+    if activity.get("is_overdue") and due_day is not None:
+        overdue_days = max(0, (now_ny.date() - due_day).days)
+        snap_status = "overdue"
+    else:
+        overdue_days = 0
+        snap_status = "today"
+
+    item = dict(activity)
+
+    item["item_type"] = activity["activity_type"]
+    item["snap_status"] = snap_status
+    item["overdue_days"] = overdue_days
+    item["snippet"] = activity.get("description") or ""
+
+    if activity["activity_type"] == ACTIVITY_TYPE_FOLLOWUP:
+        item["engagement_id"] = activity["source_id"]
+        item["follow_up_due_at"] = due_at
+
+    elif activity["activity_type"] == ACTIVITY_TYPE_TASK:
+        item["task_id"] = activity["source_id"]
+
+        # Preserve the old Dashboard field name for timestamp Tasks.
+        # Date-only Tasks remain date-only and are not given a fake timestamp.
+        item["due_ts"] = due_at
+
+    elif activity["activity_type"] == ACTIVITY_TYPE_TRANSACTION_DEADLINE:
+        item["deadline_id"] = activity["source_id"]
+
+    return item
+
+
+def list_dashboard_snapshot_items(conn, user_id: int, *, now: datetime):
+    """
+    Return Dashboard-compatible snapshot records sourced entirely from
+    the unified Activity Engine.
+    """
+    activities = list_dashboard_activities(
+        conn,
+        user_id,
+        now=now,
+    )
+
+    return [
+        dashboard_snapshot_item(activity, now=now)
+        for activity in activities
+    ]
