@@ -9396,7 +9396,7 @@ def seller_profile(contact_id):
             # UPDATE existing row
             cur.execute(
                 """
-                UPDATE seller_profiles
+                UPDATE seller_profiles AS sp
                 SET property_type = %s,
                     timeframe = %s,
                     motivation = %s,
@@ -9418,7 +9418,10 @@ def seller_profile(contact_id):
                     seller_inspector_phone = %s,
                     seller_inspector_referred = %s,
                     other_professionals = %s
-                WHERE contact_id = %s
+                FROM contacts AS c
+                WHERE sp.contact_id = %s
+                  AND c.id = sp.contact_id
+                  AND c.user_id = %s
                 """,
                 (
                     property_type,
@@ -9443,6 +9446,7 @@ def seller_profile(contact_id):
                     seller_inspector_referred,
                     other_professionals,
                     contact_id,
+                    current_user.id,
                 ),
             )
         else:
@@ -9511,8 +9515,14 @@ def seller_profile(contact_id):
 
     # GET – load existing seller profile (if any)
     cur.execute(
-        "SELECT * FROM seller_profiles WHERE contact_id = %s",
-        (contact_id,),
+        """
+        SELECT sp.*
+        FROM seller_profiles AS sp
+        JOIN contacts AS c ON c.id = sp.contact_id
+        WHERE sp.contact_id = %s
+          AND c.user_id = %s
+        """,
+        (contact_id, current_user.id),
     )
     sp = cur.fetchone()
     conn.close()

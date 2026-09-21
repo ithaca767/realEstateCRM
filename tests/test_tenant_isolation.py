@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import app as app_module
 from datetime import datetime
+from pathlib import Path
 
 
 class TenantIsolationTests(unittest.TestCase):
@@ -791,6 +792,40 @@ class EngagementInsertTenantIsolationTests(unittest.TestCase):
         conn.commit.assert_called_once()
         cur.close.assert_called_once()
 
+
+
+class SellerProfileTenantIsolationTests(unittest.TestCase):
+    def test_seller_profile_read_sql_is_tenant_scoped(self):
+        source = Path("app.py").read_text()
+        start = source.index("def seller_profile(contact_id):")
+        end = source.index('@app.route("/followups")', start)
+        seller_source = source[start:end]
+
+        self.assertIn("SELECT sp.*", seller_source)
+        self.assertIn("FROM seller_profiles AS sp", seller_source)
+        self.assertIn(
+            "JOIN contacts AS c ON c.id = sp.contact_id",
+            seller_source,
+        )
+        self.assertIn("WHERE sp.contact_id = %s", seller_source)
+        self.assertIn("AND c.user_id = %s", seller_source)
+        self.assertIn("(contact_id, current_user.id)", seller_source)
+
+    def test_seller_profile_update_sql_is_tenant_scoped(self):
+        source = Path("app.py").read_text()
+        start = source.index("def seller_profile(contact_id):")
+        end = source.index('@app.route("/followups")', start)
+        seller_source = source[start:end]
+
+        self.assertIn("UPDATE seller_profiles AS sp", seller_source)
+        self.assertIn("FROM contacts AS c", seller_source)
+        self.assertIn("WHERE sp.contact_id = %s", seller_source)
+        self.assertIn("AND c.id = sp.contact_id", seller_source)
+        self.assertIn("AND c.user_id = %s", seller_source)
+        self.assertIn(
+            "contact_id,\n                    current_user.id,",
+            seller_source,
+        )
 
 if __name__ == "__main__":
     unittest.main()
