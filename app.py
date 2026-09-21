@@ -10781,7 +10781,7 @@ def newsletter_signup(public_token):
     # POST
     first_name = (request.form.get("first_name") or "").strip()
     last_name = (request.form.get("last_name") or "").strip()
-    email = _normalize_email(request.form.get("email"))
+    email = normalize_email(request.form.get("email"))
     resident_flag = (request.form.get("is_resident") or "").strip()  # "yes" or "no" or ""
 
     if not email or "@" not in email:
