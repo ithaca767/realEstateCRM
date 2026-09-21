@@ -398,7 +398,7 @@ def generate_answer(conn, user_id: int, query: str, *, per_type_limit: int = 10,
             "ok": True,
             "no_answer": True,
             "answer": "",
-            "citations": _enrich_citations(cleaned_citations, candidates, url_builder=url_builder),
+            "citations": [],
             "confidence": 0.0,
             "warning": guard_msg,
         }
