@@ -477,3 +477,176 @@ class BuyerPropertyTenantIsolationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpecialDateTenantIsolationTests(unittest.TestCase):
+    def setUp(self):
+        app_module.app.config["TESTING"] = True
+        app_module.app.config["SECRET_KEY"] = "tenant-isolation-test-secret"
+        self.client = app_module.app.test_client()
+        self.original_user_callback = app_module.login_manager._user_callback
+
+    def tearDown(self):
+        app_module.login_manager._user_callback = self.original_user_callback
+
+    def login_as(self, user_id):
+        user = app_module.User(
+            {
+                "id": user_id,
+                "email": f"user{user_id}@example.com",
+                "role": "owner",
+                "is_active": True,
+                "timezone_name": "America/New_York",
+            }
+        )
+        app_module.login_manager._user_callback = (
+            lambda requested_user_id: (
+                user if str(requested_user_id) == str(user_id) else None
+            )
+        )
+        with self.client.session_transaction() as session:
+            session["_user_id"] = str(user_id)
+            session["_fresh"] = True
+
+    @patch("app.get_db")
+    def test_user_cannot_add_special_date_to_another_users_contact(self, mock_get_db):
+        self.login_as(101)
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchone.return_value = None
+        mock_get_db.return_value = conn
+
+        response = self.client.post(
+            "/contact/202/special-dates/add",
+            data={
+                "label": "Birthday",
+                "special_date": "1990-01-02",
+                "is_recurring": "on",
+                "notes": "Must remain tenant isolated",
+            },
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+        first_sql, first_params = cur.execute.call_args_list[0].args
+        self.assertIn(
+            "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+            " ".join(first_sql.split()),
+        )
+        self.assertEqual(first_params, (202, 101))
+
+        executed_sql = [
+            " ".join(call.args[0].split())
+            for call in cur.execute.call_args_list
+        ]
+        self.assertFalse(
+            any("INSERT INTO contact_special_dates" in sql for sql in executed_sql)
+        )
+        conn.commit.assert_not_called()
+        conn.close.assert_called_once()
+
+    @patch("app.get_db")
+    def test_user_can_add_special_date_to_owned_contact(self, mock_get_db):
+        self.login_as(101)
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchone.return_value = {"id": 202}
+        mock_get_db.return_value = conn
+
+        response = self.client.post(
+            "/contact/202/special-dates/add",
+            data={
+                "label": "Birthday",
+                "special_date": "1990-01-02",
+                "is_recurring": "on",
+                "notes": "Owned contact",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        first_sql, first_params = cur.execute.call_args_list[0].args
+        self.assertIn(
+            "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+            " ".join(first_sql.split()),
+        )
+        self.assertEqual(first_params, (202, 101))
+
+        insert_sql, insert_params = cur.execute.call_args_list[1].args
+        self.assertIn(
+            "INSERT INTO contact_special_dates",
+            " ".join(insert_sql.split()),
+        )
+        self.assertEqual(
+            insert_params,
+            (202, "Birthday", "1990-01-02", True, "Owned contact"),
+        )
+        conn.commit.assert_called_once()
+        conn.close.assert_called_once()
+
+    @patch("app.get_db")
+    def test_user_cannot_delete_another_users_special_date(self, mock_get_db):
+        self.login_as(101)
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchone.return_value = None
+        mock_get_db.return_value = conn
+
+        response = self.client.post("/special-dates/303/delete")
+
+        self.assertEqual(response.status_code, 404)
+
+        lookup_sql, lookup_params = cur.execute.call_args_list[0].args
+        normalized = " ".join(lookup_sql.split())
+        self.assertIn("FROM contact_special_dates csd", normalized)
+        self.assertIn("JOIN contacts c ON c.id = csd.contact_id", normalized)
+        self.assertIn("WHERE csd.id = %s", normalized)
+        self.assertIn("AND c.user_id = %s", normalized)
+        self.assertEqual(lookup_params, (303, 101))
+
+        executed_sql = [
+            " ".join(call.args[0].split())
+            for call in cur.execute.call_args_list
+        ]
+        self.assertFalse(
+            any("DELETE FROM contact_special_dates" in sql for sql in executed_sql)
+        )
+        conn.commit.assert_not_called()
+        conn.close.assert_called_once()
+
+    @patch("app.get_db")
+    def test_owned_special_date_delete_is_tenant_scoped(self, mock_get_db):
+        self.login_as(101)
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchone.return_value = {"contact_id": 202}
+        mock_get_db.return_value = conn
+
+        response = self.client.post("/special-dates/303/delete")
+
+        self.assertEqual(response.status_code, 302)
+
+        lookup_sql, lookup_params = cur.execute.call_args_list[0].args
+        lookup_normalized = " ".join(lookup_sql.split())
+        self.assertIn("JOIN contacts c ON c.id = csd.contact_id", lookup_normalized)
+        self.assertIn("AND c.user_id = %s", lookup_normalized)
+        self.assertEqual(lookup_params, (303, 101))
+
+        delete_sql, delete_params = cur.execute.call_args_list[1].args
+        delete_normalized = " ".join(delete_sql.split())
+        self.assertIn("DELETE FROM contact_special_dates csd", delete_normalized)
+        self.assertIn("USING contacts c", delete_normalized)
+        self.assertIn("c.id = csd.contact_id", delete_normalized)
+        self.assertIn("c.user_id = %s", delete_normalized)
+        self.assertEqual(delete_params, (303, 101))
+
+        conn.commit.assert_called_once()
+        conn.close.assert_called_once()

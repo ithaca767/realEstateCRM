@@ -11482,6 +11482,16 @@ def add_special_date(contact_id):
 
     conn = get_db()
     cur = conn.cursor()
+
+    # Tenant boundary: special dates inherit ownership through their contact.
+    cur.execute(
+        "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+        (contact_id, current_user.id),
+    )
+    if not cur.fetchone():
+        conn.close()
+        abort(404)
+
     cur.execute("""
         INSERT INTO contact_special_dates (contact_id, label, special_date, is_recurring, notes)
         VALUES (%s, %s, %s, %s, %s)
@@ -11499,16 +11509,33 @@ def delete_special_date(special_date_id):
     conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("SELECT contact_id FROM contact_special_dates WHERE id = %s", (special_date_id,))
+    cur.execute(
+        """
+        SELECT csd.contact_id
+        FROM contact_special_dates csd
+        JOIN contacts c ON c.id = csd.contact_id
+        WHERE csd.id = %s
+          AND c.user_id = %s
+        """,
+        (special_date_id, current_user.id),
+    )
     row = cur.fetchone()
     if not row:
         conn.close()
-        flash("Special date not found.", "warning")
-        return redirect(url_for("contacts"))
+        abort(404)
 
     contact_id = row["contact_id"] if isinstance(row, dict) else row[0]
 
-    cur.execute("DELETE FROM contact_special_dates WHERE id = %s", (special_date_id,))
+    cur.execute(
+        """
+        DELETE FROM contact_special_dates csd
+        USING contacts c
+        WHERE csd.id = %s
+          AND c.id = csd.contact_id
+          AND c.user_id = %s
+        """,
+        (special_date_id, current_user.id),
+    )
     conn.commit()
     conn.close()
 
