@@ -1,10 +1,10 @@
 # Ulysses CRM - Project State
 
-**Last updated:** September 20, 2026
+**Last updated:** September 21, 2026
 **Current production version:** v1.10.10
 **Current branch:** main
-**Current checkpoint:** 3f09d45
-**Session mode:** Task Foundation Hardened / Tenant-Isolation Audit Next
+**Current checkpoint:** 3d5511d
+**Session mode:** Tenant-Isolation Audit Complete / Enhancement Review Next
 
 ## Current Architecture
 
@@ -229,6 +229,34 @@ Implementation checkpoints:
 - `231e9f0` - Add Activity calendar ICS serializer
 - `0f67799` - Integrate tenant-isolated Activity calendar feed
 
+## Tenant-Isolation Security Audit - COMPLETE
+
+Completed September 21, 2026 through checkpoint `3d5511d`.
+
+The repository-wide tenant-isolation audit is complete: **14 of 14 major audit clusters cleared**.
+
+Permanent security invariant:
+
+- Every CRM read, mutation, export, search, association, calendar/feed path, AI/Assist retrieval path, background consumer, public-token workflow, and future voice/document client must preserve exact user-level tenant isolation.
+- There is no administrator or owner bypass to another user's CRM records.
+- Direct-object access must validate tenant ownership at the data-access boundary and should return not-found behavior for foreign records where applicable.
+- Child records without their own `user_id` must inherit ownership through a tenant-validated parent relationship.
+- AI/Assist may never be used as a path around these boundaries.
+- New features must fail closed rather than fall back to unscoped CRM data.
+
+Audit hardening covered dashboard queries, buyer properties, special dates, checklist records, engagements/follow-ups, seller profiles, AI/search retrieval, interactions, exports, public-token workflows, push subscriptions, and other legacy/direct-object paths.
+
+Final adversarial regression coverage explicitly verifies cross-tenant denial even when the authenticated user has the `owner` role. Public Open House and newsletter token workflows derive tenant ownership from the token-owned record rather than caller-controlled tenant input. Push subscription ownership cannot be reassigned or deactivated across tenants.
+
+Final audit validation:
+
+- Adversarial tenant-boundary suite: **7/7 passing**
+- Full automated suite: **130/130 passing**
+- `git diff --check`: clean
+- Final audit checkpoint: `3d5511d` (`Complete tenant isolation audit`)
+
+The audit also exposed and corrected an unrelated newsletter signup email-normalization typo. No unresolved cross-tenant vulnerability was identified at audit completion.
+
 ## Ulysses Assist - ARCHITECTURAL DIRECTION LOCKED
 
 Ulysses Assist is a conversational interface to Ulysses, not an AI feature bolted onto Ulysses.
@@ -377,12 +405,16 @@ Maintenance / Stabilization queue completed September 18, 2026.
 
 Calendar foundation completed and production validated September 20, 2026. Production schema migrations, credential generation, live Calendar subscription, and credential revocation were successfully verified.
 
+Task foundation architecture and integrity hardening completed September 20, 2026 through checkpoint `3f09d45`. Existing Tasks support both CRM-associated and independent work. Reminder remains future alert/notification behavior rather than a separate work-object model.
+
+Tenant-isolation security audit completed September 21, 2026 through checkpoint `3d5511d`. All 14 major audit clusters are cleared. Final adversarial tenant-boundary tests pass 7/7 and the complete automated suite passes 130/130.
+
+Tenant isolation is a permanent Ulysses invariant. There is no administrator or owner bypass to another user's CRM records. This applies equally to traditional UI routes, services, exports, Calendar, Activity Engine consumers, AI/Assist, APIs, background work, public-token workflows, future voice clients, and future document ingestion.
+
 The intermittent stale `Please log in to access this page.` flash remains deferred until it can be reproduced reliably.
 
 No numbered Maintenance / Stabilization queue items remain.
 
-Task foundation architecture and integrity hardening completed September 20, 2026 through checkpoint `3f09d45`. Existing Tasks support both CRM-associated and independent work. Reminder remains future alert/notification behavior rather than a separate work-object model.
+Next work: return to the banked CRM enhancement list and review/prioritize the next implementation sequence before changing production behavior.
 
-Next priority before broader Ulysses Assist retrieval implementation: perform the previously identified tenant-isolation audit of older application/service paths, especially any legacy fallback or query path that could return CRM data without an exact `user_id` boundary.
-
-Ulysses Assist architecture remains directionally locked, but Assist implementation has not begun. Preserve the Calendar, Task, tenant-isolation, timezone, entity-resolution, source-grounding, and validated-mutation contracts when designing future work.
+Ulysses Assist architecture remains directionally locked, but broader Assist implementation has not begun. Preserve the Calendar, Task, tenant-isolation, timezone, entity-resolution, source-grounding, and validated-mutation contracts when designing future work.
