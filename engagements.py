@@ -84,6 +84,36 @@ def insert_engagement(
 ):
     cur = conn.cursor()
     try:
+        # Tenant boundary: the engagement user and contact must belong
+        # to the same tenant. Fail closed before writing anything.
+        cur.execute(
+            """
+            SELECT id
+            FROM contacts
+            WHERE id = %s
+              AND user_id = %s
+            """,
+            (contact_id, user_id),
+        )
+        if not cur.fetchone():
+            raise ValueError("Contact not found for user")
+
+        # Child engagements must also belong to the same tenant and
+        # contact as their parent.
+        if parent_engagement_id is not None:
+            cur.execute(
+                """
+                SELECT id
+                FROM engagements
+                WHERE id = %s
+                  AND user_id = %s
+                  AND contact_id = %s
+                """,
+                (parent_engagement_id, user_id, contact_id),
+            )
+            if not cur.fetchone():
+                raise ValueError("Parent engagement not found for user/contact")
+
         cur.execute(
             """
             INSERT INTO engagements

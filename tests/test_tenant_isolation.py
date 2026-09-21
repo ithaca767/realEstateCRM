@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import app as app_module
+from datetime import datetime
 
 
 class TenantIsolationTests(unittest.TestCase):
@@ -704,6 +705,91 @@ class ChecklistTenantIsolationTests(unittest.TestCase):
         self.assertIn("AND c.user_id = %s", normalized)
         self.assertEqual(params, (202, 101))
         conn.close.assert_called_once()
+
+
+
+class EngagementInsertTenantIsolationTests(unittest.TestCase):
+    def _connection(self, fetches):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchone.side_effect = fetches
+        return conn, cur
+
+    def test_insert_engagement_rejects_foreign_contact(self):
+        from engagements import insert_engagement
+
+        conn, cur = self._connection([None])
+
+        with self.assertRaises(ValueError):
+            insert_engagement(
+                conn=conn,
+                user_id=101,
+                contact_id=202,
+                engagement_type="call",
+                occurred_at=datetime(2026, 9, 21, 10, 0),
+            )
+
+        sql = " ".join(cur.execute.call_args_list[0].args[0].split())
+        self.assertIn("FROM contacts", sql)
+        self.assertIn("id = %s", sql)
+        self.assertIn("user_id = %s", sql)
+        self.assertEqual(cur.execute.call_args_list[0].args[1], (202, 101))
+        self.assertEqual(cur.execute.call_count, 1)
+        conn.commit.assert_not_called()
+        cur.close.assert_called_once()
+
+    def test_insert_engagement_rejects_foreign_or_mismatched_parent(self):
+        from engagements import insert_engagement
+
+        conn, cur = self._connection([{"id": 202}, None])
+
+        with self.assertRaises(ValueError):
+            insert_engagement(
+                conn=conn,
+                user_id=101,
+                contact_id=202,
+                parent_engagement_id=303,
+                engagement_type="call",
+                occurred_at=datetime(2026, 9, 21, 10, 0),
+            )
+
+        parent_sql = " ".join(cur.execute.call_args_list[1].args[0].split())
+        self.assertIn("FROM engagements", parent_sql)
+        self.assertIn("user_id = %s", parent_sql)
+        self.assertIn("contact_id = %s", parent_sql)
+        self.assertEqual(
+            cur.execute.call_args_list[1].args[1],
+            (303, 101, 202),
+        )
+        self.assertEqual(cur.execute.call_count, 2)
+        conn.commit.assert_not_called()
+        cur.close.assert_called_once()
+
+    def test_insert_engagement_allows_owned_contact_and_parent(self):
+        from engagements import insert_engagement
+
+        conn, cur = self._connection([
+            {"id": 202},
+            {"id": 303},
+            {"id": 404},
+        ])
+
+        engagement_id = insert_engagement(
+            conn=conn,
+            user_id=101,
+            contact_id=202,
+            parent_engagement_id=303,
+            engagement_type="call",
+            occurred_at=datetime(2026, 9, 21, 10, 0),
+        )
+
+        self.assertEqual(engagement_id, 404)
+        self.assertEqual(cur.execute.call_count, 3)
+        insert_sql = " ".join(cur.execute.call_args_list[2].args[0].split())
+        self.assertIn("INSERT INTO engagements", insert_sql)
+        conn.commit.assert_called_once()
+        cur.close.assert_called_once()
 
 
 if __name__ == "__main__":
