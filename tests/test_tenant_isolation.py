@@ -475,8 +475,6 @@ class BuyerPropertyTenantIsolationTests(unittest.TestCase):
         conn.close.assert_called_once()
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class SpecialDateTenantIsolationTests(unittest.TestCase):
@@ -650,3 +648,63 @@ class SpecialDateTenantIsolationTests(unittest.TestCase):
 
         conn.commit.assert_called_once()
         conn.close.assert_called_once()
+
+class ChecklistTenantIsolationTests(unittest.TestCase):
+    @patch("app.get_db")
+    def test_buyer_checklist_read_is_tenant_scoped(self, mock_get_db):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchall.return_value = []
+        mock_get_db.return_value = conn
+
+        rows, complete, total = app_module.get_buyer_checklist(101, 202)
+
+        self.assertEqual(rows, [])
+        self.assertEqual(complete, 0)
+        self.assertEqual(total, 0)
+
+        sql, params = cur.execute.call_args.args
+        normalized = " ".join(sql.split())
+        self.assertIn("FROM buyer_checklist_items AS bci", normalized)
+        self.assertIn(
+            "JOIN contacts AS c ON c.id = bci.contact_id",
+            normalized,
+        )
+        self.assertIn("WHERE bci.contact_id = %s", normalized)
+        self.assertIn("AND c.user_id = %s", normalized)
+        self.assertEqual(params, (202, 101))
+        conn.close.assert_called_once()
+
+    @patch("app.get_db")
+    def test_listing_checklist_read_is_tenant_scoped(self, mock_get_db):
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchall.return_value = []
+        mock_get_db.return_value = conn
+
+        rows, complete, total = app_module.get_listing_checklist(101, 202)
+
+        self.assertEqual(rows, [])
+        self.assertEqual(complete, 0)
+        self.assertEqual(total, 0)
+
+        sql, params = cur.execute.call_args.args
+        normalized = " ".join(sql.split())
+        self.assertIn(
+            "FROM listing_checklist_items AS lci",
+            normalized,
+        )
+        self.assertIn(
+            "JOIN contacts AS c ON c.id = lci.contact_id",
+            normalized,
+        )
+        self.assertIn("WHERE lci.contact_id = %s", normalized)
+        self.assertIn("AND c.user_id = %s", normalized)
+        self.assertEqual(params, (202, 101))
+        conn.close.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()

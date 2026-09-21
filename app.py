@@ -4214,27 +4214,38 @@ def ensure_listing_checklist_initialized(user_id: int, contact_id: int) -> None:
     finally:
         conn.close()
 
-def get_listing_checklist(contact_id: int):
+def get_listing_checklist(user_id: int, contact_id: int):
     conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, item_key, label, due_date, is_complete
-        FROM listing_checklist_items
-        WHERE contact_id = %s
-          AND archived_at IS NULL
-        ORDER BY
-          CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
-          due_date ASC,
-          label ASC
-        """,
-        (contact_id,)
-    )
-    rows = cur.fetchall()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                lci.id,
+                lci.item_key,
+                lci.label,
+                lci.due_date,
+                lci.is_complete
+            FROM listing_checklist_items AS lci
+            JOIN contacts AS c ON c.id = lci.contact_id
+            WHERE lci.contact_id = %s
+              AND c.user_id = %s
+              AND lci.archived_at IS NULL
+            ORDER BY
+              CASE WHEN lci.due_date IS NULL THEN 1 ELSE 0 END,
+              lci.due_date ASC,
+              lci.label ASC
+            """,
+            (contact_id, user_id),
+        )
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+
     total = len(rows)
-    complete = sum(1 for r in rows if r["is_complete"])
+    complete = sum(1 for row in rows if row["is_complete"])
     return rows, complete, total
+
 
 BUYER_CHECKLIST_DEFAULTS = [
     ("cis_signed", "Consumer Information Statement Signed", None),
@@ -4303,22 +4314,29 @@ def ensure_buyer_checklist_initialized(user_id: int, contact_id: int) -> None:
         conn.close()
 
 
-def get_buyer_checklist(contact_id: int):
+def get_buyer_checklist(user_id: int, contact_id: int):
     conn = get_db()
     try:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, item_key, label, due_date, is_complete
-            FROM buyer_checklist_items
-            WHERE contact_id = %s
-              AND archived_at IS NULL
+            SELECT
+                bci.id,
+                bci.item_key,
+                bci.label,
+                bci.due_date,
+                bci.is_complete
+            FROM buyer_checklist_items AS bci
+            JOIN contacts AS c ON c.id = bci.contact_id
+            WHERE bci.contact_id = %s
+              AND c.user_id = %s
+              AND bci.archived_at IS NULL
             ORDER BY
-              CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
-              due_date ASC,
-              label ASC
+              CASE WHEN bci.due_date IS NULL THEN 1 ELSE 0 END,
+              bci.due_date ASC,
+              bci.label ASC
             """,
-            (contact_id,),
+            (contact_id, user_id),
         )
         rows = cur.fetchall()
     finally:
@@ -4326,7 +4344,6 @@ def get_buyer_checklist(contact_id: int):
 
     total = len(rows)
     complete = sum(1 for row in rows if row["is_complete"])
-
     return rows, complete, total
 
 
@@ -8601,7 +8618,7 @@ def buyer_profile(contact_id):
     # Buyer checklist
     if buyer_profile:
         ensure_buyer_checklist_initialized(current_user.id, contact_id)
-        buyer_checklist, buyer_checklist_complete, buyer_checklist_total = get_buyer_checklist(contact_id)
+        buyer_checklist, buyer_checklist_complete, buyer_checklist_total = get_buyer_checklist(current_user.id, contact_id)
     else:
         buyer_checklist = []
         buyer_checklist_complete = 0
@@ -9509,7 +9526,7 @@ def seller_profile(contact_id):
     pros_inspectors = get_professionals_for_dropdown(current_user.id, category="Inspector")
 
     ensure_listing_checklist_initialized(current_user.id, contact_id)
-    checklist_items, checklist_complete, checklist_total = get_listing_checklist(contact_id)
+    checklist_items, checklist_complete, checklist_total = get_listing_checklist(current_user.id, contact_id)
     
     return render_template(
         "seller_profile.html",
