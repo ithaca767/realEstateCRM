@@ -5681,8 +5681,11 @@ def contacts():
                 EXISTS (
                     SELECT 1
                     FROM client_relationships cr
+                    JOIN client_relationship_contacts crc
+                      ON crc.user_id = cr.user_id
+                     AND crc.relationship_id = cr.id
                     WHERE cr.user_id = %s
-                      AND cr.contact_id = contacts.id
+                      AND crc.contact_id = contacts.id
                       AND cr.status = 'current'
                 )
                 """
@@ -5697,15 +5700,21 @@ def contacts():
                 EXISTS (
                     SELECT 1
                     FROM client_relationships cr_ended
+                    JOIN client_relationship_contacts crc_ended
+                      ON crc_ended.user_id = cr_ended.user_id
+                     AND crc_ended.relationship_id = cr_ended.id
                     WHERE cr_ended.user_id = %s
-                      AND cr_ended.contact_id = contacts.id
+                      AND crc_ended.contact_id = contacts.id
                       AND cr_ended.status = 'ended'
                 )
                 AND NOT EXISTS (
                     SELECT 1
                     FROM client_relationships cr_current
+                    JOIN client_relationship_contacts crc_current
+                      ON crc_current.user_id = cr_current.user_id
+                     AND crc_current.relationship_id = cr_current.id
                     WHERE cr_current.user_id = %s
-                      AND cr_current.contact_id = contacts.id
+                      AND crc_current.contact_id = contacts.id
                       AND cr_current.status = 'current'
                 )
                 """
@@ -5720,8 +5729,11 @@ def contacts():
                 EXISTS (
                     SELECT 1
                     FROM client_relationships cr
+                    JOIN client_relationship_contacts crc
+                      ON crc.user_id = cr.user_id
+                     AND crc.relationship_id = cr.id
                     WHERE cr.user_id = %s
-                      AND cr.contact_id = contacts.id
+                      AND crc.contact_id = contacts.id
                       AND cr.status IN ('current', 'ended')
                 )
                 """
@@ -5788,8 +5800,11 @@ def contacts():
                     ', ' ORDER BY cr_types.relationship_type
                 )
                 FROM client_relationships cr_types
+                JOIN client_relationship_contacts crc_types
+                  ON crc_types.user_id = cr_types.user_id
+                 AND crc_types.relationship_id = cr_types.id
                 WHERE cr_types.user_id = %s
-                  AND cr_types.contact_id = contacts.id
+                  AND crc_types.contact_id = contacts.id
                   {relationship_status_sql}
             ) AS client_types
         """
@@ -6442,26 +6457,77 @@ def edit_contact(contact_id):
     cur.execute(
         """
         SELECT
-            id,
-            relationship_type,
-            agreement_type,
-            signed_date,
-            end_date,
-            status,
-            notes,
-            created_at,
-            updated_at
-        FROM client_relationships
-        WHERE user_id = %s
-          AND contact_id = %s
+            cr.id,
+            cr.relationship_type,
+            cr.agreement_type,
+            cr.signed_date,
+            cr.end_date,
+            cr.status,
+            cr.notes,
+            cr.created_at,
+            cr.updated_at
+        FROM client_relationships cr
+        JOIN client_relationship_contacts crc
+          ON crc.user_id = cr.user_id
+         AND crc.relationship_id = cr.id
+        WHERE cr.user_id = %s
+          AND crc.contact_id = %s
         ORDER BY
-            CASE WHEN status = 'current' THEN 0 ELSE 1 END,
-            signed_date DESC,
-            id DESC
+            CASE WHEN cr.status = 'current' THEN 0 ELSE 1 END,
+            cr.signed_date DESC,
+            cr.id DESC
         """,
         (current_user.id, contact_id),
     )
     client_relationships = cur.fetchall() or []
+
+    relationship_ids = [
+        relationship["id"]
+        for relationship in client_relationships
+    ]
+    relationship_members_by_id = {}
+
+    if relationship_ids:
+        cur.execute(
+            """
+            SELECT
+                crc.relationship_id,
+                crc.contact_id,
+                COALESCE(
+                    NULLIF(TRIM(c.name), ''),
+                    NULLIF(
+                        TRIM(CONCAT_WS(' ', c.first_name, c.last_name)),
+                        ''
+                    ),
+                    '(Unnamed)'
+                ) AS contact_name
+            FROM client_relationship_contacts crc
+            JOIN contacts c
+              ON c.user_id = crc.user_id
+             AND c.id = crc.contact_id
+            WHERE crc.user_id = %s
+              AND crc.relationship_id = ANY(%s)
+            ORDER BY crc.relationship_id, contact_name
+            """,
+            (current_user.id, relationship_ids),
+        )
+
+        for member in (cur.fetchall() or []):
+            relationship_members_by_id.setdefault(
+                member["relationship_id"],
+                [],
+            ).append(member)
+
+    for relationship in client_relationships:
+        members = relationship_members_by_id.get(
+            relationship["id"],
+            [],
+        )
+        relationship["members"] = members
+        relationship["member_contact_ids"] = [
+            member["contact_id"]
+            for member in members
+        ]
 
     associations = get_contact_associations(conn, current_user.id, contact_id)
 
@@ -6828,6 +6894,20 @@ def add_client_relationship(contact_id):
     signed_date = (request.form.get("signed_date") or "").strip()
     notes = (request.form.get("notes") or "").strip() or None
 
+    raw_member_ids = request.form.getlist("member_contact_ids")
+    try:
+        requested_member_ids = {
+            int(value)
+            for value in raw_member_ids
+            if str(value).strip()
+        }
+    except (TypeError, ValueError):
+        flash("Please select valid contacts for this client relationship.", "warning")
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    # The contact whose record initiated the relationship is always included.
+    requested_member_ids.add(contact_id)
+
     allowed_relationship_types = {
         "Buyer",
         "Seller",
@@ -6857,17 +6937,63 @@ def add_client_relationship(contact_id):
     conn = get_db()
     cur = conn.cursor()
 
-    # Tenant boundary: a client relationship may only be created for a
-    # contact owned by the authenticated user.
+    # Tenant boundary: the originating contact must belong to the
+    # authenticated user.
     cur.execute(
         "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
         (contact_id, current_user.id),
     )
-
     if not cur.fetchone():
         conn.close()
         abort(404)
 
+    additional_member_ids = requested_member_ids - {contact_id}
+
+    if additional_member_ids:
+        # Additional members must be directly associated with the originating
+        # contact and must independently belong to the authenticated user.
+        cur.execute(
+            """
+            SELECT
+                CASE
+                    WHEN ca.contact_id_primary = %s
+                        THEN ca.contact_id_related
+                    ELSE ca.contact_id_primary
+                END AS other_contact_id
+            FROM contact_associations ca
+            JOIN contacts c
+              ON c.id = CASE
+                    WHEN ca.contact_id_primary = %s
+                        THEN ca.contact_id_related
+                    ELSE ca.contact_id_primary
+                END
+             AND c.user_id = ca.user_id
+            WHERE ca.user_id = %s
+              AND (
+                    ca.contact_id_primary = %s
+                    OR ca.contact_id_related = %s
+              )
+            """,
+            (
+                contact_id,
+                contact_id,
+                current_user.id,
+                contact_id,
+                contact_id,
+            ),
+        )
+        allowed_associated_ids = {
+            row["other_contact_id"]
+            for row in (cur.fetchall() or [])
+        }
+
+        if not additional_member_ids.issubset(allowed_associated_ids):
+            conn.rollback()
+            conn.close()
+            abort(404)
+
+    # Keep contact_id populated during the transition so the currently
+    # deployed application remains compatible with this relationship record.
     cur.execute(
         """
         INSERT INTO client_relationships (
@@ -6880,6 +7006,7 @@ def add_client_relationship(contact_id):
             notes
         )
         VALUES (%s, %s, %s, %s, %s, 'current', %s)
+        RETURNING id
         """,
         (
             current_user.id,
@@ -6890,12 +7017,312 @@ def add_client_relationship(contact_id):
             notes,
         ),
     )
+    relationship_row = cur.fetchone()
+    relationship_id = relationship_row["id"]
+
+    for member_contact_id in sorted(requested_member_ids):
+        cur.execute(
+            """
+            INSERT INTO client_relationship_contacts (
+                user_id,
+                relationship_id,
+                contact_id
+            )
+            VALUES (%s, %s, %s)
+            """,
+            (
+                current_user.id,
+                relationship_id,
+                member_contact_id,
+            ),
+        )
 
     conn.commit()
     conn.close()
 
     flash("Client relationship added.", "success")
-    return redirect(url_for("edit_contact", contact_id=contact_id))
+    return redirect(
+        url_for("edit_contact", contact_id=contact_id)
+        + "#client-relationships"
+    )
+
+
+@app.route(
+    "/contacts/<int:contact_id>/client-relationships/<int:relationship_id>/edit",
+    methods=["POST"],
+)
+@login_required
+def edit_client_relationship(contact_id, relationship_id):
+    relationship_type = (request.form.get("relationship_type") or "").strip()
+    agreement_type = (request.form.get("agreement_type") or "").strip()
+    signed_date_raw = (request.form.get("signed_date") or "").strip()
+    end_date_raw = (request.form.get("end_date") or "").strip()
+    notes = (request.form.get("notes") or "").strip() or None
+
+    raw_member_ids = request.form.getlist("member_contact_ids")
+    try:
+        requested_member_ids = {
+            int(value)
+            for value in raw_member_ids
+            if str(value).strip()
+        }
+    except (TypeError, ValueError):
+        flash("Please select valid contacts for this client relationship.", "warning")
+        return redirect(
+            url_for("edit_contact", contact_id=contact_id)
+            + "#client-relationships"
+        )
+
+    allowed_relationship_types = {
+        "Buyer",
+        "Seller",
+        "Tenant",
+        "Landlord",
+        "Commercial",
+        "Other",
+    }
+
+    if (
+        relationship_type not in allowed_relationship_types
+        or not agreement_type
+        or not signed_date_raw
+    ):
+        flash(
+            "Please provide a valid client type, agreement type, and signed date.",
+            "warning",
+        )
+        return redirect(
+            url_for("edit_contact", contact_id=contact_id)
+            + "#client-relationships"
+        )
+
+    if not requested_member_ids:
+        flash(
+            "A client relationship must include at least one contact.",
+            "warning",
+        )
+        return redirect(
+            url_for("edit_contact", contact_id=contact_id)
+            + "#client-relationships"
+        )
+
+    try:
+        signed_date_value = date.fromisoformat(signed_date_raw)
+    except ValueError:
+        flash("Please provide a valid signed date.", "warning")
+        return redirect(
+            url_for("edit_contact", contact_id=contact_id)
+            + "#client-relationships"
+        )
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # The page Contact must belong to the authenticated user.
+    cur.execute(
+        "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+        (contact_id, current_user.id),
+    )
+    if not cur.fetchone():
+        conn.close()
+        abort(404)
+
+    # The relationship must belong to this user, and the Contact whose page
+    # initiated the edit must currently be a member of that relationship.
+    cur.execute(
+        """
+        SELECT
+            cr.id,
+            cr.status,
+            cr.signed_date,
+            cr.end_date
+        FROM client_relationships cr
+        JOIN client_relationship_contacts crc
+          ON crc.user_id = cr.user_id
+         AND crc.relationship_id = cr.id
+        WHERE cr.id = %s
+          AND cr.user_id = %s
+          AND crc.contact_id = %s
+        """,
+        (
+            relationship_id,
+            current_user.id,
+            contact_id,
+        ),
+    )
+    relationship = cur.fetchone()
+    if not relationship:
+        conn.close()
+        abort(404)
+
+    end_date_value = relationship["end_date"]
+
+    if relationship["status"] == "ended":
+        if not end_date_raw:
+            conn.close()
+            flash("Please provide an end date for an ended relationship.", "warning")
+            return redirect(
+                url_for("edit_contact", contact_id=contact_id)
+                + "#client-relationships"
+            )
+        try:
+            end_date_value = date.fromisoformat(end_date_raw)
+        except ValueError:
+            conn.close()
+            flash("Please provide a valid end date.", "warning")
+            return redirect(
+                url_for("edit_contact", contact_id=contact_id)
+                + "#client-relationships"
+            )
+
+        if end_date_value < signed_date_value:
+            conn.close()
+            flash("End date cannot be before the signed date.", "warning")
+            return redirect(
+                url_for("edit_contact", contact_id=contact_id)
+                + "#client-relationships"
+            )
+    else:
+        # Editing a current relationship cannot implicitly end it.
+        end_date_value = None
+
+    cur.execute(
+        """
+        SELECT contact_id
+        FROM client_relationship_contacts
+        WHERE user_id = %s
+          AND relationship_id = %s
+        """,
+        (current_user.id, relationship_id),
+    )
+    existing_member_ids = {
+        row["contact_id"]
+        for row in (cur.fetchall() or [])
+    }
+
+    if not existing_member_ids:
+        conn.rollback()
+        conn.close()
+        abort(404)
+
+    new_member_ids = requested_member_ids - existing_member_ids
+
+    if new_member_ids:
+        # New members must be directly associated with the Contact from
+        # which this edit was opened and independently tenant-owned.
+        cur.execute(
+            """
+            SELECT
+                CASE
+                    WHEN ca.contact_id_primary = %s
+                        THEN ca.contact_id_related
+                    ELSE ca.contact_id_primary
+                END AS other_contact_id
+            FROM contact_associations ca
+            JOIN contacts c
+              ON c.id = CASE
+                    WHEN ca.contact_id_primary = %s
+                        THEN ca.contact_id_related
+                    ELSE ca.contact_id_primary
+                END
+             AND c.user_id = ca.user_id
+            WHERE ca.user_id = %s
+              AND (
+                    ca.contact_id_primary = %s
+                    OR ca.contact_id_related = %s
+              )
+            """,
+            (
+                contact_id,
+                contact_id,
+                current_user.id,
+                contact_id,
+                contact_id,
+            ),
+        )
+        allowed_associated_ids = {
+            row["other_contact_id"]
+            for row in (cur.fetchall() or [])
+        }
+
+        if not new_member_ids.issubset(allowed_associated_ids):
+            conn.rollback()
+            conn.close()
+            abort(404)
+
+    # The membership table's composite foreign keys provide a second
+    # tenant-isolation boundary for every requested Contact.
+    cur.execute(
+        """
+        UPDATE client_relationships
+        SET relationship_type = %s,
+            agreement_type = %s,
+            signed_date = %s,
+            end_date = %s,
+            notes = %s,
+            updated_at = NOW()
+        WHERE id = %s
+          AND user_id = %s
+        """,
+        (
+            relationship_type,
+            agreement_type,
+            signed_date_value,
+            end_date_value,
+            notes,
+            relationship_id,
+            current_user.id,
+        ),
+    )
+
+    if cur.rowcount != 1:
+        conn.rollback()
+        conn.close()
+        abort(404)
+
+    member_ids_to_remove = existing_member_ids - requested_member_ids
+    member_ids_to_add = requested_member_ids - existing_member_ids
+
+    for member_contact_id in sorted(member_ids_to_remove):
+        cur.execute(
+            """
+            DELETE FROM client_relationship_contacts
+            WHERE user_id = %s
+              AND relationship_id = %s
+              AND contact_id = %s
+            """,
+            (
+                current_user.id,
+                relationship_id,
+                member_contact_id,
+            ),
+        )
+
+    for member_contact_id in sorted(member_ids_to_add):
+        cur.execute(
+            """
+            INSERT INTO client_relationship_contacts (
+                user_id,
+                relationship_id,
+                contact_id
+            )
+            VALUES (%s, %s, %s)
+            """,
+            (
+                current_user.id,
+                relationship_id,
+                member_contact_id,
+            ),
+        )
+
+    conn.commit()
+    conn.close()
+
+    flash("Client relationship updated.", "success")
+    return redirect(
+        url_for("edit_contact", contact_id=contact_id)
+        + "#client-relationships"
+    )
 
 
 @app.route(
@@ -6918,27 +7345,33 @@ def end_client_relationship(contact_id, relationship_id):
     conn = get_db()
     cur = conn.cursor()
 
-    # Tenant boundary and relationship ownership are enforced directly by
-    # the update. Only this user's current relationship for this contact
-    # can be ended.
+    # Tenant boundary and relationship membership are enforced directly
+    # by the update. A shared relationship may be ended from any Contact
+    # who is a member of that relationship.
     cur.execute(
         """
-        UPDATE client_relationships
+        UPDATE client_relationships AS cr
         SET status = 'ended',
             end_date = %s,
             updated_at = NOW()
-        WHERE id = %s
-          AND user_id = %s
-          AND contact_id = %s
-          AND status = 'current'
-          AND signed_date <= %s
+        WHERE cr.id = %s
+          AND cr.user_id = %s
+          AND cr.status = 'current'
+          AND cr.signed_date <= %s
+          AND EXISTS (
+                SELECT 1
+                FROM client_relationship_contacts crc
+                WHERE crc.user_id = cr.user_id
+                  AND crc.relationship_id = cr.id
+                  AND crc.contact_id = %s
+          )
         """,
         (
             end_date_value,
             relationship_id,
             current_user.id,
-            contact_id,
             end_date_value,
+            contact_id,
         ),
     )
 
