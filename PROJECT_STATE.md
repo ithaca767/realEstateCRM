@@ -1,10 +1,10 @@
 # Ulysses CRM - Project State
 
-**Last updated:** September 21, 2026
+**Last updated:** September 22, 2026
 **Current production version:** v1.10.10
 **Current branch:** main
 **Current checkpoint:** 3d5511d
-**Session mode:** Tenant-Isolation Audit Complete / Enhancement Review Next
+**Session mode:** Clients Enhancement Complete Locally / Production Deployment Next
 
 ## Current Architecture
 
@@ -345,6 +345,49 @@ Implementation checkpoint:
 
 - `3f09d45` - Harden Task integrity and timezone handling
 
+## Client Relationships / Clients - COMPLETE LOCALLY
+
+Completed locally September 22, 2026. Production deployment and migration validation remain pending.
+
+Ulysses now distinguishes general Contacts from actual client representation. `Active Contacts` remains the existing activity-based concept and is not a synonym for Client.
+
+Client vocabulary and lifecycle:
+
+- Contacts are everyone stored in the CRM.
+- Active Contacts remain activity-based and surface Contacts based on recent CRM activity.
+- Current Clients are non-archived Contacts with at least one current signed representation or service relationship.
+- Past Clients are non-archived Contacts with at least one ended client relationship and no relationship that remains current.
+- All Clients are non-archived Contacts with any current or ended client relationship.
+- Archived is a CRM record-retention state, not a client lifecycle state. Archiving is an alternative to deleting a Contact and does not itself create Past Client status.
+- Ending a client relationship preserves its history and moves the Contact from Current to Past only when no other current client relationship remains.
+
+Client relationships are first-class records rather than a boolean flag on Contacts. A Contact may have multiple relationships over time or simultaneous relationships such as Buyer and Seller.
+
+The `client_relationships` model records tenant owner, Contact, relationship type, agreement type, signed date, optional end date, current/ended status, and optional notes.
+
+The Contacts interface now has a master `Clients` view with `Current`, `Past`, and `All` subviews. Client Type is relationship-derived and multiple applicable relationship types are aggregated without duplicating the Contact.
+
+The Contact edit page includes Client Relationships history and supports adding a signed relationship and ending a current relationship while preserving history.
+
+Tenant-isolation protections:
+
+- Reads, creation, ending, filtering, and Client Type aggregation are explicitly scoped to the authenticated `user_id`.
+- Relationship tenant IDs are parameterized in SQL.
+- The database migration adds a composite `(user_id, contact_id)` foreign key so a relationship cannot reference another tenant's Contact even if application validation fails.
+- No administrator or owner bypass exists.
+
+Migration:
+
+- `docs/migrations/2026_09_21_client_relationships.sql`
+
+Local validation:
+
+- 13 dedicated Client lifecycle / tenant-isolation tests passing.
+- Complete automated regression suite passes 143/143.
+- `git diff --check` passes.
+
+Production migration and live production validation remain required before this feature is production-complete.
+
 ## Active Feature Backlog
 
 Captured September 20, 2026 from the current approved feature-request list. These items are approved for planning, but inclusion here does not mean that architecture, implementation order, or release scope has been finalized.
@@ -359,7 +402,6 @@ Captured September 20, 2026 from the current approved feature-request list. Thes
 
 ### Dashboard / Contact Workflow
 
-- Set apart `Active` clients on the Dashboard, representing clients with signed contracts.
 - Add an `Add Contact` action to the Dashboard Active Contacts card.
 - Consider isolating imported Contacts in a separate view/tab until they are activated or reactivated.
 - Add search capability for Professionals.
@@ -415,6 +457,14 @@ The intermittent stale `Please log in to access this page.` flash remains deferr
 
 No numbered Maintenance / Stabilization queue items remain.
 
-Next work: return to the banked CRM enhancement list and review/prioritize the next implementation sequence before changing production behavior.
+Client Relationships / Clients enhancement completed locally September 22, 2026. The implementation introduces first-class signed client relationships, master Clients navigation with Current / Past / All views, relationship-derived Client Type display, relationship history on Contact records, and explicit tenant-scoped creation, reads, ending, filtering, and aggregation.
+
+Archived Contacts are record-retention records and are not part of the operational Clients population. Ending representation does not archive a Contact.
+
+Local validation is complete: 13 dedicated Client tests pass and the complete automated regression suite passes 143/143. `git diff --check` is clean.
+
+Production deployment remains pending. Before declaring the Clients enhancement production-complete, apply and validate `docs/migrations/2026_09_21_client_relationships.sql` against production, deploy the application, and perform live smoke validation.
+
+After production validation, update the production version/checkpoint and return to the remaining banked enhancement list. The Dashboard Active Contacts `Contacts` button should become `Create Contact`; broader mobile-friendly UI work is also banked.
 
 Ulysses Assist architecture remains directionally locked, but broader Assist implementation has not begun. Preserve the Calendar, Task, tenant-isolation, timezone, entity-resolution, source-grounding, and validated-mutation contracts when designing future work.

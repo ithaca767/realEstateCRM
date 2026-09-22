@@ -5642,8 +5642,10 @@ def contacts():
     where_clauses.append("user_id = %s")
     params.append(current_user.id)
     
-    # Phase 6a default: exclude archived contacts unless explicitly requested
-    if not show_archived:
+    # Phase 6a default: exclude archived contacts unless explicitly requested.
+    # Clients are an operational population, so archived Contacts remain excluded
+    # even when show_archived is explicitly requested.
+    if tab == "clients" or not show_archived:
         where_clauses.append("archived_at IS NULL")
     
     # Tabs mapped to your existing schema
@@ -5665,9 +5667,67 @@ def contacts():
         placeholders = ", ".join(["%s"] * len(lead_stages))
         where_clauses.append(f"pipeline_stage IN ({placeholders})")
         params.extend(lead_stages)
-    elif tab == "past_clients":
-        where_clauses.append("pipeline_stage = %s")
-        params.append("Past Client / Relationship")
+    elif tab == "clients":
+        client_status = (
+            request.args.get("client_status") or "current"
+        ).strip().lower()
+
+        if client_status not in {"current", "past", "all"}:
+            client_status = "current"
+
+        if client_status == "current":
+            where_clauses.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM client_relationships cr
+                    WHERE cr.user_id = %s
+                      AND cr.contact_id = contacts.id
+                      AND cr.status = 'current'
+                )
+                """
+            )
+            params.append(current_user.id)
+
+        elif client_status == "past":
+            # A Past Client has historical representation but no
+            # relationship that is still current.
+            where_clauses.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM client_relationships cr_ended
+                    WHERE cr_ended.user_id = %s
+                      AND cr_ended.contact_id = contacts.id
+                      AND cr_ended.status = 'ended'
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM client_relationships cr_current
+                    WHERE cr_current.user_id = %s
+                      AND cr_current.contact_id = contacts.id
+                      AND cr_current.status = 'current'
+                )
+                """
+            )
+            params.extend([current_user.id, current_user.id])
+
+        else:
+            # All Clients includes every non-archived contact with
+            # current or historical client representation.
+            where_clauses.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM client_relationships cr
+                    WHERE cr.user_id = %s
+                      AND cr.contact_id = contacts.id
+                      AND cr.status IN ('current', 'ended')
+                )
+                """
+            )
+            params.append(current_user.id)
+
     elif tab == "imported":
         where_clauses.append("contact_state = %s")
         params.append("imported")
@@ -5709,6 +5769,31 @@ def contacts():
         offset = (page - 1) * PAGE_SIZE
 
     # Main query for current page
+    client_type_select = "NULL::text AS client_types"
+
+    if tab == "clients":
+        if client_status == "current":
+            relationship_status_sql = "AND cr_types.status = 'current'"
+        elif client_status == "past":
+            relationship_status_sql = "AND cr_types.status = 'ended'"
+        else:
+            relationship_status_sql = (
+                "AND cr_types.status IN ('current', 'ended')"
+            )
+
+        client_type_select = f"""
+            (
+                SELECT string_agg(
+                    DISTINCT cr_types.relationship_type,
+                    ', ' ORDER BY cr_types.relationship_type
+                )
+                FROM client_relationships cr_types
+                WHERE cr_types.user_id = %s
+                  AND cr_types.contact_id = contacts.id
+                  {relationship_status_sql}
+            ) AS client_types
+        """
+
     data_sql = f"""
         SELECT
             id,
@@ -5721,21 +5806,37 @@ def contacts():
             pipeline_stage,
             notes,
             archived_at,
-            contact_state            
+            contact_state,
+            {client_type_select}
         FROM contacts
         {where_sql}
         ORDER BY last_name NULLS LAST, first_name NULLS LAST, id ASC
         LIMIT %s OFFSET %s
     """
-    data_params = params + [PAGE_SIZE, offset]
+    data_params = list(params)
+    if tab == "clients":
+        # client_type_select appears before where_sql in data_sql, so its
+        # tenant parameter must precede the WHERE-clause parameters.
+        data_params.insert(0, current_user.id)
+
+    data_params.extend([PAGE_SIZE, offset])
     cur.execute(data_sql, tuple(data_params))
     contacts = cur.fetchall()
     conn.close()
+
+    client_status = (
+        (request.args.get("client_status") or "current").strip().lower()
+        if tab == "clients"
+        else None
+    )
+    if client_status not in {None, "current", "past", "all"}:
+        client_status = "current"
 
     return render_template(
         "contacts.html",
         contacts=contacts,
         active_tab=tab,
+        client_status=client_status,
         search_query=search,
         page=page,
         total_pages=total_pages,
@@ -6336,6 +6437,32 @@ def edit_contact(contact_id):
     )
     special_dates = cur.fetchall()
 
+    # Client relationships are independently tenant-scoped even though the
+    # contact ownership boundary was already verified above.
+    cur.execute(
+        """
+        SELECT
+            id,
+            relationship_type,
+            agreement_type,
+            signed_date,
+            end_date,
+            status,
+            notes,
+            created_at,
+            updated_at
+        FROM client_relationships
+        WHERE user_id = %s
+          AND contact_id = %s
+        ORDER BY
+            CASE WHEN status = 'current' THEN 0 ELSE 1 END,
+            signed_date DESC,
+            id DESC
+        """,
+        (current_user.id, contact_id),
+    )
+    client_relationships = cur.fetchall() or []
+
     associations = get_contact_associations(conn, current_user.id, contact_id)
 
     conn.close()
@@ -6352,6 +6479,7 @@ def edit_contact(contact_id):
         eng_total_rows=eng_total_rows,
         eng_page_size=ENG_PAGE_SIZE,
         special_dates=special_dates,
+        client_relationships=client_relationships,
         open_interactions=open_interactions,
         completed_interactions=completed_interactions,
         lead_types=LEAD_TYPES,
@@ -6690,6 +6818,143 @@ def contact_set_state(contact_id):
         return redirect(next_url)
 
     return redirect(url_for("contacts", tab="imported"))
+
+
+@app.route("/contacts/<int:contact_id>/client-relationships/add", methods=["POST"])
+@login_required
+def add_client_relationship(contact_id):
+    relationship_type = (request.form.get("relationship_type") or "").strip()
+    agreement_type = (request.form.get("agreement_type") or "").strip()
+    signed_date = (request.form.get("signed_date") or "").strip()
+    notes = (request.form.get("notes") or "").strip() or None
+
+    allowed_relationship_types = {
+        "Buyer",
+        "Seller",
+        "Tenant",
+        "Landlord",
+        "Commercial",
+        "Other",
+    }
+
+    if (
+        relationship_type not in allowed_relationship_types
+        or not agreement_type
+        or not signed_date
+    ):
+        flash(
+            "Please provide a valid client type, agreement type, and signed date.",
+            "warning",
+        )
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    try:
+        signed_date_value = date.fromisoformat(signed_date)
+    except ValueError:
+        flash("Please provide a valid signed date.", "warning")
+        return redirect(url_for("edit_contact", contact_id=contact_id))
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Tenant boundary: a client relationship may only be created for a
+    # contact owned by the authenticated user.
+    cur.execute(
+        "SELECT id FROM contacts WHERE id = %s AND user_id = %s",
+        (contact_id, current_user.id),
+    )
+
+    if not cur.fetchone():
+        conn.close()
+        abort(404)
+
+    cur.execute(
+        """
+        INSERT INTO client_relationships (
+            user_id,
+            contact_id,
+            relationship_type,
+            agreement_type,
+            signed_date,
+            status,
+            notes
+        )
+        VALUES (%s, %s, %s, %s, %s, 'current', %s)
+        """,
+        (
+            current_user.id,
+            contact_id,
+            relationship_type,
+            agreement_type,
+            signed_date_value,
+            notes,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+    flash("Client relationship added.", "success")
+    return redirect(url_for("edit_contact", contact_id=contact_id))
+
+
+@app.route(
+    "/contacts/<int:contact_id>/client-relationships/<int:relationship_id>/end",
+    methods=["POST"],
+)
+@login_required
+def end_client_relationship(contact_id, relationship_id):
+    end_date_raw = (request.form.get("end_date") or "").strip()
+
+    try:
+        end_date_value = date.fromisoformat(end_date_raw)
+    except ValueError:
+        flash("Please provide a valid end date.", "warning")
+        return redirect(
+            url_for("edit_contact", contact_id=contact_id)
+            + "#client-relationships"
+        )
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Tenant boundary and relationship ownership are enforced directly by
+    # the update. Only this user's current relationship for this contact
+    # can be ended.
+    cur.execute(
+        """
+        UPDATE client_relationships
+        SET status = 'ended',
+            end_date = %s,
+            updated_at = NOW()
+        WHERE id = %s
+          AND user_id = %s
+          AND contact_id = %s
+          AND status = 'current'
+          AND signed_date <= %s
+        """,
+        (
+            end_date_value,
+            relationship_id,
+            current_user.id,
+            contact_id,
+            end_date_value,
+        ),
+    )
+
+    if cur.rowcount != 1:
+        conn.rollback()
+        conn.close()
+        abort(404)
+
+    conn.commit()
+    conn.close()
+
+    flash("Client relationship ended.", "success")
+    return redirect(
+        url_for("edit_contact", contact_id=contact_id)
+        + "#client-relationships"
+    )
 
 
 @app.route("/contacts/<int:contact_id>/engagements/add", methods=["POST"])

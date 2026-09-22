@@ -11,7 +11,10 @@
           {% if active_tab == "buyers" %}Buyers{% endif %}
           {% if active_tab == "leads" %}Active Leads{% endif %}
           {% if active_tab == "all" %}All Contacts{% endif %}
-          {% if active_tab == "past_clients" %}Past Clients{% endif %}
+          {% if active_tab == "clients" %}
+            Clients ·
+            {% if client_status == "past" %}Past{% elif client_status == "all" %}All{% else %}Current{% endif %}
+          {% endif %}
         </div>
       </div>
     
@@ -62,9 +65,9 @@
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'past_clients' %}active{% endif %}"
-               href="{{ url_for('contacts', tab='past_clients', q=search_query, page=1) }}">
-              Past Clients
+            <a class="nav-link {% if active_tab == 'clients' %}active{% endif %}"
+               href="{{ url_for('contacts', tab='clients', client_status='current', q=search_query, page=1) }}">
+              Clients
             </a>
           </li>
           <li class="nav-item">
@@ -86,6 +89,9 @@
               method="get"
               action="{{ url_for('contacts') }}">
           <input type="hidden" name="tab" value="{{ active_tab }}">
+          {% if active_tab == "clients" %}
+            <input type="hidden" name="client_status" value="{{ client_status }}">
+          {% endif %}
           <input type="hidden" name="page" value="1">
           <input
             class="form-control form-control-sm"
@@ -100,6 +106,26 @@
           </button>
         </form>
       </div>
+
+      {% if active_tab == "clients" %}
+        <div class="d-flex gap-2 mb-3">
+          <a
+            class="btn btn-sm {% if client_status == 'current' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+            href="{{ url_for('contacts', tab='clients', client_status='current', q=search_query, page=1) }}">
+            Current
+          </a>
+          <a
+            class="btn btn-sm {% if client_status == 'past' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+            href="{{ url_for('contacts', tab='clients', client_status='past', q=search_query, page=1) }}">
+            Past
+          </a>
+          <a
+            class="btn btn-sm {% if client_status == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+            href="{{ url_for('contacts', tab='clients', client_status='all', q=search_query, page=1) }}">
+            All
+          </a>
+        </div>
+      {% endif %}
 
       <!-- Info line -->
       <div class="d-flex justify-content-between align-items-center mb-2">
@@ -117,7 +143,7 @@
               <th>Name</th>
               <th>Email</th>
               <th>Phone</th>
-              <th>Type</th>
+              <th>{% if active_tab == "clients" %}Client Type{% else %}Type{% endif %}</th>
               <th>Notes</th>
               <th></th>
             </tr>
@@ -141,9 +167,13 @@
                 <td>{{ c['phone']|phone_display }}
                 </td>
                 <td>
-                  {{ c["lead_type"] or '' }}
-                  {% if c["pipeline_stage"] %}
-                    <br><small class="text-muted">{{ c["pipeline_stage"] }}</small>
+                  {% if active_tab == "clients" %}
+                    {{ c["client_types"] or '' }}
+                  {% else %}
+                    {{ c["lead_type"] or '' }}
+                    {% if c["pipeline_stage"] %}
+                      <br><small class="text-muted">{{ c["pipeline_stage"] }}</small>
+                    {% endif %}
                   {% endif %}
                 </td>
                 <td class="text-truncate" style="max-width: 250px;">
@@ -199,7 +229,7 @@
           <!-- Previous -->
           <li class="page-item {% if page <= 1 %}disabled{% endif %}">
             <a class="page-link"
-               href="{% if page > 1 %}{{ url_for('contacts', tab=active_tab, q=search_query, page=page-1) }}{% else %}#{% endif %}">
+               href="{% if page > 1 %}{{ url_for('contacts', tab=active_tab, client_status=client_status if active_tab == 'clients' else None, q=search_query, page=page-1) }}{% else %}#{% endif %}">
               Previous
             </a>
           </li>
@@ -210,7 +240,7 @@
           {% for p in range(start_page, end_page + 1) %}
             <li class="page-item {% if p == page %}active{% endif %}">
               <a class="page-link"
-                 href="{{ url_for('contacts', tab=active_tab, q=search_query, page=p) }}">
+                 href="{{ url_for('contacts', tab=active_tab, client_status=client_status if active_tab == 'clients' else None, q=search_query, page=p) }}">
                 {{ p }}
               </a>
             </li>
@@ -219,7 +249,7 @@
           <!-- Next -->
           <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
             <a class="page-link"
-               href="{% if page < total_pages %}{{ url_for('contacts', tab=active_tab, q=search_query, page=page+1) }}{% else %}#{% endif %}">
+               href="{% if page < total_pages %}{{ url_for('contacts', tab=active_tab, client_status=client_status if active_tab == 'clients' else None, q=search_query, page=page+1) }}{% else %}#{% endif %}">
               Next
             </a>
           </li>

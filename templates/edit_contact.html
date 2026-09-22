@@ -361,6 +361,245 @@
             </div>
           </div>
 
+          <!-- Client Relationships -->
+          <div class="card mt-4" id="client-relationships">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <div>
+                Client Relationships
+                <div class="text-muted small">
+                  Signed representation and service agreements for this contact.
+                </div>
+              </div>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-primary"
+                data-bs-toggle="modal"
+                data-bs-target="#addClientRelationshipModal">
+                + Add
+              </button>
+            </div>
+
+            <div class="card-body bg-white">
+              {% if client_relationships and client_relationships|length > 0 %}
+                {% set has_current_relationship = client_relationships
+                    | selectattr("status", "equalto", "current")
+                    | list
+                    | length > 0 %}
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Client Type</th>
+                        <th>Agreement</th>
+                        <th>Signed</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        {% if has_current_relationship %}
+                          <th>Action</th>
+                        {% endif %}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for relationship in client_relationships %}
+                        <tr>
+                          <td class="fw-semibold">
+                            {{ relationship["relationship_type"] }}
+                          </td>
+                          <td>{{ relationship["agreement_type"] }}</td>
+                          <td>{{ relationship["signed_date"] }}</td>
+                          <td>
+                            {% if relationship["status"] == "current" %}
+                              <span class="badge bg-success">Current</span>
+                            {% else %}
+                              <span class="badge bg-secondary">Ended</span>
+                              {% if relationship["end_date"] %}
+                                <div class="small text-muted mt-1">
+                                  {{ relationship["end_date"] }}
+                                </div>
+                              {% endif %}
+                            {% endif %}
+                          </td>
+                          <td>{{ relationship["notes"] or "" }}</td>
+                          {% if has_current_relationship %}
+                            <td>
+                              {% if relationship["status"] == "current" %}
+                                <button
+                                  type="button"
+                                  class="btn btn-sm btn-outline-secondary"
+                                  data-bs-toggle="modal"
+                                  data-bs-target="#endClientRelationshipModal{{ relationship['id'] }}">
+                                  End
+                                </button>
+                              {% endif %}
+                            </td>
+                          {% endif %}
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+
+                  {% for relationship in client_relationships %}
+                    {% if relationship["status"] == "current" %}
+                      <div
+                        class="modal fade"
+                        id="endClientRelationshipModal{{ relationship['id'] }}"
+                        tabindex="-1"
+                        aria-labelledby="endClientRelationshipModalLabel{{ relationship['id'] }}"
+                        aria-hidden="true">
+                        <div class="modal-dialog">
+                          <div class="modal-content">
+                            <form
+                              method="post"
+                              action="{{ url_for(
+                                'end_client_relationship',
+                                contact_id=c['id'],
+                                relationship_id=relationship['id']
+                              ) }}">
+                              <div class="modal-header">
+                                <h5
+                                  class="modal-title"
+                                  id="endClientRelationshipModalLabel{{ relationship['id'] }}">
+                                  End Client Relationship
+                                </h5>
+                                <button
+                                  type="button"
+                                  class="btn-close"
+                                  data-bs-dismiss="modal"
+                                  aria-label="Close"></button>
+                              </div>
+
+                              <div class="modal-body">
+                                <p>
+                                  End the
+                                  <strong>{{ relationship["relationship_type"] }}</strong>
+                                  relationship established by
+                                  <strong>{{ relationship["agreement_type"] }}</strong>.
+                                </p>
+
+                                <div class="mb-0">
+                                  <label class="form-label">End Date *</label>
+                                  <input
+                                    type="date"
+                                    name="end_date"
+                                    class="form-control"
+                                    value="{{ today }}"
+                                    min="{{ relationship['signed_date'] }}"
+                                    required>
+                                </div>
+                              </div>
+
+                              <div class="modal-footer">
+                                <button
+                                  type="button"
+                                  class="btn btn-outline-secondary"
+                                  data-bs-dismiss="modal">
+                                  Cancel
+                                </button>
+                                <button type="submit" class="btn btn-danger">
+                                  End Relationship
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              {% else %}
+                <p class="mb-0 text-muted">
+                  No client relationships recorded yet.
+                </p>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Add Client Relationship Modal -->
+          <div
+            class="modal fade"
+            id="addClientRelationshipModal"
+            tabindex="-1"
+            aria-labelledby="addClientRelationshipModalLabel"
+            aria-hidden="true">
+            <div class="modal-dialog">
+              <div class="modal-content">
+                <form
+                  method="post"
+                  action="{{ url_for('add_client_relationship', contact_id=c['id']) }}">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="addClientRelationshipModalLabel">
+                      Add Client Relationship
+                    </h5>
+                    <button
+                      type="button"
+                      class="btn-close"
+                      data-bs-dismiss="modal"
+                      aria-label="Close"></button>
+                  </div>
+
+                  <div class="modal-body">
+                    <div class="mb-3">
+                      <label class="form-label">Client Type *</label>
+                      <select
+                        name="relationship_type"
+                        class="form-select"
+                        required>
+                        <option value="">Select...</option>
+                        <option value="Buyer">Buyer</option>
+                        <option value="Seller">Seller</option>
+                        <option value="Tenant">Tenant</option>
+                        <option value="Landlord">Landlord</option>
+                        <option value="Commercial">Commercial</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    <div class="mb-3">
+                      <label class="form-label">Agreement *</label>
+                      <input
+                        type="text"
+                        name="agreement_type"
+                        class="form-control"
+                        placeholder="Buyer Agency Agreement, Listing Agreement, MOU"
+                        required>
+                    </div>
+
+                    <div class="mb-3">
+                      <label class="form-label">Signed Date *</label>
+                      <input
+                        type="date"
+                        name="signed_date"
+                        class="form-control"
+                        value="{{ today }}"
+                        required>
+                    </div>
+
+                    <div class="mb-0">
+                      <label class="form-label">Notes</label>
+                      <textarea
+                        name="notes"
+                        class="form-control"
+                        rows="3"
+                        placeholder="Optional notes about this client relationship"></textarea>
+                    </div>
+                  </div>
+
+                  <div class="modal-footer">
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary"
+                      data-bs-dismiss="modal">
+                      Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                      Add Client Relationship
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
           <!-- Special Dates -->
           <div class="card mt-4">
             <div class="card-header">Special Dates</div>
