@@ -529,6 +529,11 @@
     var modal = document.getElementById("addContactModal");
     if (!modal) return;
 
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("add") === "1") {
+      bootstrap.Modal.getOrCreateInstance(modal).show();
+    }
+
     var dateInput = modal.querySelector('input[name="next_follow_up"]');
     var timeRow = document.getElementById("followupTimeRow");
     var hourSelect = modal.querySelector('select[name="next_follow_up_hour"]');
