@@ -352,7 +352,7 @@
                       Showing {{ active_contacts|length if active_contacts else 0 }} (max 20)
                     </div>
                   </div>
-                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('contacts', add=1) }}">Create Contact</a>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('contacts', add=1, return='dashboard') }}">Create Contact</a>
                 </div>
             
                 <div class="card-body bg-white">

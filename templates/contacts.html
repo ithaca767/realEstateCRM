@@ -534,6 +534,12 @@
       bootstrap.Modal.getOrCreateInstance(modal).show();
     }
 
+    if (params.get("return") === "dashboard") {
+      modal.addEventListener("hidden.bs.modal", function () {
+        window.location.href = "{{ url_for('dashboard') }}";
+      }, { once: true });
+    }
+
     var dateInput = modal.querySelector('input[name="next_follow_up"]');
     var timeRow = document.getElementById("followupTimeRow");
     var hourSelect = modal.querySelector('select[name="next_follow_up_hour"]');
