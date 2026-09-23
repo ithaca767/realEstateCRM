@@ -31,6 +31,11 @@
                 </button>
               </li>
               <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#bp-showings" type="button" role="tab">
+                  Showings
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#bp-pros" type="button" role="tab">
                   Professionals
                 </button>
@@ -206,6 +211,83 @@
                 </div>
               </div>
           
+              <!-- Showings -->
+              <div class="tab-pane fade" id="bp-showings" role="tabpanel">
+                <div class="card card-soft">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-semibold">Showings</div>
+                      <div class="text-muted small">Most recent buyer showings</div>
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-primary"
+                      data-bs-toggle="modal"
+                      data-bs-target="#logBuyerShowingModal"
+                    >
+                      + Log Showing
+                    </button>
+                  </div>
+
+                  <div class="card-body p-0">
+                    {% if buyer_showings and buyer_showings|length > 0 %}
+                      <div class="table-responsive">
+                        <table class="table mb-0 align-middle">
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Property</th>
+                              <th>Attending</th>
+                              <th>Status</th>
+                              <th>Interest</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for showing in buyer_showings %}
+                              <tr
+                                role="button"
+                                class="buyer-showing-row"
+                                tabindex="0"
+                                data-bs-toggle="modal"
+                                data-bs-target="#editBuyerShowingModal"
+                                data-showing-id="{{ showing['id'] }}"
+                              >
+                                <td>
+                                  {{ showing['scheduled_at'].strftime('%b %-d, %Y') }}
+                                </td>
+                                <td>
+                                  <div>{{ showing['address_line'] or 'Address not entered' }}</div>
+                                  {% if showing['city'] or showing['state'] %}
+                                    <div class="text-muted small">
+                                      {% if showing['city'] %}{{ showing['city'] }}{% endif %}
+                                      {% if showing['city'] and showing['state'] %}, {% endif %}
+                                      {% if showing['state'] %}{{ showing['state'] }}{% endif %}
+                                    </div>
+                                  {% endif %}
+                                </td>
+                                <td>{{ showing['attendee_names'] }}</td>
+                                <td class="text-capitalize">
+                                  {{ (showing['status'] or '')|replace('_', ' ') }}
+                                </td>
+                                <td class="text-capitalize">
+                                  {% if showing['interest_level'] %}
+                                    {{ showing['interest_level']|replace('_', ' ') }}
+                                  {% else %}
+                                    <span class="text-muted">-</span>
+                                  {% endif %}
+                                </td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    {% else %}
+                      <div class="p-3 text-muted">No showings logged yet.</div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+
               <!-- Professionals -->
               <div class="tab-pane fade" id="bp-pros" role="tabpanel">
                 <div class="row g-3">
@@ -456,6 +538,520 @@
           </form>
 
           {% if bp %}
+          <!-- Log Buyer Showing modal (outside main Buyer Profile form) -->
+          <div class="modal fade"
+               id="logBuyerShowingModal"
+               tabindex="-1"
+               aria-labelledby="logBuyerShowingModalLabel"
+               aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+              <form method="post"
+                    action="{{ url_for('create_showing') }}"
+                    class="modal-content">
+                  <input type="hidden" name="showing_type" value="buyer">
+                  <input type="hidden" name="buyer_contact_id" value="{{ contact_id }}">
+
+                  <div class="modal-header">
+                    <div>
+                      <h5 class="modal-title" id="logBuyerShowingModalLabel">Log Showing</h5>
+                      <div class="text-muted small">{{ contact_name }}</div>
+                    </div>
+                    <button type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"></button>
+                  </div>
+
+                  <div class="modal-body">
+                    <div class="row g-3">
+
+                      <div class="col-12">
+                        <label for="buyerShowingProperty" class="form-label">
+                          Property
+                        </label>
+                        <select id="buyerShowingProperty" class="form-select">
+                          <option value="">Other Property</option>
+                          {% for p in subject_properties %}
+                            <option
+                              value="{{ p.id }}"
+                              data-address="{{ p.address_line or '' }}"
+                              data-city="{{ p.city or '' }}"
+                              data-state="{{ p.state or '' }}"
+                              data-postal-code="{{ p.postal_code or '' }}"
+                            >
+                              {{ p.address_line }}
+                              {% if p.city %}, {{ p.city }}{% endif %}
+                              {% if p.state %}, {{ p.state }}{% endif %}
+                            </option>
+                          {% endfor %}
+                        </select>
+                        <div class="form-text">
+                          Choose a Subject Property or enter another property below.
+                        </div>
+                      </div>
+
+                      <div class="col-md-6">
+                        <label for="buyerShowingAddress" class="form-label">
+                          Address
+                        </label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="buyerShowingAddress"
+                          name="address_line"
+                          autocomplete="street-address"
+                        >
+                      </div>
+
+                      <div class="col-md-3">
+                        <label for="buyerShowingCity" class="form-label">City</label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="buyerShowingCity"
+                          name="city"
+                          autocomplete="address-level2"
+                        >
+                      </div>
+
+                      <div class="col-md-1">
+                        <label for="buyerShowingState" class="form-label">State</label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="buyerShowingState"
+                          name="state"
+                          maxlength="2"
+                          autocomplete="address-level1"
+                        >
+                      </div>
+
+                      <div class="col-md-2">
+                        <label for="buyerShowingPostalCode" class="form-label">Zip</label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="buyerShowingPostalCode"
+                          name="postal_code"
+                          autocomplete="postal-code"
+                        >
+                      </div>
+
+                      <div class="col-md-6">
+                        <label for="buyerShowingScheduledAt" class="form-label">
+                          Date &amp; Time <span class="text-danger">*</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          class="form-control"
+                          id="buyerShowingScheduledAt"
+                          name="scheduled_at"
+                          required
+                        >
+                      </div>
+
+                      <div class="col-md-6">
+                        <label for="buyerShowingStatus" class="form-label">Status</label>
+                        <select
+                          class="form-select"
+                          id="buyerShowingStatus"
+                          name="status"
+                        >
+                          <option value="scheduled" selected>Scheduled</option>
+                          <option value="completed">Completed</option>
+                          <option value="canceled">Canceled</option>
+                          <option value="no_show">No Show</option>
+                        </select>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label mb-2">
+                          Attending <span class="text-danger">*</span>
+                        </label>
+
+                        <div class="border rounded p-3">
+                          <div class="form-check">
+                            <input
+                              class="form-check-input"
+                              type="checkbox"
+                              name="contact_ids"
+                              value="{{ contact_id }}"
+                              id="buyerShowingContact{{ contact_id }}"
+                              checked
+                              required
+                            >
+                            <label
+                              class="form-check-label fw-semibold"
+                              for="buyerShowingContact{{ contact_id }}"
+                            >
+                              {{ contact_name }}
+                            </label>
+                          </div>
+
+                          {% for a in buyer_showing_associations %}
+                            <div class="form-check mt-2">
+                              <input
+                                class="form-check-input"
+                                type="checkbox"
+                                name="contact_ids"
+                                value="{{ a.other_contact_id }}"
+                                id="buyerShowingContact{{ a.other_contact_id }}"
+                              >
+                              <label
+                                class="form-check-label"
+                                for="buyerShowingContact{{ a.other_contact_id }}"
+                              >
+                                {{ a.other_name }}
+                                {% if a.relationship_type %}
+                                  <span class="text-muted">
+                                    ({{ a.relationship_type }})
+                                  </span>
+                                {% endif %}
+                              </label>
+                            </div>
+                          {% endfor %}
+
+                          {% if not buyer_showing_associations %}
+                            <div class="text-muted small mt-2">
+                              No associated contacts available.
+                            </div>
+                          {% endif %}
+                        </div>
+
+                        <div class="form-text">
+                          Select only the people who attended this Showing.
+                        </div>
+                      </div>
+
+                      <div class="col-md-6">
+                        <label for="buyerShowingInterest" class="form-label">
+                          Interest
+                        </label>
+                        <select
+                          class="form-select"
+                          id="buyerShowingInterest"
+                          name="interest_level"
+                        >
+                          <option value="">Not entered</option>
+                          <option value="very_interested">Very Interested</option>
+                          <option value="interested">Interested</option>
+                          <option value="neutral">Neutral</option>
+                          <option value="not_interested">Not Interested</option>
+                        </select>
+                      </div>
+
+                      <div class="col-12">
+                        <label for="buyerShowingFeedback" class="form-label">
+                          Client Feedback
+                        </label>
+                        <textarea
+                          class="form-control"
+                          id="buyerShowingFeedback"
+                          name="feedback"
+                          rows="3"
+                          placeholder="What did the buyer think of the property?"
+                        ></textarea>
+                      </div>
+
+                      <div class="col-12">
+                        <label for="buyerShowingNotes" class="form-label">
+                          Agent Notes
+                        </label>
+                        <textarea
+                          class="form-control"
+                          id="buyerShowingNotes"
+                          name="notes"
+                          rows="3"
+                          placeholder="Private notes about the Showing"
+                        ></textarea>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  <div class="modal-footer">
+                    <button
+                      type="button"
+                      class="btn btn-secondary"
+                      data-bs-dismiss="modal"
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                      Save Showing
+                    </button>
+                  </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Edit Buyer Showing modal -->
+          <div class="modal fade"
+               id="editBuyerShowingModal"
+               tabindex="-1"
+               aria-labelledby="editBuyerShowingModalLabel"
+               aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+              <form method="post"
+                    id="editBuyerShowingForm"
+                    class="modal-content">
+                <input type="hidden" name="showing_type" value="buyer">
+                <input type="hidden" name="buyer_contact_id" value="{{ contact_id }}">
+
+                <div class="modal-header">
+                  <div>
+                    <h5 class="modal-title" id="editBuyerShowingModalLabel">
+                      Showing
+                    </h5>
+                    <div class="text-muted small">{{ contact_name }}</div>
+                  </div>
+                  <button type="button"
+                          class="btn-close"
+                          data-bs-dismiss="modal"
+                          aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                  <div class="row g-3">
+
+                    <div class="col-12">
+                      <label for="editBuyerShowingProperty" class="form-label">
+                        Property
+                      </label>
+                      <select id="editBuyerShowingProperty" class="form-select">
+                        <option value="">Other Property</option>
+                        {% for p in subject_properties %}
+                          <option
+                            value="{{ p.id }}"
+                            data-address="{{ p.address_line or '' }}"
+                            data-city="{{ p.city or '' }}"
+                            data-state="{{ p.state or '' }}"
+                            data-postal-code="{{ p.postal_code or '' }}"
+                          >
+                            {{ p.address_line }}
+                            {% if p.city %}, {{ p.city }}{% endif %}
+                            {% if p.state %}, {{ p.state }}{% endif %}
+                          </option>
+                        {% endfor %}
+                      </select>
+                      <div class="form-text">
+                        Choose a Subject Property or edit the address below.
+                      </div>
+                    </div>
+
+                    <div class="col-md-6">
+                      <label for="editBuyerShowingAddress" class="form-label">
+                        Address
+                      </label>
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="editBuyerShowingAddress"
+                        name="address_line"
+                        autocomplete="street-address"
+                      >
+                    </div>
+
+                    <div class="col-md-3">
+                      <label for="editBuyerShowingCity" class="form-label">City</label>
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="editBuyerShowingCity"
+                        name="city"
+                        autocomplete="address-level2"
+                      >
+                    </div>
+
+                    <div class="col-md-1">
+                      <label for="editBuyerShowingState" class="form-label">State</label>
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="editBuyerShowingState"
+                        name="state"
+                        maxlength="2"
+                        autocomplete="address-level1"
+                      >
+                    </div>
+
+                    <div class="col-md-2">
+                      <label for="editBuyerShowingPostalCode" class="form-label">Zip</label>
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="editBuyerShowingPostalCode"
+                        name="postal_code"
+                        autocomplete="postal-code"
+                      >
+                    </div>
+
+                    <div class="col-md-6">
+                      <label for="editBuyerShowingScheduledAt" class="form-label">
+                        Date &amp; Time <span class="text-danger">*</span>
+                      </label>
+                      <input
+                        type="datetime-local"
+                        class="form-control"
+                        id="editBuyerShowingScheduledAt"
+                        name="scheduled_at"
+                        required
+                      >
+                    </div>
+
+                    <div class="col-md-6">
+                      <label for="editBuyerShowingStatus" class="form-label">Status</label>
+                      <select
+                        class="form-select"
+                        id="editBuyerShowingStatus"
+                        name="status"
+                      >
+                        <option value="scheduled">Scheduled</option>
+                        <option value="completed">Completed</option>
+                        <option value="canceled">Canceled</option>
+                        <option value="no_show">No Show</option>
+                      </select>
+                    </div>
+
+                    <div class="col-12">
+                      <label class="form-label mb-2">
+                        Attending <span class="text-danger">*</span>
+                      </label>
+
+                      <div class="border rounded p-3">
+                        <div class="form-check">
+                          <input
+                            class="form-check-input edit-buyer-showing-contact"
+                            type="checkbox"
+                            name="contact_ids"
+                            value="{{ contact_id }}"
+                            id="editBuyerShowingContact{{ contact_id }}"
+                            required
+                          >
+                          <label
+                            class="form-check-label fw-semibold"
+                            for="editBuyerShowingContact{{ contact_id }}"
+                          >
+                            {{ contact_name }}
+                          </label>
+                        </div>
+
+                        {% for a in buyer_showing_associations %}
+                          <div class="form-check mt-2">
+                            <input
+                              class="form-check-input edit-buyer-showing-contact"
+                              type="checkbox"
+                              name="contact_ids"
+                              value="{{ a.other_contact_id }}"
+                              id="editBuyerShowingContact{{ a.other_contact_id }}"
+                            >
+                            <label
+                              class="form-check-label"
+                              for="editBuyerShowingContact{{ a.other_contact_id }}"
+                            >
+                              {{ a.other_name }}
+                              {% if a.relationship_type %}
+                                <span class="text-muted">
+                                  ({{ a.relationship_type }})
+                                </span>
+                              {% endif %}
+                            </label>
+                          </div>
+                        {% endfor %}
+
+                        {% if not buyer_showing_associations %}
+                          <div class="text-muted small mt-2">
+                            No associated contacts available.
+                          </div>
+                        {% endif %}
+                      </div>
+
+                      <div class="form-text">
+                        Select only the people who attended this Showing.
+                      </div>
+                    </div>
+
+                    <div class="col-md-6">
+                      <label for="editBuyerShowingInterest" class="form-label">
+                        Interest
+                      </label>
+                      <select
+                        class="form-select"
+                        id="editBuyerShowingInterest"
+                        name="interest_level"
+                      >
+                        <option value="">Not entered</option>
+                        <option value="very_interested">Very Interested</option>
+                        <option value="interested">Interested</option>
+                        <option value="neutral">Neutral</option>
+                        <option value="not_interested">Not Interested</option>
+                      </select>
+                    </div>
+
+                    <div class="col-12">
+                      <label for="editBuyerShowingFeedback" class="form-label">
+                        Client Feedback
+                      </label>
+                      <textarea
+                        class="form-control"
+                        id="editBuyerShowingFeedback"
+                        name="feedback"
+                        rows="3"
+                        placeholder="What did the buyer think of the property?"
+                      ></textarea>
+                    </div>
+
+                    <div class="col-12">
+                      <label for="editBuyerShowingNotes" class="form-label">
+                        Agent Notes
+                      </label>
+                      <textarea
+                        class="form-control"
+                        id="editBuyerShowingNotes"
+                        name="notes"
+                        rows="3"
+                        placeholder="Private notes about the Showing"
+                      ></textarea>
+                    </div>
+
+                  </div>
+                </div>
+
+                <div class="modal-footer justify-content-between">
+                  <button
+                    type="button"
+                    class="btn btn-outline-danger"
+                    id="deleteBuyerShowingButton"
+                  >
+                    Delete
+                  </button>
+
+                  <div>
+                    <button
+                      type="button"
+                      class="btn btn-secondary"
+                      data-bs-dismiss="modal"
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Buyer Showing delete form kept separate from the edit form -->
+          <form method="post"
+                id="deleteBuyerShowingForm"
+                class="d-none">
+            <input type="hidden"
+                   name="buyer_contact_id"
+                   value="{{ contact_id }}">
+          </form>
+
           <!-- Buyer Checklist modal (outside main Buyer Profile form) -->
           <div class="modal fade"
                id="buyerChecklistModal"
@@ -579,6 +1175,251 @@
 let buyerChecklistDirty = false;
 
 document.addEventListener("DOMContentLoaded", function () {
+    // Buyer Showing edit modal.
+    // Data comes only from the tenant-scoped Buyer Profile Showing query.
+    const buyerShowingsEditData = {{ buyer_showings_edit_data|tojson }};
+    const buyerShowingsById = new Map(
+        buyerShowingsEditData.map(showing => [
+            String(showing.id),
+            showing
+        ])
+    );
+
+    const editBuyerShowingModal =
+        document.getElementById("editBuyerShowingModal");
+    const editBuyerShowingForm =
+        document.getElementById("editBuyerShowingForm");
+    const deleteBuyerShowingForm =
+        document.getElementById("deleteBuyerShowingForm");
+    const deleteBuyerShowingButton =
+        document.getElementById("deleteBuyerShowingButton");
+    const editBuyerShowingProperty =
+        document.getElementById("editBuyerShowingProperty");
+    const editBuyerShowingAddress =
+        document.getElementById("editBuyerShowingAddress");
+    const editBuyerShowingCity =
+        document.getElementById("editBuyerShowingCity");
+    const editBuyerShowingState =
+        document.getElementById("editBuyerShowingState");
+    const editBuyerShowingPostalCode =
+        document.getElementById("editBuyerShowingPostalCode");
+    const editBuyerShowingScheduledAt =
+        document.getElementById("editBuyerShowingScheduledAt");
+    const editBuyerShowingStatus =
+        document.getElementById("editBuyerShowingStatus");
+    const editBuyerShowingInterest =
+        document.getElementById("editBuyerShowingInterest");
+    const editBuyerShowingFeedback =
+        document.getElementById("editBuyerShowingFeedback");
+    const editBuyerShowingNotes =
+        document.getElementById("editBuyerShowingNotes");
+    const editBuyerShowingContacts = document.querySelectorAll(
+        ".edit-buyer-showing-contact"
+    );
+
+    function findMatchingSubjectProperty(showing) {
+        if (!editBuyerShowingProperty) return "";
+
+        for (const option of editBuyerShowingProperty.options) {
+            if (!option.value) continue;
+
+            if (
+                (option.dataset.address || "") ===
+                    (showing.address_line || "") &&
+                (option.dataset.city || "") ===
+                    (showing.city || "") &&
+                (option.dataset.state || "") ===
+                    (showing.state || "") &&
+                (option.dataset.postalCode || "") ===
+                    (showing.postal_code || "")
+            ) {
+                return option.value;
+            }
+        }
+
+        return "";
+    }
+
+    function populateEditBuyerShowing(showingId) {
+        const showing = buyerShowingsById.get(String(showingId));
+
+        if (!showing || !editBuyerShowingForm) {
+            return;
+        }
+
+        editBuyerShowingForm.action =
+            "/showings/" + encodeURIComponent(showing.id) + "/update";
+
+        if (deleteBuyerShowingForm) {
+            deleteBuyerShowingForm.action =
+                "/showings/" +
+                encodeURIComponent(showing.id) +
+                "/delete";
+        }
+
+        if (editBuyerShowingProperty) {
+            editBuyerShowingProperty.value =
+                findMatchingSubjectProperty(showing);
+        }
+
+        if (editBuyerShowingAddress) {
+            editBuyerShowingAddress.value =
+                showing.address_line || "";
+        }
+
+        if (editBuyerShowingCity) {
+            editBuyerShowingCity.value = showing.city || "";
+        }
+
+        if (editBuyerShowingState) {
+            editBuyerShowingState.value = showing.state || "";
+        }
+
+        if (editBuyerShowingPostalCode) {
+            editBuyerShowingPostalCode.value =
+                showing.postal_code || "";
+        }
+
+        if (editBuyerShowingScheduledAt) {
+            editBuyerShowingScheduledAt.value =
+                showing.scheduled_at || "";
+        }
+
+        if (editBuyerShowingStatus) {
+            editBuyerShowingStatus.value =
+                showing.status || "scheduled";
+        }
+
+        if (editBuyerShowingInterest) {
+            editBuyerShowingInterest.value =
+                showing.interest_level || "";
+        }
+
+        if (editBuyerShowingFeedback) {
+            editBuyerShowingFeedback.value =
+                showing.feedback || "";
+        }
+
+        if (editBuyerShowingNotes) {
+            editBuyerShowingNotes.value =
+                showing.notes || "";
+        }
+
+        const attendeeIds = new Set(
+            (showing.attendee_ids || []).map(String)
+        );
+
+        editBuyerShowingContacts.forEach(checkbox => {
+            checkbox.checked = attendeeIds.has(
+                String(checkbox.value)
+            );
+        });
+    }
+
+    if (editBuyerShowingModal) {
+        editBuyerShowingModal.addEventListener(
+            "show.bs.modal",
+            function (event) {
+                const trigger = event.relatedTarget;
+                if (!trigger) return;
+
+                populateEditBuyerShowing(
+                    trigger.dataset.showingId
+                );
+            }
+        );
+    }
+
+    if (deleteBuyerShowingButton && deleteBuyerShowingForm) {
+        deleteBuyerShowingButton.addEventListener("click", function () {
+            if (
+                window.confirm(
+                    "Delete this Showing? This cannot be undone."
+                )
+            ) {
+                deleteBuyerShowingForm.submit();
+            }
+        });
+    }
+
+    document.querySelectorAll(".buyer-showing-row").forEach(row => {
+        row.addEventListener("keydown", function (event) {
+            if (event.key !== "Enter" && event.key !== " ") {
+                return;
+            }
+
+            event.preventDefault();
+            populateEditBuyerShowing(row.dataset.showingId);
+
+            if (editBuyerShowingModal) {
+                bootstrap.Modal
+                    .getOrCreateInstance(editBuyerShowingModal)
+                    .show();
+            }
+        });
+    });
+
+    if (editBuyerShowingProperty) {
+        editBuyerShowingProperty.addEventListener(
+            "change",
+            function () {
+                const option =
+                    this.options[this.selectedIndex];
+
+                if (!option || !option.value) {
+                    return;
+                }
+
+                if (editBuyerShowingAddress) {
+                    editBuyerShowingAddress.value =
+                        option.dataset.address || "";
+                }
+
+                if (editBuyerShowingCity) {
+                    editBuyerShowingCity.value =
+                        option.dataset.city || "";
+                }
+
+                if (editBuyerShowingState) {
+                    editBuyerShowingState.value =
+                        option.dataset.state || "";
+                }
+
+                if (editBuyerShowingPostalCode) {
+                    editBuyerShowingPostalCode.value =
+                        option.dataset.postalCode || "";
+                }
+            }
+        );
+    }
+
+    const buyerShowingProperty = document.getElementById("buyerShowingProperty");
+
+    if (buyerShowingProperty) {
+        const showingAddress = document.getElementById("buyerShowingAddress");
+        const showingCity = document.getElementById("buyerShowingCity");
+        const showingState = document.getElementById("buyerShowingState");
+        const showingPostalCode = document.getElementById("buyerShowingPostalCode");
+
+        buyerShowingProperty.addEventListener("change", function () {
+            const option = this.options[this.selectedIndex];
+
+            if (!this.value) {
+                showingAddress.value = "";
+                showingCity.value = "";
+                showingState.value = "";
+                showingPostalCode.value = "";
+                showingAddress.focus();
+                return;
+            }
+
+            showingAddress.value = option.dataset.address || "";
+            showingCity.value = option.dataset.city || "";
+            showingState.value = option.dataset.state || "";
+            showingPostalCode.value = option.dataset.postalCode || "";
+        });
+    }
+
     // Persist active Buyer Profile tab
     const tabs = document.querySelectorAll('form .nav-tabs button[data-bs-toggle="tab"]');
 

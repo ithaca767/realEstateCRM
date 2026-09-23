@@ -1981,13 +1981,14 @@ def get_contact_associations(conn, user_id, contact_id):
             WHEN ca.contact_id_primary = %s THEN ca.contact_id_related
             ELSE ca.contact_id_primary
           END
+         AND c.user_id = %s
 
         WHERE ca.user_id = %s
           AND (ca.contact_id_primary = %s OR ca.contact_id_related = %s)
 
         ORDER BY other_name ASC
         """,
-        (contact_id, contact_id, user_id, contact_id, contact_id),
+        (contact_id, contact_id, user_id, user_id, contact_id, contact_id),
     )
     return cur.fetchall()
 
@@ -2141,6 +2142,15 @@ OFFER_STATUSES = [
 
 LISTING_STATUS_VALUES = {v for v, _ in LISTING_STATUSES}
 OFFER_STATUS_VALUES = {v for v, _ in OFFER_STATUSES}
+
+SHOWING_TYPES = {"buyer", "listing"}
+SHOWING_STATUSES = {"scheduled", "completed", "canceled", "no_show"}
+SHOWING_INTEREST_LEVELS = {
+    "very_interested",
+    "interested",
+    "neutral",
+    "not_interested",
+}
 
 BASE_TEMPLATE = """
 <!doctype html>
@@ -9345,6 +9355,125 @@ def buyer_profile(contact_id):
     )
     buyer_transactions = cur.fetchall()
 
+    # Recent buyer showings involving this contact.
+    # Both the Showing and membership are explicitly tenant-scoped.
+    cur.execute(
+        """
+        SELECT
+            s.id,
+            s.transaction_id,
+            s.showing_agent_professional_id,
+            s.address_line,
+            s.city,
+            s.state,
+            s.postal_code,
+            s.scheduled_at,
+            s.status,
+            s.showing_agent_name,
+            s.showing_agent_brokerage,
+            s.showing_agent_email,
+            s.showing_agent_phone,
+            s.interest_level,
+            s.feedback,
+            s.notes,
+            STRING_AGG(
+                COALESCE(
+                    NULLIF(TRIM(CONCAT_WS(' ', attendee.first_name, attendee.last_name)), ''),
+                    NULLIF(TRIM(attendee.name), ''),
+                    'Unnamed Contact'
+                ),
+                ', '
+                ORDER BY attendee.id
+            ) AS attendee_names,
+            ARRAY_AGG(
+                attendee.id
+                ORDER BY attendee.id
+            ) AS attendee_ids
+        FROM showings AS s
+        JOIN showing_contacts AS selected_membership
+          ON selected_membership.showing_id = s.id
+         AND selected_membership.user_id = %s
+         AND selected_membership.contact_id = %s
+        JOIN showing_contacts AS all_memberships
+          ON all_memberships.showing_id = s.id
+         AND all_memberships.user_id = %s
+        JOIN contacts AS attendee
+          ON attendee.id = all_memberships.contact_id
+         AND attendee.user_id = %s
+        WHERE s.user_id = %s
+          AND s.showing_type = 'buyer'
+        GROUP BY
+            s.id,
+            s.transaction_id,
+            s.showing_agent_professional_id,
+            s.address_line,
+            s.city,
+            s.state,
+            s.postal_code,
+            s.scheduled_at,
+            s.status,
+            s.showing_agent_name,
+            s.showing_agent_brokerage,
+            s.showing_agent_email,
+            s.showing_agent_phone,
+            s.interest_level,
+            s.feedback,
+            s.notes
+        ORDER BY s.scheduled_at DESC, s.id DESC
+        LIMIT 5
+        """,
+        (
+            current_user.id,
+            contact_id,
+            current_user.id,
+            current_user.id,
+            current_user.id,
+        ),
+    )
+    buyer_showings = cur.fetchall()
+
+    # Prepare only the already tenant-scoped Buyer Showing records for the
+    # reusable edit modal. Keep datetime-local formatting on the server so
+    # browser JavaScript does not reinterpret timezone-aware timestamps.
+    buyer_showings_edit_data = []
+    for showing in buyer_showings:
+        buyer_showings_edit_data.append(
+            {
+                "id": showing["id"],
+                "transaction_id": showing["transaction_id"],
+                "showing_agent_professional_id": (
+                    showing["showing_agent_professional_id"]
+                ),
+                "address_line": showing["address_line"] or "",
+                "city": showing["city"] or "",
+                "state": showing["state"] or "",
+                "postal_code": showing["postal_code"] or "",
+                "scheduled_at": format_local_datetime_input(
+                    showing["scheduled_at"]
+                ),
+                "status": showing["status"] or "scheduled",
+                "showing_agent_name": showing["showing_agent_name"] or "",
+                "showing_agent_brokerage": (
+                    showing["showing_agent_brokerage"] or ""
+                ),
+                "showing_agent_email": showing["showing_agent_email"] or "",
+                "showing_agent_phone": showing["showing_agent_phone"] or "",
+                "interest_level": showing["interest_level"] or "",
+                "feedback": showing["feedback"] or "",
+                "notes": showing["notes"] or "",
+                "attendee_ids": list(showing["attendee_ids"] or []),
+            }
+        )
+
+    # Associated contacts are candidates for Showing attendance.
+    # Association makes a contact available for selection only. It does not
+    # imply that the associated contact attended a Showing.
+    buyer_showing_associations = get_contact_associations(
+        conn,
+        current_user.id,
+        contact_id,
+    )
+
     # Handle form submissions
     if request.method == "POST":
         form_action = (request.form.get("form_action") or "").strip()
@@ -9612,8 +9741,11 @@ def buyer_profile(contact_id):
         buyer_checklist_complete=buyer_checklist_complete,
         buyer_checklist_total=buyer_checklist_total,
 
-        # subject properties and other context
+        # subject properties, showings and other context
         subject_properties=subject_properties,
+        buyer_showings=buyer_showings,
+        buyer_showings_edit_data=buyer_showings_edit_data,
+        buyer_showing_associations=buyer_showing_associations,
         contact_id=contact_id,
         pros_attorneys = get_professionals_for_dropdown(current_user.id, category="Attorney"),
         pros_lenders = get_professionals_for_dropdown(current_user.id, category="Lender"),
@@ -10730,6 +10862,680 @@ def new_transaction(contact_id):
         default_tx_type=default_tx_type,
         
     )
+
+@app.route("/showings/<int:showing_id>/update", methods=["POST"])
+@login_required
+def update_showing(showing_id):
+    showing_type = (request.form.get("showing_type") or "").strip().lower()
+    status = (request.form.get("status") or "scheduled").strip().lower()
+    scheduled_at_raw = (request.form.get("scheduled_at") or "").strip()
+
+    address_line = (request.form.get("address_line") or "").strip() or None
+    city = (request.form.get("city") or "").strip() or None
+    state = (request.form.get("state") or "").strip() or None
+    postal_code = (request.form.get("postal_code") or "").strip() or None
+
+    showing_agent_name = (
+        request.form.get("showing_agent_name") or ""
+    ).strip() or None
+    showing_agent_brokerage = (
+        request.form.get("showing_agent_brokerage") or ""
+    ).strip() or None
+    showing_agent_email = (
+        request.form.get("showing_agent_email") or ""
+    ).strip() or None
+    showing_agent_phone = (
+        request.form.get("showing_agent_phone") or ""
+    ).strip() or None
+
+    interest_level = (
+        request.form.get("interest_level") or ""
+    ).strip().lower() or None
+    feedback = (request.form.get("feedback") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+
+    if showing_type not in SHOWING_TYPES:
+        return "Invalid showing type", 400
+
+    if status not in SHOWING_STATUSES:
+        return "Invalid showing status", 400
+
+    if (
+        interest_level is not None
+        and interest_level not in SHOWING_INTEREST_LEVELS
+    ):
+        return "Invalid interest level", 400
+
+    try:
+        scheduled_at = parse_local_datetime_input(scheduled_at_raw)
+    except (TypeError, ValueError):
+        return "Invalid showing date/time", 400
+
+    if scheduled_at is None:
+        return "Showing date/time is required", 400
+
+    transaction_id_raw = (request.form.get("transaction_id") or "").strip()
+    transaction_id = None
+    if transaction_id_raw:
+        try:
+            transaction_id = int(transaction_id_raw)
+        except (TypeError, ValueError):
+            return "Invalid transaction", 400
+
+    professional_id_raw = (
+        request.form.get("showing_agent_professional_id") or ""
+    ).strip()
+    showing_agent_professional_id = None
+    if professional_id_raw:
+        try:
+            showing_agent_professional_id = int(professional_id_raw)
+        except (TypeError, ValueError):
+            return "Invalid showing agent", 400
+
+    raw_contact_ids = request.form.getlist("contact_ids")
+    try:
+        contact_ids = {
+            int(value)
+            for value in raw_contact_ids
+            if str(value).strip()
+        }
+    except (TypeError, ValueError):
+        return "Invalid showing contact", 400
+
+    if showing_type == "buyer" and not contact_ids:
+        return "Buyer showing requires at least one contact", 400
+
+    buyer_contact_id_raw = (
+        request.form.get("buyer_contact_id") or ""
+    ).strip()
+    buyer_contact_id = None
+    if buyer_contact_id_raw:
+        try:
+            buyer_contact_id = int(buyer_contact_id_raw)
+        except (TypeError, ValueError):
+            return "Invalid buyer contact", 400
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    try:
+        # The Showing itself is the first tenant boundary.
+        cur.execute(
+            """
+            SELECT id, showing_type
+            FROM showings
+            WHERE id = %s
+              AND user_id = %s
+            """,
+            (showing_id, current_user.id),
+        )
+        existing_showing = cur.fetchone()
+
+        if not existing_showing:
+            conn.rollback()
+            return "Showing not found", 404
+
+        # Showing context is immutable after creation. The stored record,
+        # not a submitted hidden field, is authoritative.
+        if showing_type != existing_showing["showing_type"]:
+            conn.rollback()
+            return "Showing type cannot be changed", 400
+
+        showing_type = existing_showing["showing_type"]
+
+        # Buyer Profile return context must also belong to this tenant and
+        # remain an explicit attendee of a buyer Showing.
+        if buyer_contact_id is not None:
+            cur.execute(
+                """
+                SELECT id
+                FROM contacts
+                WHERE id = %s
+                  AND user_id = %s
+                """,
+                (buyer_contact_id, current_user.id),
+            )
+            if not cur.fetchone():
+                conn.rollback()
+                return "Buyer contact not found", 404
+
+            if (
+                showing_type == "buyer"
+                and buyer_contact_id not in contact_ids
+            ):
+                conn.rollback()
+                return "Buyer contact must attend buyer showing", 400
+
+        if transaction_id is not None:
+            cur.execute(
+                """
+                SELECT id
+                FROM transactions
+                WHERE id = %s
+                  AND user_id = %s
+                """,
+                (transaction_id, current_user.id),
+            )
+            if not cur.fetchone():
+                conn.rollback()
+                return "Transaction not found", 404
+
+        if showing_agent_professional_id is not None:
+            cur.execute(
+                """
+                SELECT id, name, company, email, phone
+                FROM professionals
+                WHERE id = %s
+                  AND user_id = %s
+                """,
+                (
+                    showing_agent_professional_id,
+                    current_user.id,
+                ),
+            )
+            showing_agent_professional = cur.fetchone()
+
+            if not showing_agent_professional:
+                conn.rollback()
+                return "Showing agent not found", 404
+
+            # Preserve a snapshot of the selected Professional's details.
+            # Explicit Showing values continue to take precedence.
+            showing_agent_name = (
+                showing_agent_name
+                or showing_agent_professional.get("name")
+            )
+            showing_agent_brokerage = (
+                showing_agent_brokerage
+                or showing_agent_professional.get("company")
+            )
+            showing_agent_email = (
+                showing_agent_email
+                or showing_agent_professional.get("email")
+            )
+            showing_agent_phone = (
+                showing_agent_phone
+                or showing_agent_professional.get("phone")
+            )
+
+        if contact_ids:
+            cur.execute(
+                """
+                SELECT id
+                FROM contacts
+                WHERE user_id = %s
+                  AND id = ANY(%s)
+                """,
+                (current_user.id, sorted(contact_ids)),
+            )
+            owned_contact_ids = {
+                row["id"]
+                for row in (cur.fetchall() or [])
+            }
+
+            if owned_contact_ids != contact_ids:
+                conn.rollback()
+                return "Contact not found", 404
+
+        cur.execute(
+            """
+            UPDATE showings
+            SET
+                showing_type = %s,
+                transaction_id = %s,
+                showing_agent_professional_id = %s,
+                address_line = %s,
+                city = %s,
+                state = %s,
+                postal_code = %s,
+                scheduled_at = %s,
+                status = %s,
+                showing_agent_name = %s,
+                showing_agent_brokerage = %s,
+                showing_agent_email = %s,
+                showing_agent_phone = %s,
+                interest_level = %s,
+                feedback = %s,
+                notes = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND user_id = %s
+            RETURNING id
+            """,
+            (
+                showing_type,
+                transaction_id,
+                showing_agent_professional_id,
+                address_line,
+                city,
+                state,
+                postal_code,
+                scheduled_at,
+                status,
+                showing_agent_name,
+                showing_agent_brokerage,
+                showing_agent_email,
+                showing_agent_phone,
+                interest_level,
+                feedback,
+                notes,
+                showing_id,
+                current_user.id,
+            ),
+        )
+
+        if not cur.fetchone():
+            conn.rollback()
+            return "Showing not found", 404
+
+        # Membership replacement is part of the same transaction.
+        # Contacts themselves are never deleted.
+        cur.execute(
+            """
+            DELETE FROM showing_contacts
+            WHERE showing_id = %s
+              AND user_id = %s
+            """,
+            (showing_id, current_user.id),
+        )
+
+        for contact_id in sorted(contact_ids):
+            cur.execute(
+                """
+                INSERT INTO showing_contacts (
+                    user_id,
+                    showing_id,
+                    contact_id
+                )
+                VALUES (%s, %s, %s)
+                """,
+                (
+                    current_user.id,
+                    showing_id,
+                    contact_id,
+                ),
+            )
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    if buyer_contact_id is not None:
+        return redirect(
+            url_for("buyer_profile", contact_id=buyer_contact_id)
+            + "#bp-showings"
+        )
+
+    return redirect(url_for("transactions"))
+
+
+@app.route("/showings/<int:showing_id>/delete", methods=["POST"])
+@login_required
+def delete_showing(showing_id):
+    buyer_contact_id = request.form.get("buyer_contact_id")
+
+    if buyer_contact_id:
+        try:
+            buyer_contact_id = int(buyer_contact_id)
+        except (TypeError, ValueError):
+            return "Invalid Buyer contact", 400
+    else:
+        buyer_contact_id = None
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    try:
+        # The Showing itself must belong to the current tenant.
+        cur.execute(
+            """
+            SELECT id
+            FROM showings
+            WHERE id = %s
+              AND user_id = %s
+            """,
+            (showing_id, current_user.id),
+        )
+
+        if not cur.fetchone():
+            conn.rollback()
+            return "Showing not found", 404
+
+        if buyer_contact_id is not None:
+            # Return context is accepted only when the Contact belongs to
+            # this tenant and actually participates in this Showing.
+            cur.execute(
+                """
+                SELECT c.id
+                FROM contacts AS c
+                JOIN showing_contacts AS sc
+                  ON sc.contact_id = c.id
+                 AND sc.user_id = %s
+                 AND sc.showing_id = %s
+                WHERE c.id = %s
+                  AND c.user_id = %s
+                """,
+                (
+                    current_user.id,
+                    showing_id,
+                    buyer_contact_id,
+                    current_user.id,
+                ),
+            )
+
+            if not cur.fetchone():
+                conn.rollback()
+                return "Buyer Showing context not found", 404
+
+        cur.execute(
+            """
+            DELETE FROM showings
+            WHERE id = %s
+              AND user_id = %s
+            RETURNING id
+            """,
+            (showing_id, current_user.id),
+        )
+
+        if not cur.fetchone():
+            conn.rollback()
+            return "Showing not found", 404
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    flash("Showing deleted.", "info")
+
+    if buyer_contact_id is not None:
+        return redirect(
+            url_for("buyer_profile", contact_id=buyer_contact_id)
+            + "#bp-showings"
+        )
+
+    return redirect(url_for("transactions"))
+
+
+@app.route("/showings", methods=["POST"])
+@login_required
+def create_showing():
+    showing_type = (request.form.get("showing_type") or "").strip().lower()
+    status = (request.form.get("status") or "scheduled").strip().lower()
+    scheduled_at_raw = (request.form.get("scheduled_at") or "").strip()
+
+    address_line = (request.form.get("address_line") or "").strip() or None
+    city = (request.form.get("city") or "").strip() or None
+    state = (request.form.get("state") or "").strip() or None
+    postal_code = (request.form.get("postal_code") or "").strip() or None
+
+    showing_agent_name = (
+        request.form.get("showing_agent_name") or ""
+    ).strip() or None
+    showing_agent_brokerage = (
+        request.form.get("showing_agent_brokerage") or ""
+    ).strip() or None
+    showing_agent_email = (
+        request.form.get("showing_agent_email") or ""
+    ).strip() or None
+    showing_agent_phone = (
+        request.form.get("showing_agent_phone") or ""
+    ).strip() or None
+
+    interest_level = (
+        request.form.get("interest_level") or ""
+    ).strip().lower() or None
+    feedback = (request.form.get("feedback") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+
+    if showing_type not in SHOWING_TYPES:
+        return "Invalid showing type", 400
+
+    if status not in SHOWING_STATUSES:
+        return "Invalid showing status", 400
+
+    if (
+        interest_level is not None
+        and interest_level not in SHOWING_INTEREST_LEVELS
+    ):
+        return "Invalid interest level", 400
+
+    try:
+        scheduled_at = parse_local_datetime_input(scheduled_at_raw)
+    except (TypeError, ValueError):
+        return "Invalid showing date/time", 400
+
+    if scheduled_at is None:
+        return "Showing date/time is required", 400
+
+    transaction_id_raw = (request.form.get("transaction_id") or "").strip()
+    transaction_id = None
+    if transaction_id_raw:
+        try:
+            transaction_id = int(transaction_id_raw)
+        except (TypeError, ValueError):
+            return "Invalid transaction", 400
+
+    professional_id_raw = (
+        request.form.get("showing_agent_professional_id") or ""
+    ).strip()
+    showing_agent_professional_id = None
+    if professional_id_raw:
+        try:
+            showing_agent_professional_id = int(professional_id_raw)
+        except (TypeError, ValueError):
+            return "Invalid showing agent", 400
+
+    raw_contact_ids = request.form.getlist("contact_ids")
+    try:
+        contact_ids = {
+            int(value)
+            for value in raw_contact_ids
+            if str(value).strip()
+        }
+    except (TypeError, ValueError):
+        return "Invalid showing contact", 400
+
+    if showing_type == "buyer" and not contact_ids:
+        return "Buyer showing requires at least one contact", 400
+
+    buyer_contact_id_raw = (
+        request.form.get("buyer_contact_id") or ""
+    ).strip()
+    buyer_contact_id = None
+    if buyer_contact_id_raw:
+        try:
+            buyer_contact_id = int(buyer_contact_id_raw)
+        except (TypeError, ValueError):
+            return "Invalid buyer contact", 400
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    try:
+        if buyer_contact_id is not None:
+            cur.execute(
+                """
+                SELECT id
+                FROM contacts
+                WHERE id = %s
+                  AND user_id = %s
+                """,
+                (buyer_contact_id, current_user.id),
+            )
+            if not cur.fetchone():
+                conn.rollback()
+                return "Buyer contact not found", 404
+
+            if (
+                showing_type == "buyer"
+                and buyer_contact_id not in contact_ids
+            ):
+                conn.rollback()
+                return "Buyer contact must attend buyer showing", 400
+
+        if transaction_id is not None:
+            cur.execute(
+                """
+                SELECT id
+                FROM transactions
+                WHERE id = %s
+                  AND user_id = %s
+                """,
+                (transaction_id, current_user.id),
+            )
+            if not cur.fetchone():
+                conn.rollback()
+                return "Transaction not found", 404
+
+        if showing_agent_professional_id is not None:
+            cur.execute(
+                """
+                SELECT id, name, company, email, phone
+                FROM professionals
+                WHERE id = %s
+                  AND user_id = %s
+                """,
+                (
+                    showing_agent_professional_id,
+                    current_user.id,
+                ),
+            )
+            showing_agent_professional = cur.fetchone()
+            if not showing_agent_professional:
+                conn.rollback()
+                return "Showing agent not found", 404
+
+            # Preserve the Professional's current details as a historical
+            # snapshot for this Showing. Explicit Showing values win.
+            showing_agent_name = (
+                showing_agent_name
+                or showing_agent_professional.get("name")
+            )
+            showing_agent_brokerage = (
+                showing_agent_brokerage
+                or showing_agent_professional.get("company")
+            )
+            showing_agent_email = (
+                showing_agent_email
+                or showing_agent_professional.get("email")
+            )
+            showing_agent_phone = (
+                showing_agent_phone
+                or showing_agent_professional.get("phone")
+            )
+
+        if contact_ids:
+            cur.execute(
+                """
+                SELECT id
+                FROM contacts
+                WHERE user_id = %s
+                  AND id = ANY(%s)
+                """,
+                (current_user.id, sorted(contact_ids)),
+            )
+            owned_contact_ids = {
+                row["id"]
+                for row in (cur.fetchall() or [])
+            }
+
+            if owned_contact_ids != contact_ids:
+                conn.rollback()
+                return "Contact not found", 404
+
+        cur.execute(
+            """
+            INSERT INTO showings (
+                user_id,
+                showing_type,
+                transaction_id,
+                showing_agent_professional_id,
+                address_line,
+                city,
+                state,
+                postal_code,
+                scheduled_at,
+                status,
+                showing_agent_name,
+                showing_agent_brokerage,
+                showing_agent_email,
+                showing_agent_phone,
+                interest_level,
+                feedback,
+                notes
+            )
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            RETURNING id
+            """,
+            (
+                current_user.id,
+                showing_type,
+                transaction_id,
+                showing_agent_professional_id,
+                address_line,
+                city,
+                state,
+                postal_code,
+                scheduled_at,
+                status,
+                showing_agent_name,
+                showing_agent_brokerage,
+                showing_agent_email,
+                showing_agent_phone,
+                interest_level,
+                feedback,
+                notes,
+            ),
+        )
+
+        showing_row = cur.fetchone()
+        if not showing_row or "id" not in showing_row:
+            conn.rollback()
+            return "Insert failed", 500
+
+        showing_id = showing_row["id"]
+
+        for contact_id in sorted(contact_ids):
+            cur.execute(
+                """
+                INSERT INTO showing_contacts (
+                    user_id,
+                    showing_id,
+                    contact_id
+                )
+                VALUES (%s, %s, %s)
+                """,
+                (
+                    current_user.id,
+                    showing_id,
+                    contact_id,
+                ),
+            )
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    if buyer_contact_id is not None:
+        return redirect(
+            url_for("buyer_profile", contact_id=buyer_contact_id)
+            + "#bp-showings"
+        )
+
+    return redirect(url_for("transactions"))
+
 
 @app.route("/transactions/new", methods=["GET"])
 @login_required
