@@ -1,10 +1,10 @@
 # Ulysses CRM - Project State
 
-**Last updated:** September 22, 2026
-**Current production version:** v1.10.10
+**Last updated:** September 23, 2026
+**Current production version:** v1.10.11
 **Current branch:** main
-**Current checkpoint:** 3d5511d
-**Session mode:** Clients Enhancement Complete Locally / Production Deployment Next
+**Current checkpoint:** 0f3efd5
+**Session mode:** Buyer Showing Workflow Complete / Production Validated
 
 ## Current Architecture
 
@@ -345,48 +345,91 @@ Implementation checkpoint:
 
 - `3f09d45` - Harden Task integrity and timezone handling
 
-## Client Relationships / Clients - COMPLETE LOCALLY
+## Client Relationships / Clients - COMPLETE AND PRODUCTION VALIDATED
 
-Completed locally September 22, 2026. Production deployment and migration validation remain pending.
+Completed and production validated September 22, 2026.
 
 Ulysses now distinguishes general Contacts from actual client representation. `Active Contacts` remains the existing activity-based concept and is not a synonym for Client.
 
-Client vocabulary and lifecycle:
-
-- Contacts are everyone stored in the CRM.
-- Active Contacts remain activity-based and surface Contacts based on recent CRM activity.
-- Current Clients are non-archived Contacts with at least one current signed representation or service relationship.
-- Past Clients are non-archived Contacts with at least one ended client relationship and no relationship that remains current.
-- All Clients are non-archived Contacts with any current or ended client relationship.
-- Archived is a CRM record-retention state, not a client lifecycle state. Archiving is an alternative to deleting a Contact and does not itself create Past Client status.
-- Ending a client relationship preserves its history and moves the Contact from Current to Past only when no other current client relationship remains.
-
 Client relationships are first-class records rather than a boolean flag on Contacts. A Contact may have multiple relationships over time or simultaneous relationships such as Buyer and Seller.
 
-The `client_relationships` model records tenant owner, Contact, relationship type, agreement type, signed date, optional end date, current/ended status, and optional notes.
+Current Clients are non-archived Contacts with at least one current signed representation or service relationship. Past Clients have an ended relationship and no relationship that remains current. All Clients includes non-archived Contacts with any current or ended client relationship.
 
-The Contacts interface now has a master `Clients` view with `Current`, `Past`, and `All` subviews. Client Type is relationship-derived and multiple applicable relationship types are aggregated without duplicating the Contact.
+Archived is a CRM record-retention state, not a client lifecycle state. Ending representation preserves relationship history and does not archive the Contact.
 
-The Contact edit page includes Client Relationships history and supports adding a signed relationship and ending a current relationship while preserving history.
+The Contacts interface provides `Current`, `Past`, and `All` Client views. Client Type is relationship-derived and multiple applicable relationship types are aggregated without duplicating the Contact.
 
-Tenant-isolation protections:
+Tenant isolation applies to relationship reads, creation, ending, filtering, membership, and aggregation. Database constraints preserve tenant ownership across relationships and Contacts. There is no administrator or owner bypass.
 
-- Reads, creation, ending, filtering, and Client Type aggregation are explicitly scoped to the authenticated `user_id`.
-- Relationship tenant IDs are parameterized in SQL.
-- The database migration adds a composite `(user_id, contact_id)` foreign key so a relationship cannot reference another tenant's Contact even if application validation fails.
-- No administrator or owner bypass exists.
+Production migration and live production validation are complete.
 
-Migration:
+Implementation checkpoint:
 
-- `docs/migrations/2026_09_21_client_relationships.sql`
+- `c0d491d` - Complete shared Client Relationship membership architecture
 
-Local validation:
+## Dashboard Create Contact - COMPLETE AND PRODUCTION VALIDATED
 
-- 13 dedicated Client lifecycle / tenant-isolation tests passing.
-- Complete automated regression suite passes 143/143.
-- `git diff --check` passes.
+Completed and production validated September 22, 2026.
 
-Production migration and live production validation remain required before this feature is production-complete.
+- The Dashboard Active Contacts action is now `Create Contact`.
+
+- It opens the existing Contact creation workflow rather than introducing a duplicate form.
+
+- Dashboard-origin Cancel, close, Escape, and backdrop dismissal return to the Dashboard.
+
+Implementation checkpoints:
+
+- `79f741d` - Add dashboard Create Contact shortcut
+
+- `b8784c6` - Return dashboard contact creation on cancel
+
+## Showings / Feedback - BUYER WORKFLOW COMPLETE AND PRODUCTION VALIDATED
+
+Completed and production validated September 23, 2026 through checkpoint `0f3efd5`.
+
+Showing architecture is resolved. A Showing is a first-class tenant-owned event rather than an Engagement or a `buyer_properties` record.
+
+The shared Showing model supports Buyer and future Listing contexts:
+
+- Buyer Showing records a property shown to one or more explicitly selected CRM Contacts.
+
+- Listing Showing is designed for another agent showing the user's listing to their buyer. The external buyer does not need to become a CRM Contact.
+
+- A Showing may optionally link to a Transaction, but touring a property does not itself create a Transaction.
+
+- Showing participation is explicit through `showing_contacts`. Contact associations are candidates only and never imply attendance.
+
+The Buyer Showing workflow supports creation, explicit attendee selection, property snapshot data, scheduled date/time, status, interest level, feedback, notes, editing, and deletion.
+
+`Broker / Agent` is now a standard Professional category. A Showing may optionally reference a tenant-owned Professional through `showing_agent_professional_id`, while manual agent fields remain available as snapshot/fallback data.
+
+Tenant isolation is enforced at both application and database boundaries. Composite ownership foreign keys protect Showing relationships to Transactions, Contacts, and Professionals. There is no administrator or owner bypass.
+
+Migrations:
+
+- `docs/migrations/2026_09_22_showings.sql`
+
+- `docs/migrations/2026_09_22_showings_professional_agent.sql`
+
+Validation:
+
+- 34 dedicated Showing tests.
+
+- Complete automated regression suite passes 183/183.
+
+- Both production Showing migrations were applied and schema-verified before application deployment.
+
+- Production deployed at `0f3efd5`, application version v1.10.11.
+
+- Live production Buyer Showing creation and deletion were successfully validated September 23, 2026 with no application or database errors.
+
+Implementation checkpoints:
+
+- `f234e70` - Add Showing data foundation
+
+- `0f3efd5` - Add buyer Showing workflow
+
+Listing Showing UI remains future work and should use this shared Showing architecture rather than creating a parallel system.
 
 ## Active Feature Backlog
 
@@ -402,8 +445,8 @@ Captured September 20, 2026 from the current approved feature-request list. Thes
 
 ### Dashboard / Contact Workflow
 
-- Add an `Add Contact` action to the Dashboard Active Contacts card.
 - Consider isolating imported Contacts in a separate view/tab until they are activated or reactivated.
+
 - Add search capability for Professionals.
 
 ### Buyer / Seller Data
@@ -419,9 +462,11 @@ Captured September 20, 2026 from the current approved feature-request list. Thes
 
 ### Showings / Feedback
 
-- Add showing interactions and agent feedback for Sellers.
-- Before implementation, evaluate a generalized Showing model that can support both Buyer and Seller workflows rather than creating separate showing systems.
-- A Showing may become relevant to an Offer or Transaction, but an Offer remains a distinct business object.
+- Add the Seller / Listing Showing interface using the established shared Showing model.
+
+- Surface cooperating/showing-agent Professional selection where useful in the Listing Showing workflow.
+
+- Preserve the distinction between Showing, Offer, and Transaction. A Showing may link to a Transaction where appropriate, but an Offer remains a distinct business object.
 
 ### Reporting / Assist
 
@@ -436,8 +481,8 @@ Captured September 20, 2026 from the current approved feature-request list. Thes
 ### Backlog Planning Notes
 
 - Core Task semantics are resolved through checkpoint `3f09d45`; Reminder delivery semantics remain future work.
-- Perform the previously identified tenant-isolation audit before exposing broader CRM retrieval services to Ulysses Assist.
-- Showing / Feedback requires architecture review before implementation.
+- The repository-wide tenant-isolation audit is complete. Preserve its invariants before exposing broader CRM retrieval services to Ulysses Assist.
+- Showing architecture is resolved and the Buyer workflow is production-complete. Seller / Listing Showing UI remains future work on the same shared model.
 - Calendar connection UX improvements remain banked for later; the current production Calendar Feed is functional and secure.
 - Ulysses Assist remains architecturally approved but implementation has not begun.
 
@@ -445,26 +490,44 @@ Captured September 20, 2026 from the current approved feature-request list. Thes
 
 Maintenance / Stabilization queue completed September 18, 2026.
 
-Calendar foundation completed and production validated September 20, 2026. Production schema migrations, credential generation, live Calendar subscription, and credential revocation were successfully verified.
+Calendar foundation completed and production validated September 20, 2026.
 
-Task foundation architecture and integrity hardening completed September 20, 2026 through checkpoint `3f09d45`. Existing Tasks support both CRM-associated and independent work. Reminder remains future alert/notification behavior rather than a separate work-object model.
+Task foundation architecture and integrity hardening completed September 20, 2026 through checkpoint `3f09d45`. Existing Tasks support CRM-associated and independent work. Reminder remains future alert/notification behavior rather than a separate work-object model.
 
-Tenant-isolation security audit completed September 21, 2026 through checkpoint `3d5511d`. All 14 major audit clusters are cleared. Final adversarial tenant-boundary tests pass 7/7 and the complete automated suite passes 130/130.
+Tenant-isolation security audit completed September 21, 2026 through checkpoint `3d5511d`. Tenant isolation is a permanent Ulysses invariant with no administrator or owner bypass.
 
-Tenant isolation is a permanent Ulysses invariant. There is no administrator or owner bypass to another user's CRM records. This applies equally to traditional UI routes, services, exports, Calendar, Activity Engine consumers, AI/Assist, APIs, background work, public-token workflows, future voice clients, and future document ingestion.
+Client Relationships / Clients completed and production validated September 22, 2026. Ulysses now has first-class client relationships, Current / Past / All Client views, explicit shared relationship membership, preserved history, and tenant-enforced Contact membership.
+
+Dashboard Create Contact completed and production validated September 22, 2026 through `b8784c6`.
+
+Buyer Showings / Feedback completed and production validated September 23, 2026 through checkpoint `0f3efd5`, application version v1.10.11.
+
+Showing is now a first-class tenant-owned CRM event with explicit Contact attendance, optional Transaction association, optional tenant-owned Professional agent association, property snapshot data, scheduling, status, interest level, feedback, notes, edit, and delete behavior.
+
+The shared Showing architecture supports Buyer and future Listing contexts. Buyer attendance is explicit and is never inferred from Contact associations. Listing Showing UI remains future work.
+
+Both production Showing migrations were applied and verified before application deployment:
+
+- `docs/migrations/2026_09_22_showings.sql`
+
+- `docs/migrations/2026_09_22_showings_professional_agent.sql`
+
+Showing validation at completion:
+
+- 34 dedicated Showing tests.
+
+- Complete automated regression suite: 183/183 passing.
+
+- Production deployed commit: `0f3efd5`.
+
+- Production application version: v1.10.11.
+
+- Live production Buyer Showing create and delete workflow successfully validated with no application or database errors.
 
 The intermittent stale `Please log in to access this page.` flash remains deferred until it can be reproduced reliably.
 
-No numbered Maintenance / Stabilization queue items remain.
-
-Client Relationships / Clients enhancement completed locally September 22, 2026. The implementation introduces first-class signed client relationships, master Clients navigation with Current / Past / All views, relationship-derived Client Type display, relationship history on Contact records, and explicit tenant-scoped creation, reads, ending, filtering, and aggregation.
-
-Archived Contacts are record-retention records and are not part of the operational Clients population. Ending representation does not archive a Contact.
-
-Local validation is complete: 13 dedicated Client tests pass and the complete automated regression suite passes 143/143. `git diff --check` is clean.
-
-Production deployment remains pending. Before declaring the Clients enhancement production-complete, apply and validate `docs/migrations/2026_09_21_client_relationships.sql` against production, deploy the application, and perform live smoke validation.
-
-After production validation, update the production version/checkpoint and return to the remaining banked enhancement list. The Dashboard Active Contacts `Contacts` button should become `Create Contact`; broader mobile-friendly UI work is also banked.
+Broader mobile-friendly Ulysses UI work remains banked. The current GUI is functional but should receive a dedicated responsive/mobile pass rather than piecemeal fixes.
 
 Ulysses Assist architecture remains directionally locked, but broader Assist implementation has not begun. Preserve the Calendar, Task, tenant-isolation, timezone, entity-resolution, source-grounding, and validated-mutation contracts when designing future work.
+
+Next enhancement should be selected from the remaining Active Feature Backlog. Do not reopen completed Client, Dashboard Create Contact, or Buyer Showing architecture unless a regression or new requirement is identified.
